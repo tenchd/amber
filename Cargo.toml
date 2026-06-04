@@ -1,0 +1,9 @@
+[package]
+name = "merkle"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+hex-literal = "1.1.0"
+hybrid-array = "0.4.12"
+sha2 = "0.11.0"
