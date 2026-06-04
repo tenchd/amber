@@ -3,7 +3,6 @@ pub mod tests;
 use sha2::{Sha256, Digest};
 use std::fmt;
 
-
 //fn double_hash(input: &[u8]) -> Array<u8, <Sha256 as OutputSizeUser>::OutputSize> {
 fn double_hash(input: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
@@ -202,7 +201,12 @@ impl MerkleTree {
             } else {
                 self.nodes[parent_index].left
             };
-            proof_hashes.push(self.nodes[sibling_index].hash);
+            if sibling_index == 0 {
+                proof_hashes.push(self.nodes[current_index].hash);
+            }
+            else {
+                proof_hashes.push(self.nodes[sibling_index].hash);
+            }
             proof_directions.push(self.nodes[parent_index].left == current_index);
             current_index = parent_index;
         }

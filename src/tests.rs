@@ -39,4 +39,30 @@ use crate::{MerkleTree};
             assert!(!merkle_tree.verify_without_index(d), "Data: {:?} should be invalid", String::from_utf8_lossy(d));
         }
     }
+
+    #[test]
+    fn test_verify_proof() {
+        let data: Vec<&[u8]> = vec![
+            b"Hello, world!",
+            b"Long messageeeeeeee!",
+            b"short",
+            b"Another message",
+            b"Data 5",
+            b"Data 6",
+            b"Data 7",
+        ];
+        let merkle_tree = MerkleTree::new(data.clone());
+
+        // let test_data = b"Data 7";
+        // let test_index = 7;
+        // let proof = merkle_tree.produce_proof(test_index);
+        // println!("Proof for leaf index {}: {}", test_index, proof);
+        // assert!(merkle_tree.verify_proof(test_data, &proof), "Proof should be valid for data: {:?}", String::from_utf8_lossy(test_data));
+
+        for (i, d) in data.iter().enumerate() {
+            println!("testing proof for leaf index {} (data: {:?})", i + 1, String::from_utf8_lossy(d));
+            let proof = merkle_tree.produce_proof(i + 1);
+            assert!(merkle_tree.verify_proof(d, &proof), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
+        }
+    }
 }
