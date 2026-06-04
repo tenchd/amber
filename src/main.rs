@@ -114,7 +114,7 @@ impl MerkleTree {
                 if debug {
                     println!("current index i = {}, current write pointer = {}", i, current_pointer);
                 }
-                if i + 2 < next_level_start {
+                if i + 1 < next_level_start {
                     if debug {
                         println!("inner case");
                     }
@@ -129,20 +129,20 @@ impl MerkleTree {
                     }
                 }
 
-                else if i + 1 < next_level_start {
-                    if debug {
-                        println!("border case");
-                    }
-                    let (left_side, right_side) = nodes.split_at_mut(i + 1);
-                    let mut left = &mut left_side[i];
-                    let mut right = &mut right_side[0];
+                // else if i + 1 < next_level_start {
+                //     if debug {
+                //         println!("border case");
+                //     }
+                //     let (left_side, right_side) = nodes.split_at_mut(i + 1);
+                //     let mut left = &mut left_side[i];
+                //     let mut right = &mut right_side[0];
 
-                    let parent = MerkleNode::new_internal(&mut left, &mut right, current_pointer);
-                    nodes.push(parent);
-                    if debug {
-                        MerkleTree::display_state(nodes);
-                    }
-                }
+                //     let parent = MerkleNode::new_internal(&mut left, &mut right, current_pointer);
+                //     nodes.push(parent);
+                //     if debug {
+                //         MerkleTree::display_state(nodes);
+                //     }
+                // }
                 else {
                     if debug {
                         println!("end case");
