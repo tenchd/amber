@@ -64,6 +64,9 @@ This document and merkle tree do not carry the same incentives to be preserved a
 For that reason, please save this document and Merkle tree to your computer. Please back it up in multiple locations. Please share it with other people. Print out a physical copy of this document and store it somewhere where it will last a long time. If you are a bookbinder, consider printing the hex dump of the Merkle tree as a bound book [insert calcuation of how mnay pages]. If you have access to other forms of long-term storage media, use that as well. 
 Remember, even though future people may have no particular reason to trust you, if you manage to preserve a copy of the genuine versions of this document and the Merkle tree, they can verify them as genuine by referring to the blockchain message. The challenge is simply ensuring that these files persist into the future. 
 
+Who Am I?
+It may be useful for me to establish my identity in the future. For that reason I share my public key here, as well as a signature of the Merkle tree root hash with my private key.
+
 Convenience: Code for Deserializing and Using the Merkle Tree
 link to github
 dump of code for basic merkle tree stuff. requires rust version whatever.
