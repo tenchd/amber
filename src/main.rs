@@ -1,6 +1,7 @@
 pub mod tests;
 
 use sha2::{Sha256, Digest};
+use serde::{Serialize, Deserialize};
 use std::fmt;
 
 //fn double_hash(input: &[u8]) -> Array<u8, <Sha256 as OutputSizeUser>::OutputSize> {
@@ -19,10 +20,10 @@ fn double_hash(input: &[u8]) -> [u8; 32] {
 // nodes are owned by the 'nodes' vector in the MerkleTree struct. 0 means none.
 type NodeHandle = usize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct MerkleNode {
     hash: [u8; 32],
-    index: usize,
+    index: NodeHandle,
     left: NodeHandle,
     right: NodeHandle,
     parent: NodeHandle,
@@ -57,7 +58,7 @@ impl fmt::Display for MerkleNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 struct MerkleProof {
     leaf_index: usize,
     proof_hashes: Vec<[u8; 32]>,
@@ -74,13 +75,14 @@ impl fmt::Display for MerkleProof {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 struct MerkleTree {
     root_index: usize,
     num_leaves: usize,
     nodes: Vec<MerkleNode>,
 }
 
+#[allow(dead_code)]
 impl MerkleTree {
     fn new(data: Vec<&[u8]>) -> Self {
         let num_leaves = data.len();
@@ -128,21 +130,6 @@ impl MerkleTree {
                         MerkleTree::display_state(nodes);
                     }
                 }
-
-                // else if i + 1 < next_level_start {
-                //     if debug {
-                //         println!("border case");
-                //     }
-                //     let (left_side, right_side) = nodes.split_at_mut(i + 1);
-                //     let mut left = &mut left_side[i];
-                //     let mut right = &mut right_side[0];
-
-                //     let parent = MerkleNode::new_internal(&mut left, &mut right, current_pointer);
-                //     nodes.push(parent);
-                //     if debug {
-                //         MerkleTree::display_state(nodes);
-                //     }
-                // }
                 else {
                     if debug {
                         println!("end case");
@@ -168,14 +155,6 @@ impl MerkleTree {
         self.nodes[self.root_index].hash
     }
 
-    fn verify_with_index(&self, data: &[u8], index: usize) -> bool {
-        if index >= self.num_leaves {
-            return false;
-        }
-        let leaf_hash = double_hash(data);
-        self.nodes[index].hash == leaf_hash
-    }
-
     fn is_a_leaf(&self, node: &MerkleNode) -> bool {
         node.index < self.num_leaves + 1 && node.index != 0
     }
@@ -183,6 +162,10 @@ impl MerkleTree {
     fn matches_hash(&self, node: &MerkleNode, data: &[u8]) -> bool {
         let leaf_hash = double_hash(data);
         node.hash == leaf_hash
+    }
+
+    fn verify_with_index(&self, data: &[u8], index: usize) -> bool {
+        self.is_a_leaf(&self.nodes[index]) && self.matches_hash(&self.nodes[index], data)
     }
 
     fn verify_without_index(&self, data: &[u8]) -> bool {
@@ -244,4 +227,8 @@ fn main() {
     let proof = merkle_tree.produce_proof(3);
     println!("Proof for leaf index 3: {}", proof);
     println!("Verifying proof: {}", merkle_tree.verify_proof(data[2], &proof));
+    let serialized = serde_json::to_string(&merkle_tree).unwrap();
+    println!("Serialized Merkle tree: {}", serialized);
+    let deserialized: MerkleTree = serde_json::from_str(&serialized).unwrap();
+    println!("Deserialized Merkle tree has root hash: {:x?} and contains {} leaves", deserialized.get_root_hash(), deserialized.num_leaves);
 }
