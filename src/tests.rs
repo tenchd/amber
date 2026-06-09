@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod tests {
 use crate::{MerkleTree, build_merkle_tree_from_directory};
+use hex_literal::hex;
 
     #[test]
     fn basic_test() {
@@ -17,6 +18,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory};
         ];
         let merkle_tree = MerkleTree::new_from_data(data.clone());
         println!("Merkle tree has root hash: {:x?} and contains {} leaves", merkle_tree.get_root_hash(), merkle_tree.num_leaves);
+        merkle_tree.verify_tree();
 
         for i in 0..merkle_tree.nodes.len() {
             let node = &merkle_tree.nodes[i];
@@ -52,6 +54,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory};
             b"Data 7",
         ];
         let merkle_tree = MerkleTree::new_from_data(data.clone());
+        merkle_tree.verify_tree();
 
         // let test_data = b"Data 7";
         // let test_index = 7;
@@ -76,6 +79,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory};
             let data_refs: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
             let merkle_tree = MerkleTree::new_from_data(data_refs.clone());
             println!("Merkle tree has root hash: {:x?} and contains {} leaves", merkle_tree.get_root_hash(), merkle_tree.num_leaves);
+            merkle_tree.verify_tree();
 
             assert!(merkle_tree.verify_with_index(b"Data 50", 51), "Data 50 should be valid");
             assert!(!merkle_tree.verify_with_index(b"Data 50", 52), "Data 50 should not be valid at index 52");
@@ -101,6 +105,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory};
         let path = "../small_merkel";
         let merkle_tree = build_merkle_tree_from_directory(path);
         println!("Merkle tree built from directory {} has root hash: {:x?} and contains {} leaves", path, &merkle_tree.get_root_hash()[..4], merkle_tree.num_leaves);
+        merkle_tree.verify_tree();
         assert!(merkle_tree.verify_with_index_from_file("../small_merkel/PG11_raw.txt", 1), "tree should say yes to PG11_raw.txt at index 1");
         assert!(!merkle_tree.verify_with_index_from_file("../small_merkel/PG11_raw.txt", 2), "tree should say no to PG11_raw.txt at index 2");
         assert!(!merkle_tree.verify_with_index_from_file("../small_merkel/PG50_raw.txt", 1), "tree should say no to PG50_raw.txt at index 1");
@@ -108,6 +113,26 @@ use crate::{MerkleTree, build_merkle_tree_from_directory};
         assert!(!merkle_tree.verify_without_index_from_file("../gutenberg/data/raw/PG109_raw.txt"), "tree should say no to PG109_raw.txt without index");
         let proof = merkle_tree.produce_proof(1);
         assert!(merkle_tree.verify_proof_from_file("../small_merkel/PG11_raw.txt", &proof), "proof should be valid for PG11_raw.txt");
+        println!("Proof for PG11_raw.txt: {}", proof);
+    }
+
+    #[test]
+    fn double_hash() {
+        let expected_hash = hex!("80b621c7642162e6cb9c342ad2c0a900867175c664a292eb0ad311e9ca92f23e");
+
+        let path = "../small_merkel/test.txt";
+        let hash = crate::double_hash_from_file(path);
+        assert!(hash == expected_hash, "Hash does not match expected value");
+        println!("Double hash for {}: {:x?}", path, &hash[..4]);
+
+        let data = b"This is a short test file.";
+        let hash = crate::double_hash(data);
+        assert!(hash == expected_hash, "Hash does not match expected value");
+        println!("Double hash for data: {:x?}", &hash[..4]);
+    }
+
+    #[test]
+    fn basic_serialization() {
 
     }
 }

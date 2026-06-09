@@ -2,6 +2,7 @@ pub mod tests;
 
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
+use hex_literal::hex;
 use std::fmt;
 use std::fs::File;
 use std::io::{Read};
@@ -273,6 +274,39 @@ impl MerkleTree {
         }
         computed_hash == self.get_root_hash()
     }
+
+    fn verify_tree(&self) {
+        for node in self.nodes.iter() {
+            if self.is_a_leaf(&node) || node.index == 0 {
+                continue;
+            }
+
+            assert!(node.left != 0);
+            let left_index = &self.nodes[node.left];
+            let left_hash = left_index.hash;
+            if node.right > 0 {
+                let right_index = &self.nodes[node.right];
+                let right_hash = right_index.hash;
+                let computed_hash = double_hash(&[left_hash, right_hash].concat());
+                assert!(node.hash == computed_hash, 
+                    "Merkle tree verification failed.\n 
+                    Node {}'s hash does not match the double SHA256 hash of the concatenation of its children's hashes.\n
+                    Left child has index {} and hash {:x?}.\n
+                    Right child has index {} and hash {:x?}.\n
+                    The double SHA256 hash of their concatenated hashes is {:x?}, but parent node {}'s hash is {:x?}.",
+                node.index, left_index, left_hash, right_index, right_hash,computed_hash, node.index, node.hash);
+            }
+            else {
+                let computed_hash = double_hash(&[left_hash, left_hash].concat());
+                assert!(node.hash == computed_hash, 
+                    "Merkle tree verification failed.\n
+                    Node {}'s hash does not match the double SHA256 hash of the self-concatenation of its child's hash.\n
+                    Left (only) child has index {} and hash {:x?}.\n
+                    Concatenating it with itself and double SHA256 hashing is {:x?}, but parent node {}'s hash is {:x?}.",
+                    node.index, left_index, left_hash, computed_hash, node.index, node.hash);
+            }
+        }
+    }
 }
 
 // for this first version, don't worry about the order in which files are added.
@@ -300,25 +334,16 @@ fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
 }
 
-fn main() {
-    let data: Vec<&[u8]> = vec![
-        b"Hello, world!",
-        b"Long messageeeeeeee!",
-        b"short",
-        b"Another message",
-        b"Data 5",
-        b"Data 6",
-        b"Data 7",
-    ];
 
-    let merkle_tree = MerkleTree::new_from_data(data.clone());
-    println!("Merkle tree has root hash: {:x?} and contains {} leaves", merkle_tree.get_root_hash(), merkle_tree.num_leaves);
-    println!("Producing proof for leaf index 3 (data: {:?})", String::from_utf8_lossy(data[2]));
-    let proof = merkle_tree.produce_proof(3);
-    println!("Proof for leaf index 3: {}", proof);
-    println!("Verifying proof: {}", merkle_tree.verify_proof(data[2], &proof));
+
+fn main() {
+    let path = "../small_merkel";
+    let merkle_tree = build_merkle_tree_from_directory(path);
+    println!("Merkle tree built from directory {} has root hash: {:x?} and contains {} leaves", path, &merkle_tree.get_root_hash()[..4], merkle_tree.num_leaves);
     let serialized = serde_json::to_string(&merkle_tree).unwrap();
-    println!("Serialized Merkle tree: {}", serialized);
+    //println!("Serialized Merkle tree: {}", serialized);
     let deserialized: MerkleTree = serde_json::from_str(&serialized).unwrap();
-    println!("Deserialized Merkle tree has root hash: {:x?} and contains {} leaves", deserialized.get_root_hash(), deserialized.num_leaves);
+    println!("Deserialized Merkle tree has root hash: {:x?} and contains {} leaves", &deserialized.get_root_hash()[..4], deserialized.num_leaves);
+    deserialized.verify_tree();
+    println!("Deserialized tree verified.");
 }
