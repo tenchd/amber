@@ -1,8 +1,8 @@
-pub mod tests;
+mod tests;
+mod tag;
 
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
-use hex_literal::hex;
 use std::fmt;
 use std::fs::File;
 use std::io::{Read};

@@ -2,6 +2,7 @@
 
 #[cfg(test)]
 mod tests {
+
 use crate::{MerkleTree, build_merkle_tree_from_directory};
 use hex_literal::hex;
 
@@ -117,7 +118,8 @@ use hex_literal::hex;
     }
 
     #[test]
-    fn double_hash() {
+    fn double_hash_match() {
+        // got the following value from applying sha25sum twice to a file with contents "This is a short test file.".
         let expected_hash = hex!("80b621c7642162e6cb9c342ad2c0a900867175c664a292eb0ad311e9ca92f23e");
 
         let path = "../small_merkel/test.txt";
@@ -133,6 +135,29 @@ use hex_literal::hex;
 
     #[test]
     fn basic_serialization() {
+        let path = "../small_merkel";
+        let merkle_tree = build_merkle_tree_from_directory(path);
+        let original_root_hash = merkle_tree.get_root_hash();
+        //println!("Merkle tree built from directory {} has root hash: {:x?} and contains {} leaves", path, &merkle_tree.get_root_hash()[..4], merkle_tree.num_leaves);
+        let serialized = serde_json::to_string(&merkle_tree).unwrap();
+        //println!("Serialized Merkle tree: {}", serialized);
+        let deserialized: MerkleTree = serde_json::from_str(&serialized).unwrap();
+        //println!("Deserialized Merkle tree has root hash: {:x?} and contains {} leaves", &deserialized.get_root_hash()[..4], deserialized.num_leaves);
+        assert!(deserialized.get_root_hash() == original_root_hash);
+        deserialized.verify_tree();
+        println!("Deserialized tree verified.");
+    }
 
+    #[test]
+    fn basic_tag() {
+        let path = "../small_merkel";
+        let merkle_tree = build_merkle_tree_from_directory(path);
+        let identifier = "PGMERKLE";
+        let merkle_root_hash = merkle_tree.get_root_hash();
+        let num_leaves: u32 = merkle_tree.num_leaves.try_into().expect("Too many leaves to write as u32");
+        let explainer_file_path = "dummy_explain.txt";
+        let tag = crate::tag::create_chain_tag(identifier, num_leaves, merkle_root_hash, explainer_file_path); 
+        let expected_tag = hex!("50 47 4d 45 52 4b 4c 45 00 00 00 0c ce 90 85 b9 6a a4 7f d9 6f 57 72 e0 f6 d7 9b 56 a9 27 89 af aa 27 1c 30 d7 41 b2 c9 9a 36 60 ab a0 e5 8f 0d df 84 5d c1 ce 07 79 33 7c 91 89 c3 0b 91 6e 7d 62 94 96 ac 85 18 ac 6b c7 50 9e 61");
+        assert_eq!(tag, expected_tag);
     }
 }
