@@ -3,11 +3,35 @@ pub mod tests;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use std::fmt;
+use std::fs::File;
+use std::io::{Read};
 
 //fn double_hash(input: &[u8]) -> Array<u8, <Sha256 as OutputSizeUser>::OutputSize> {
 fn double_hash(input: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(input);
+    let first_hash = hasher.finalize_reset();
+    hasher.update(&first_hash);
+    let result = hasher.finalize();
+    let mut hash_bytes = vec![0u8; 32];
+    hash_bytes.copy_from_slice(&result);
+    let hash_bytes_length: [u8; 32] = hash_bytes.try_into().expect("Hash length must be 32 bytes");
+    hash_bytes_length
+}
+
+fn double_hash_from_file(filepath: &str) -> [u8; 32] {
+    let mut file = File::open(filepath).expect("Failed to open file");
+    let mut hasher = Sha256::new();
+    let mut buffer = [0; 1024]; // Process in 1KB chunks
+
+    loop {
+            let bytes_read = file.read(&mut buffer).expect("Failed to read file");
+            if bytes_read == 0 {
+                break; // Reached end of file
+            }
+            hasher.update(&buffer[..bytes_read]);
+        }
+
     let first_hash = hasher.finalize_reset();
     hasher.update(&first_hash);
     let result = hasher.finalize();
@@ -31,6 +55,11 @@ struct MerkleNode {
 
 impl MerkleNode {
     fn new_leaf(hash: [u8; 32], index: usize) -> Self {
+        MerkleNode { hash, index, left: 0, right: 0, parent: 0 }
+    }
+
+    fn new_leaf_from_file(filepath: &str, index: usize) -> Self {
+        let hash = double_hash_from_file(filepath);
         MerkleNode { hash, index, left: 0, right: 0, parent: 0 }
     }
 
@@ -84,12 +113,24 @@ struct MerkleTree {
 
 #[allow(dead_code)]
 impl MerkleTree {
-    fn new(data: Vec<&[u8]>) -> Self {
+    fn new_from_data(data: Vec<&[u8]>) -> Self {
         let num_leaves = data.len();
         let mut nodes: Vec<MerkleNode> = vec![];
         nodes.push(MerkleNode { hash: [0u8; 32], index: 0, left: 0, right: 0, parent: 0 }); // dummy node at index 0
         for (index, d) in data.iter().enumerate() {
             nodes.push(MerkleNode::new_leaf(double_hash(d).into(), index + 1));
+        }
+        let root_index = MerkleTree::build_tree(&mut nodes, num_leaves, false);
+        MerkleTree { root_index, num_leaves, nodes }
+    }
+
+    // Assumes files are all in a single directory and have names of the form "PG<number>_raw.txt". All other files are ignored. The order of the files in the tree is determined by the number in the filename, with smaller numbers coming first. For example, "PG1_raw.txt" would be the first leaf, "PG2_raw.txt" would be the second leaf, and so on.
+    fn new_from_files(filepaths: Vec<&str>) -> Self {
+        let num_leaves = filepaths.len();
+        let mut nodes: Vec<MerkleNode> = vec![];
+        nodes.push(MerkleNode { hash: [0u8; 32], index: 0, left: 0, right: 0, parent: 0 }); // dummy node at index 0
+        for (index, filepath) in filepaths.iter().enumerate() {
+            nodes.push(MerkleNode::new_leaf_from_file(filepath, index + 1));
         }
         let root_index = MerkleTree::build_tree(&mut nodes, num_leaves, false);
         MerkleTree { root_index, num_leaves, nodes }
@@ -164,12 +205,25 @@ impl MerkleTree {
         node.hash == leaf_hash
     }
 
+    fn matches_hash_from_file(&self, node: &MerkleNode, filepath: &str) -> bool {
+        let leaf_hash = double_hash_from_file(filepath);
+        node.hash == leaf_hash
+    }
+
     fn verify_with_index(&self, data: &[u8], index: usize) -> bool {
         self.is_a_leaf(&self.nodes[index]) && self.matches_hash(&self.nodes[index], data)
     }
 
+    fn verify_with_index_from_file(&self, filepath: &str, index: usize) -> bool {
+        self.is_a_leaf(&self.nodes[index]) && self.matches_hash_from_file(&self.nodes[index], filepath)
+    }
+
     fn verify_without_index(&self, data: &[u8]) -> bool {
         self.nodes.iter().any(|node| self.is_a_leaf(node) && self.matches_hash(node, data))
+    }
+
+    fn verify_without_index_from_file(&self, filepath: &str) -> bool {
+        self.nodes.iter().any(|node| self.is_a_leaf(node) && self.matches_hash_from_file(node, filepath))
     }
 
     fn produce_proof(&self, index: usize) -> MerkleProof {
@@ -177,7 +231,7 @@ impl MerkleTree {
         let mut proof_directions = Vec::new();
         let mut current_index = index;
         while current_index != self.root_index {
-            println!("Current index: {}, hash: {:x?}", current_index, &self.nodes[current_index].hash[..4]);
+            //println!("Current index: {}, hash: {:x?}", current_index, &self.nodes[current_index].hash[..4]);
             let parent_index = self.nodes[current_index].parent;
             let sibling_index = if self.nodes[parent_index].left == current_index {
                 self.nodes[parent_index].right
@@ -207,8 +261,44 @@ impl MerkleTree {
         }
         computed_hash == self.get_root_hash()
     }
+
+    fn verify_proof_from_file(&self, filepath: &str, proof: &MerkleProof) -> bool {
+        let mut computed_hash = double_hash_from_file(filepath);
+        for (i, sibling_hash) in proof.proof_hashes.iter().enumerate() {
+            if proof.proof_directions[i] {
+                computed_hash = double_hash(&[computed_hash, *sibling_hash].concat());
+            } else {
+                computed_hash = double_hash(&[*sibling_hash, computed_hash].concat());
+            }
+        }
+        computed_hash == self.get_root_hash()
+    }
 }
 
+// for this first version, don't worry about the order in which files are added.
+// later have the order be determined by the PG id number.
+fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
+    // scan current directory for files of the form "PG<number>_raw.txt", add them to a vector, and then build the tree from that vector of file paths.
+    let mut filepaths: Vec<String> = std::fs::read_dir(path)
+        .expect("Failed to read directory")
+        .filter_map(|entry| {
+            let entry = entry.expect("Failed to read directory entry");
+            let filename = entry.file_name().into_string().expect("Failed to convert OsString to String");
+            if filename.starts_with("PG") && filename.ends_with("_raw.txt") {
+                Some(entry.path().to_str().unwrap().to_string())
+            } else {
+                None 
+            }
+        })
+        .collect();
+    filepaths.sort_by(|a, b| {
+        let a_num: usize = a.split("PG").nth(1).unwrap().split("_").nth(0).unwrap().parse().unwrap();
+        let b_num: usize = b.split("PG").nth(1).unwrap().split("_").nth(0).unwrap().parse().unwrap();
+        a_num.cmp(&b_num)
+    });
+    println!("Building Merkle tree from files: {:?}", filepaths);
+    MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
+}
 
 fn main() {
     let data: Vec<&[u8]> = vec![
@@ -221,7 +311,7 @@ fn main() {
         b"Data 7",
     ];
 
-    let merkle_tree = MerkleTree::new(data.clone());
+    let merkle_tree = MerkleTree::new_from_data(data.clone());
     println!("Merkle tree has root hash: {:x?} and contains {} leaves", merkle_tree.get_root_hash(), merkle_tree.num_leaves);
     println!("Producing proof for leaf index 3 (data: {:?})", String::from_utf8_lossy(data[2]));
     let proof = merkle_tree.produce_proof(3);

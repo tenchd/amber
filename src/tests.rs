@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-use crate::{MerkleTree};
+use crate::{MerkleTree, build_merkle_tree_from_directory};
 
     #[test]
     fn basic_test() {
@@ -15,7 +15,7 @@ use crate::{MerkleTree};
             b"Data 6",
             b"Data 7",
         ];
-        let merkle_tree = MerkleTree::new(data.clone());
+        let merkle_tree = MerkleTree::new_from_data(data.clone());
         println!("Merkle tree has root hash: {:x?} and contains {} leaves", merkle_tree.get_root_hash(), merkle_tree.num_leaves);
 
         for i in 0..merkle_tree.nodes.len() {
@@ -51,7 +51,7 @@ use crate::{MerkleTree};
             b"Data 6",
             b"Data 7",
         ];
-        let merkle_tree = MerkleTree::new(data.clone());
+        let merkle_tree = MerkleTree::new_from_data(data.clone());
 
         // let test_data = b"Data 7";
         // let test_index = 7;
@@ -74,7 +74,7 @@ use crate::{MerkleTree};
             println!("Testing with {} leaves", num_leaves);
             let data: Vec<Vec<u8>> = (0..num_leaves).map(|i| format!("Data {}", i).into_bytes()).collect();
             let data_refs: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
-            let merkle_tree = MerkleTree::new(data_refs.clone());
+            let merkle_tree = MerkleTree::new_from_data(data_refs.clone());
             println!("Merkle tree has root hash: {:x?} and contains {} leaves", merkle_tree.get_root_hash(), merkle_tree.num_leaves);
 
             assert!(merkle_tree.verify_with_index(b"Data 50", 51), "Data 50 should be valid");
@@ -94,5 +94,20 @@ use crate::{MerkleTree};
                 assert!(merkle_tree.verify_proof(d, &proof), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
             }
         }
+    }
+
+    #[test]
+    fn build_tree_from_files() {
+        let path = "../small_merkel";
+        let merkle_tree = build_merkle_tree_from_directory(path);
+        println!("Merkle tree built from directory {} has root hash: {:x?} and contains {} leaves", path, &merkle_tree.get_root_hash()[..4], merkle_tree.num_leaves);
+        assert!(merkle_tree.verify_with_index_from_file("../small_merkel/PG11_raw.txt", 1), "tree should say yes to PG11_raw.txt at index 1");
+        assert!(!merkle_tree.verify_with_index_from_file("../small_merkel/PG11_raw.txt", 2), "tree should say no to PG11_raw.txt at index 2");
+        assert!(!merkle_tree.verify_with_index_from_file("../small_merkel/PG50_raw.txt", 1), "tree should say no to PG50_raw.txt at index 1");
+        assert!(merkle_tree.verify_without_index_from_file("../small_merkel/PG11_raw.txt"), "tree should say yes to PG11_raw.txt without index");
+        assert!(!merkle_tree.verify_without_index_from_file("../gutenberg/data/raw/PG109_raw.txt"), "tree should say no to PG109_raw.txt without index");
+        let proof = merkle_tree.produce_proof(1);
+        assert!(merkle_tree.verify_proof_from_file("../small_merkel/PG11_raw.txt", &proof), "proof should be valid for PG11_raw.txt");
+
     }
 }
