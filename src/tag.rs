@@ -20,8 +20,8 @@ pub fn create_chain_tag(identifier: &str, num_merkle_leaves: u32, merkle_root_ha
 
     let result = [prefix, explainer_hash.to_vec()].concat();
     assert!(result.len() == 76, "Result should have 76 bytes. You had {}", result.len());
-    println!("Wrote identifier {}, # merkle leaves {}, merkle root hash {:x?}, and explainer hash {:x?} to bytes.\n
-    Result: {:x?}", identifier, num_merkle_leaves, merkle_root_hash, explainer_hash, result);
+    //println!("Wrote identifier {}, # merkle leaves {}, merkle root hash {:x?}, and explainer hash {:x?} to bytes.\n
+    //Result: {:x?}", identifier, num_merkle_leaves, merkle_root_hash, explainer_hash, result);
     result
 }
 
