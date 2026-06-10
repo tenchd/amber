@@ -1,1 +1,4 @@
 /target
+*.pem
+*.json
+test_example.txt
