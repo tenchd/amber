@@ -3,7 +3,8 @@ mod tag;
 
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
-use std::fmt;
+use serde_json::Result;
+use std::{fmt, fs};
 use std::fs::File;
 use std::io::{Read};
 
@@ -309,8 +310,6 @@ impl MerkleTree {
     }
 }
 
-// for this first version, don't worry about the order in which files are added.
-// later have the order be determined by the PG id number.
 fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
     // scan current directory for files of the form "PG<number>_raw.txt", add them to a vector, and then build the tree from that vector of file paths.
     let mut filepaths: Vec<String> = std::fs::read_dir(path)
@@ -330,20 +329,26 @@ fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
         let b_num: usize = b.split("PG").nth(1).unwrap().split("_").nth(0).unwrap().parse().unwrap();
         a_num.cmp(&b_num)
     });
-    println!("Building Merkle tree from files: {:?}", filepaths);
+    //println!("Building Merkle tree from files: {:?}", filepaths);
+    println!("Number of files: {}. Should be 78706", filepaths.len());
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
 }
 
-
-
 fn main() {
-    let path = "../small_merkel";
-    let merkle_tree = build_merkle_tree_from_directory(path);
-    println!("Merkle tree built from directory {} has root hash: {:x?} and contains {} leaves", path, &merkle_tree.get_root_hash()[..4], merkle_tree.num_leaves);
-    let serialized = serde_json::to_string(&merkle_tree).unwrap();
-    //println!("Serialized Merkle tree: {}", serialized);
-    let deserialized: MerkleTree = serde_json::from_str(&serialized).unwrap();
-    println!("Deserialized Merkle tree has root hash: {:x?} and contains {} leaves", &deserialized.get_root_hash()[..4], deserialized.num_leaves);
+    // let path = "../small_merkel";
+    // let path = "../gutenberg/data/raw/";
+    // let merkle_tree = build_merkle_tree_from_directory(path);
+    // println!("Merkle tree built from directory {} has root hash: {:x?}... and contains {} leaves", path, &merkle_tree.get_root_hash()[..4], merkle_tree.num_leaves);
+    // let serialized = serde_json::to_string(&merkle_tree).unwrap();
+    let tree_filename = "pgtree.json";
+    // let mut file = File::create(tree_filename).expect("filed to create file");
+    // file.write_all(serialized.as_bytes()).expect("failed to write data");
+    // println!("wrote tree to file.");
+
+    println!("reading tree from file:");
+    let json_data = fs::read_to_string(tree_filename).expect("failed to read file");
+    let deserialized: MerkleTree = serde_json::from_str(&json_data).unwrap();
+    println!("Deserialized Merkle tree has root hash: {:x?}... and contains {} leaves", &deserialized.get_root_hash()[..4], deserialized.num_leaves);
     deserialized.verify_tree();
     println!("Deserialized tree verified.");
 }
