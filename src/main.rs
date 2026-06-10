@@ -1,6 +1,7 @@
 mod tests;
 mod tag;
 
+use sha2::digest::const_oid::ObjectIdentifier;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use serde_json::Result;
@@ -351,4 +352,10 @@ fn main() {
     println!("Deserialized Merkle tree has root hash: {:x?}... and contains {} leaves", &deserialized.get_root_hash()[..4], deserialized.num_leaves);
     deserialized.verify_tree();
     println!("Deserialized tree verified.");
+
+    let document_filename = "test_example.txt";
+    let identifier = "PGMERKLE";
+    crate::tag::write_document(document_filename, "10", "2:30", 953058, identifier, deserialized.num_leaves.try_into().unwrap(), deserialized.get_root_hash());
+    let tag = crate::tag::create_chain_tag(identifier, deserialized.num_leaves.try_into().unwrap(), deserialized.get_root_hash(), document_filename);
+    println!("Tag is {:x?}", tag);
 }

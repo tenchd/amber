@@ -1,0 +1,41 @@
+This document explains how to use the merkle tree I built, along with the blockchain transaction timestamping its root hash, to certify that a text file is an exact, unaltered copy of a literary work from Project Gutenberg in 2026.
+The same blockchain transaction also contains a cryptographically-secure SHA256 hash of this text file (the one you are reading right now) as well. This is the canonical version of the text file, and should be preserved exactly to ensure that it can be verified.
+
+Motivation
+The motivation for this work is to aid literary conservation efforts and to preserve a clear historical record of literary expression far into the future.
+While the primary challenge of literary and historical conservation efforts across the centuries has been preserving and accurately translating texts, a secondary challenge has been identifying forgeries because they obscure our view of the past.
+If current technological trends continue, large-language models will drastically reduce the cost of creating convincing forgeries of historical texts.
+In such a case, we can expect a massive flood of such forgeries to be created, for the same reasons that spam emails and malicious internet traffic are ubiquitous. 
+Some of the forgeries will be made maliciously, by political, religious, or financial entities that seek to rewrite inconvenient aspects of the historical record. More will be the result of error, misconfiguration, and laziness. 
+Imagine the plight of our descendants two hundred years from now, who might wish to read a transcript of John Brown's remarks upon being found guilty for the crimes of treason and insurrection. Even if the true transcript survives, it may be indistinguishable among many convincingly altered versions. Intentional, politically-motivated alterations could include intensifying or removing Brown's appeals to Christianity, removing his denial of treasonous intent, or rewriting his professed abolitionist motivations into something cruder and more mercenary. Any one of these changes would fundamentally alter the text, and the historical understanding of any reader who accepted it as real. And how could our descendants know which is real? Imagine this was the case for every surviving cultural text.
+One possible way to avoid this distressing hypothetical future is to rely on a trusted institution, such as the Project Gutenberg organization, to maintain genuine copies of important works. However, we see in history that institutions often shift priorities, make mistakes, become influenced or undermined by outside forces, or even cease to exist. It would be better to have a means of re-establishing trust in the provenance of literary works, even after they have passed into the hands of untrusted parties.
+To that end, the goal of this project is to provide cryptographic-strength, censorship- and tamper-resistant proof that each currently existing Project Gutenberg text existed today. Such proof would allow our hypothetical descendants in the above example to verify that the true version of Brown's speech (which appears in its entirety in W. E. B. DuBois' biography "John Brown" on Project Gutenberg, #62799) was, in fact, the version that existed in June 2026 and not a forgery produced later.
+As I write this, there is still time to avert this concerning possible future. I do not yet see much evidence of proliferation of convincing forgeries. I suspect that, for the moment, creating a convincing forgery is still too inconvenient to be done at scale. But it's only a matter of time before this happens. If we do not prepare, we risk denying our descendants the irreplaceable gift of the literary record, from which we have benefitted for millenia. 
+
+Scope
+My goal in doing this is:
+- To provide cryptographic-strength, censorship- and tamper-resistant proof that each currently existing Project Gutenberg text existed today. This can be used to re-establish trust in the provenance of literary texts.
+
+I do NOT intend this project to:
+- independently prove any Project Gutenberg work is authentic (not a forgery, correctly translated, complete, etc.).
+- directly preserve the actual text of any Project Gutenberg work. The merkle tree stores hashes of the documents but not the documents themselves.
+
+I assume the following conditions continue to hold in the future:
+- Finding a SHA256 hash collision remains computationally infeasible.
+- Genuine, unaltered versions of the raw text files of Project Gutenberg survive.
+- This document, and the accompanying Merkle tree, survive.
+- The message I wrote on the Bitcoin blockchain containing the Merkle root hash and the hash of this document remain readable and provably unaltered (i.e., the blockchain is not edited in some kind of 51% attack).
+- The Project Gutenberg index scheme stays the same (see below).
+
+Indexing Project Gutenberg Raw Text Files
+Each work in the Project Gutenberg collection is indexed by a unique positive integer. For example, PG1 is "The Declaration of Independence of the United States of America", and PG100 is "The Complete Works of William Shakespeare". I use these unique integers as identifiers during Merkle tree construction.
+Each Project Gutenberg work is typically available in several different formats, including popular ebook formats like .epub and .mobi. We will use the plain text (UTF-8 encoded) version of each work, because these are the simplest and the least likely to change over time.
+
+Merkle Tree Construction and Serialization
+I constructed the Merkle tree of the Project Gutenberg plain text files in the same way a Bitcoin miner computes the Merkle root hash of the block of transactions. That is to say, let the unique integer identifiers of the works be the ordering of the files. First I compute the double SHA256 hash of each file. These comprise the leaves of the Merkle tree. Then for each adjacent pair of leaves in the ordering, I double hash the concatenation of their hashes to produce the hash of their parent node. The process is repeated at each level until the root is reached. If there is an odd number of nodes at some level, the last node's hash is concatenated with itself and then double SHA256 hashed to get the parent hash.
+The tree is serialized as XXXX. [todo]
+
+It is possible and totally acceptable to serialize the Merkle tree in another form for reasons such as reducing total size. If you encounter the tree serialized in another form and are able to deserialize it, you can trust it as genuine provided it still passes verification (see below).
+
+Blockchain Message
+I wrote the message to the blockchain using the OP_RETURN script command. The resulting Bitcoin transation therefore does nothing interesting except write the following 76 bytes of data into the block:
