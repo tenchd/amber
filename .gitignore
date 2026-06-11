@@ -2,3 +2,4 @@
 *.pem
 *.json
 test_example.txt
+timestamp/*

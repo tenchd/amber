@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_imports)]
+
 mod tests;
 mod tag;
 
@@ -9,6 +12,7 @@ use serde::{Serialize, Deserialize};
 use std::{fmt, fs};
 use std::fs::File;
 use std::io::{Read,Write};
+use config::Config;
 
 //fn double_hash(input: &[u8]) -> Array<u8, <Sha256 as OutputSizeUser>::OutputSize> {
 fn double_hash(input: &[u8]) -> [u8; 32] {
@@ -342,7 +346,7 @@ fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
     let filepaths = get_filenames_from_directory(path);
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
 }
-fn doc_test(tree_filename: &str){
+fn build_doc_and_tag_from_saved_tree(tree_filename: &str){
     println!("reading merkle tree from file.");
     let json_data = fs::read_to_string(tree_filename).expect("failed to read file");
     let deserialized: MerkleTree = serde_json::from_str(&json_data).unwrap();
@@ -350,26 +354,37 @@ fn doc_test(tree_filename: &str){
     deserialized.verify_tree();
     println!("Merkle tree verified.");
 
-    let document_filename = "explain_example.txt";
+    let document_filename = "timestamp/explain.txt";
     let identifier = "PGMERKLE";
     crate::tag::write_document(document_filename, "June 11, 2026", "13:50", 953259, identifier, deserialized.num_leaves.try_into().unwrap(), deserialized.get_root_hash());
     let tag = crate::tag::create_chain_tag(identifier, deserialized.num_leaves.try_into().unwrap(), deserialized.get_root_hash(), document_filename);
-    println!("Tag is {:x?}", hex_fmt::HexFmt(tag));
+    println!("Wrote explainer document to file {}", document_filename);
+    //println!("Tag is {}", hex_fmt::HexFmt(&tag));
+    let tag_filename = "timestamp/tag.txt";
+    let tag_string = format!("{}", HexFmt(&tag));
+    let mut file = File::create(tag_filename).expect("failed to create file");
+    file.write_all(&tag_string.into_bytes()).expect("failed to write tag");
+    println!("Wrote tag to file {}", tag_filename);
+}
+
+fn build_timestamp(corpus_path: &str) {
+    let tree = build_merkle_tree_from_directory(corpus_path);
+    let tree_filename = "timestamp/pgtree.json";
+    let serialized = serde_json::to_string(&tree).unwrap();
+    let mut file = File::create(tree_filename).expect("failed to create file");
+    file.write_all(serialized.as_bytes()).expect("failed to write data");
+    println!("wrote tree to file.");
+
+    build_doc_and_tag_from_saved_tree(tree_filename);
 }
 
 fn main() {
-    // let path = "../small_merkel";
-    //let path = "../gutenberg/data/raw/";
-    // let path = "../gutenberg2/cache/epub_copy/";
-    // let merkle_tree = build_merkle_tree_from_directory(path);
-    // println!("Merkle tree built from directory {} has root hash: {:x?}... and contains {} leaves", path, HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
-    // let serialized = serde_json::to_string(&merkle_tree).unwrap();
-    // get_filenames_from_directory(path);
-
-    let tree_filename = "pgtree.json";
-    // let mut file = File::create(tree_filename).expect("failed to create file");
-    // file.write_all(serialized.as_bytes()).expect("failed to write data");
-    // println!("wrote tree to file.");
-
-    doc_test(tree_filename);
+    // let settings = Config::builder()
+    //                 .add_source(config::File::with_name("config"))
+    //                 .build()
+    //                 .unwrap();
+    // let corpus_path = settings.get_string("corpus_path").unwrap();
+    let tree_filename = "timestamp/pgtree.json";
+    //build_timestamp(&corpus_path);
+    build_doc_and_tag_from_saved_tree(tree_filename);
 }

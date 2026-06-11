@@ -3,10 +3,11 @@
 #[cfg(test)]
 mod tests {
 use std::fs::File;
-use std::io::Write;
+use std::io::{Write,Read};
 use crate::{MerkleTree, build_merkle_tree_from_directory};
 use hex_literal::hex;
 use hex_fmt::HexFmt;
+use config::Config;
 
     #[test]
     fn basic_test() {
@@ -195,9 +196,13 @@ use hex_fmt::HexFmt;
     #[test]
     #[ignore]
     fn full_pg_test() {
-        let path = "../gutenberg2/cache/epub_copy/";
-        let merkle_tree = build_merkle_tree_from_directory(path);
-        println!("Merkle tree built from directory {} has root hash: {:x?}... and contains {} leaves", path, HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
+        let settings = Config::builder()
+                    .add_source(config::File::with_name("config"))
+                    .build()
+                    .unwrap();
+        let path = settings.get_string("corpus_path").unwrap();
+        let merkle_tree = build_merkle_tree_from_directory(&path);
+        println!("Merkle tree built from directory {} has root hash: {}... and contains {} leaves", path, HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
         merkle_tree.verify_tree();
         println!("Tree verified.");
     }
