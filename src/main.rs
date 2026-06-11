@@ -353,7 +353,7 @@ fn main() {
     deserialized.verify_tree();
     println!("Deserialized tree verified.");
 
-    let document_filename = "test_example.txt";
+    let document_filename = "explain_example.txt";
     let identifier = "PGMERKLE";
     crate::tag::write_document(document_filename, "June 10, 2026", "2:30", 953058, identifier, deserialized.num_leaves.try_into().unwrap(), deserialized.get_root_hash());
     let tag = crate::tag::create_chain_tag(identifier, deserialized.num_leaves.try_into().unwrap(), deserialized.get_root_hash(), document_filename);
