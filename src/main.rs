@@ -1,13 +1,14 @@
 mod tests;
 mod tag;
 
-use sha2::digest::const_oid::ObjectIdentifier;
+use hex_fmt::HexFmt;
+//use sha2::digest::const_oid::ObjectIdentifier;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
-use serde_json::Result;
+//use serde_json::Result;
 use std::{fmt, fs};
 use std::fs::File;
-use std::io::{Read};
+use std::io::{Read,Write};
 
 //fn double_hash(input: &[u8]) -> Array<u8, <Sha256 as OutputSizeUser>::OutputSize> {
 fn double_hash(input: &[u8]) -> [u8; 32] {
@@ -311,14 +312,15 @@ impl MerkleTree {
     }
 }
 
-fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
+fn get_filenames_from_directory(path: &str) -> Vec<String> {
     // scan current directory for files of the form "PG<number>_raw.txt", add them to a vector, and then build the tree from that vector of file paths.
     let mut filepaths: Vec<String> = std::fs::read_dir(path)
         .expect("Failed to read directory")
         .filter_map(|entry| {
             let entry = entry.expect("Failed to read directory entry");
             let filename = entry.file_name().into_string().expect("Failed to convert OsString to String");
-            if filename.starts_with("PG") && filename.ends_with("_raw.txt") {
+            //if filename.starts_with("PG") && filename.ends_with("_raw.txt") {
+            if filename.starts_with("pg") && filename.ends_with(".txt") {
                 Some(entry.path().to_str().unwrap().to_string())
             } else {
                 None 
@@ -326,36 +328,48 @@ fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
         })
         .collect();
     filepaths.sort_by(|a, b| {
-        let a_num: usize = a.split("PG").nth(1).unwrap().split("_").nth(0).unwrap().parse().unwrap();
-        let b_num: usize = b.split("PG").nth(1).unwrap().split("_").nth(0).unwrap().parse().unwrap();
+        let a_num: usize = a.split("pg").nth(1).unwrap().split(".txt").nth(0).unwrap().parse().unwrap();
+        let b_num: usize = b.split("pg").nth(1).unwrap().split(".txt").nth(0).unwrap().parse().unwrap();
         a_num.cmp(&b_num)
     });
     //println!("Building Merkle tree from files: {:?}", filepaths);
-    println!("Number of files: {}. Should be 78706", filepaths.len());
+    println!("Number of files: {}.", filepaths.len());
+    //println!("First ten files in the set: {:#?}", &filepaths[0..100]);
+    filepaths
+}
+
+fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
+    let filepaths = get_filenames_from_directory(path);
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
+}
+fn doc_test(tree_filename: &str){
+    println!("reading merkle tree from file.");
+    let json_data = fs::read_to_string(tree_filename).expect("failed to read file");
+    let deserialized: MerkleTree = serde_json::from_str(&json_data).unwrap();
+    println!("Merkle tree has root hash: {:x?}... and contains {} leaves", HexFmt(&deserialized.get_root_hash()[..4]), deserialized.num_leaves);
+    deserialized.verify_tree();
+    println!("Merkle tree verified.");
+
+    let document_filename = "explain_example.txt";
+    let identifier = "PGMERKLE";
+    crate::tag::write_document(document_filename, "June 11, 2026", "13:50", 953259, identifier, deserialized.num_leaves.try_into().unwrap(), deserialized.get_root_hash());
+    let tag = crate::tag::create_chain_tag(identifier, deserialized.num_leaves.try_into().unwrap(), deserialized.get_root_hash(), document_filename);
+    println!("Tag is {:x?}", hex_fmt::HexFmt(tag));
 }
 
 fn main() {
     // let path = "../small_merkel";
-    // let path = "../gutenberg/data/raw/";
+    //let path = "../gutenberg/data/raw/";
+    // let path = "../gutenberg2/cache/epub_copy/";
     // let merkle_tree = build_merkle_tree_from_directory(path);
-    // println!("Merkle tree built from directory {} has root hash: {:x?}... and contains {} leaves", path, &merkle_tree.get_root_hash()[..4], merkle_tree.num_leaves);
+    // println!("Merkle tree built from directory {} has root hash: {:x?}... and contains {} leaves", path, HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
     // let serialized = serde_json::to_string(&merkle_tree).unwrap();
+    // get_filenames_from_directory(path);
+
     let tree_filename = "pgtree.json";
-    // let mut file = File::create(tree_filename).expect("filed to create file");
+    // let mut file = File::create(tree_filename).expect("failed to create file");
     // file.write_all(serialized.as_bytes()).expect("failed to write data");
     // println!("wrote tree to file.");
 
-    println!("reading tree from file:");
-    let json_data = fs::read_to_string(tree_filename).expect("failed to read file");
-    let deserialized: MerkleTree = serde_json::from_str(&json_data).unwrap();
-    println!("Deserialized Merkle tree has root hash: {:x?}... and contains {} leaves", &deserialized.get_root_hash()[..4], deserialized.num_leaves);
-    deserialized.verify_tree();
-    println!("Deserialized tree verified.");
-
-    let document_filename = "explain_example.txt";
-    let identifier = "PGMERKLE";
-    crate::tag::write_document(document_filename, "June 10, 2026", "2:30", 953058, identifier, deserialized.num_leaves.try_into().unwrap(), deserialized.get_root_hash());
-    let tag = crate::tag::create_chain_tag(identifier, deserialized.num_leaves.try_into().unwrap(), deserialized.get_root_hash(), document_filename);
-    println!("Tag is {:x?}", hex_fmt::HexFmt(tag));
+    doc_test(tree_filename);
 }

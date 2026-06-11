@@ -3,8 +3,8 @@ use std::io::{Write,Read};
 use std::process::Command;
 use hex_fmt::HexFmt;
 use config::Config;
-
 use crate::double_hash_from_file;
+
 pub fn create_chain_tag_prefix(identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32]) -> Vec<u8> {
     assert!(identifier.is_ascii(), "Identifier must be ascii characters only.");
     assert!(identifier.len() == 8, "Identifier must have exactly 8 characters. You supplied {}", identifier.len());
@@ -22,8 +22,8 @@ pub fn create_chain_tag(identifier: &str, num_merkle_leaves: u32, merkle_root_ha
 
     let result = [prefix, explainer_hash.to_vec()].concat();
     assert!(result.len() == 76, "Result should have 76 bytes. You had {}", result.len());
-    //println!("Wrote identifier {}, # merkle leaves {}, merkle root hash {:x?}, and explainer hash {:x?} to bytes.\n
-    //Result: {:x?}", identifier, num_merkle_leaves, merkle_root_hash, explainer_hash, result);
+    println!("Wrote identifier {},\n# merkle leaves {},\nmerkle root hash {},\nand explainer hash {}\nto bytes.\n
+Result: {}\n", identifier, num_merkle_leaves, HexFmt(merkle_root_hash), HexFmt(explainer_hash), HexFmt(&result));
     result
 }
 
@@ -79,6 +79,6 @@ First, you must verify that this document and the accompanying Merkle tree are v
                                 .arg(output_filename)
                                 .output()
                                 .expect("failed to execute process");
-    println!("output of command: {}", String::from_utf8(sh_output.stdout).unwrap());
+    println!("Outcome of signing with private key: {}", String::from_utf8(sh_output.stdout).unwrap());
 }
 

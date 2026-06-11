@@ -6,6 +6,7 @@ use std::fs::File;
 use std::io::Write;
 use crate::{MerkleTree, build_merkle_tree_from_directory};
 use hex_literal::hex;
+use hex_fmt::HexFmt;
 
     #[test]
     fn basic_test() {
@@ -19,7 +20,7 @@ use hex_literal::hex;
             b"Data 7",
         ];
         let merkle_tree = MerkleTree::new_from_data(data.clone());
-        println!("Merkle tree has root hash: {:x?}... and contains {} leaves", merkle_tree.get_root_hash(), merkle_tree.num_leaves);
+        println!("Merkle tree has root hash: {:x?}... and contains {} leaves", HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
         merkle_tree.verify_tree();
 
         for i in 0..merkle_tree.nodes.len() {
@@ -80,7 +81,7 @@ use hex_literal::hex;
             let data: Vec<Vec<u8>> = (0..num_leaves).map(|i| format!("Data {}", i).into_bytes()).collect();
             let data_refs: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
             let merkle_tree = MerkleTree::new_from_data(data_refs.clone());
-            println!("Merkle tree has root hash: {:x?}... and contains {} leaves", merkle_tree.get_root_hash(), merkle_tree.num_leaves);
+            println!("Merkle tree has root hash: {:x?}... and contains {} leaves", HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
             merkle_tree.verify_tree();
 
             assert!(merkle_tree.verify_with_index(b"Data 50", 51), "Data 50 should be valid");
@@ -104,17 +105,17 @@ use hex_literal::hex;
 
     #[test]
     fn build_tree_from_files() {
-        let path = "../small_merkel";
+        let path = "testing/small_corpus";
         let merkle_tree = build_merkle_tree_from_directory(path);
-        println!("Merkle tree built from directory {} has root hash: {:x?}... and contains {} leaves", path, &merkle_tree.get_root_hash()[..4], merkle_tree.num_leaves);
+        println!("Merkle tree built from directory {} has root hash: {:x?}... and contains {} leaves", path, HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
         merkle_tree.verify_tree();
-        assert!(merkle_tree.verify_with_index_from_file("../small_merkel/PG11_raw.txt", 1), "tree should say yes to PG11_raw.txt at index 1");
-        assert!(!merkle_tree.verify_with_index_from_file("../small_merkel/PG11_raw.txt", 2), "tree should say no to PG11_raw.txt at index 2");
-        assert!(!merkle_tree.verify_with_index_from_file("../small_merkel/PG50_raw.txt", 1), "tree should say no to PG50_raw.txt at index 1");
-        assert!(merkle_tree.verify_without_index_from_file("../small_merkel/PG11_raw.txt"), "tree should say yes to PG11_raw.txt without index");
-        assert!(!merkle_tree.verify_without_index_from_file("../gutenberg/data/raw/PG109_raw.txt"), "tree should say no to PG109_raw.txt without index");
+        assert!(merkle_tree.verify_with_index_from_file("testing/small_corpus/pg1.txt", 1), "tree should say yes to PG11_raw.txt at index 1");
+        assert!(!merkle_tree.verify_with_index_from_file("testing/small_corpus/pg1.txt", 2), "tree should say no to PG11_raw.txt at index 2");
+        assert!(!merkle_tree.verify_with_index_from_file("testing/small_corpus/pg2.txt", 1), "tree should say no to PG50_raw.txt at index 1");
+        assert!(merkle_tree.verify_without_index_from_file("testing/small_corpus/pg1.txt"), "tree should say yes to PG11_raw.txt without index");
+        assert!(!merkle_tree.verify_without_index_from_file("testing/small_corpus/ignore.txt"), "tree should say no to file not in Merkle tree");
         let proof = merkle_tree.produce_proof(1);
-        assert!(merkle_tree.verify_proof_from_file("../small_merkel/PG11_raw.txt", &proof), "proof should be valid for PG11_raw.txt");
+        assert!(merkle_tree.verify_proof_from_file("testing/small_corpus/pg1.txt", &proof), "proof should be valid for PG11_raw.txt");
         println!("Proof for PG11_raw.txt: {}", proof);
     }
 
@@ -123,7 +124,7 @@ use hex_literal::hex;
         // got the following value from applying sha25sum twice to a file with contents "This is a short test file.".
         let expected_hash = hex!("80b621c7642162e6cb9c342ad2c0a900867175c664a292eb0ad311e9ca92f23e");
 
-        let path = "../small_merkel/test.txt";
+        let path = "testing/small_corpus/ignore.txt";
         let hash = crate::double_hash_from_file(path);
         assert!(hash == expected_hash, "Hash does not match expected value");
         println!("Double hash for {}: {:x?}", path, &hash[..4]);
@@ -132,18 +133,22 @@ use hex_literal::hex;
         let hash = crate::double_hash(data);
         assert!(hash == expected_hash, "Hash does not match expected value");
         println!("Double hash for data: {:x?}", &hash[..4]);
+
+        let new_path = "testing/dummy_explain.txt";
+        let new_hash = crate::double_hash_from_file(new_path);
+        println!("Hash of dummy doc: {}", HexFmt(new_hash));
     }
 
     #[test]
     fn basic_serialization() {
-        let path = "../small_merkel";
+        let path = "testing/small_corpus";
         let merkle_tree = build_merkle_tree_from_directory(path);
         let original_root_hash = merkle_tree.get_root_hash();
-        //println!("Merkle tree built from directory {} has root hash: {:x?}... and contains {} leaves", path, &merkle_tree.get_root_hash()[..4], merkle_tree.num_leaves);
+        //println!("Merkle tree built from directory {} has root hash: {:x?}... and contains {} leaves", path, HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
         let serialized = serde_json::to_string(&merkle_tree).unwrap();
         //println!("Serialized Merkle tree: {}", serialized);
         let deserialized: MerkleTree = serde_json::from_str(&serialized).unwrap();
-        //println!("Deserialized Merkle tree has root hash: {:x?}... and contains {} leaves", &deserialized.get_root_hash()[..4], deserialized.num_leaves);
+        //println!("Deserialized Merkle tree has root hash: {:x?}... and contains {} leaves", HexFmt(&deserialized.get_root_hash()[..4]), deserialized.num_leaves);
         assert!(deserialized.get_root_hash() == original_root_hash);
         deserialized.verify_tree();
         println!("Deserialized tree verified.");
@@ -151,23 +156,23 @@ use hex_literal::hex;
 
     #[test]
     fn serialization_write() {
-        let path = "../small_merkel";
+        let path = "testing/small_corpus";
         let merkle_tree = build_merkle_tree_from_directory(path);
         let original_root_hash = merkle_tree.get_root_hash();
-        println!("Merkle tree built from directory {} has root hash: {:x?}... and contains {} leaves", path, &merkle_tree.get_root_hash()[..4], merkle_tree.num_leaves);
+        println!("Merkle tree built from directory {} has root hash: {:x?}... and contains {} leaves", path, HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
         let serialized = serde_json::to_string(&merkle_tree).unwrap();
         let tree_filename = "pgtree_test.json";
-        let mut file = File::create(tree_filename).expect("filed to create file");
+        let mut file = File::create(tree_filename).expect("failed to create file");
         file.write_all(serialized.as_bytes()).expect("failed to write data");
         println!("wrote tree to file.");
 
         println!("reading tree from file:");
         let json_data = std::fs::read_to_string(tree_filename).expect("failed to read file");
         let deserialized: MerkleTree = serde_json::from_str(&json_data).unwrap();
-        println!("Deserialized Merkle tree has root hash: {:x?}... and contains {} leaves", &deserialized.get_root_hash()[..4], deserialized.num_leaves);
+        println!("Deserialized Merkle tree has root hash: {:x?}... and contains {} leaves", HexFmt(&deserialized.get_root_hash()[..4]), deserialized.num_leaves);
         deserialized.verify_tree();
         println!("Deserialized tree verified.");
-        println!("Deserialized Merkle tree has root hash: {:x?}... and contains {} leaves", &deserialized.get_root_hash()[..4], deserialized.num_leaves);
+        println!("Deserialized Merkle tree has root hash: {:x?}... and contains {} leaves", HexFmt(&deserialized.get_root_hash()[..4]), deserialized.num_leaves);
         assert!(deserialized.get_root_hash() == original_root_hash);
         deserialized.verify_tree();
         println!("Deserialized tree verified.");
@@ -176,23 +181,23 @@ use hex_literal::hex;
 
     #[test]
     fn basic_tag() {
-        let path = "../small_merkel";
+        let path = "testing/small_corpus";
         let merkle_tree = build_merkle_tree_from_directory(path);
         let identifier = "PGMERKLE";
         let merkle_root_hash = merkle_tree.get_root_hash();
         let num_leaves: u32 = merkle_tree.num_leaves.try_into().expect("Too many leaves to write as u32");
-        let explainer_file_path = "src/dummy_explain.txt";
+        let explainer_file_path = "testing/dummy_explain.txt";
         let tag = crate::tag::create_chain_tag(identifier, num_leaves, merkle_root_hash, explainer_file_path); 
-        let expected_tag = hex!("50 47 4d 45 52 4b 4c 45 00 00 00 0c ce 90 85 b9 6a a4 7f d9 6f 57 72 e0 f6 d7 9b 56 a9 27 89 af aa 27 1c 30 d7 41 b2 c9 9a 36 60 ab a0 e5 8f 0d df 84 5d c1 ce 07 79 33 7c 91 89 c3 0b 91 6e 7d 62 94 96 ac 85 18 ac 6b c7 50 9e 61");
+        let expected_tag = hex!("50 47 4d 45 52 4b 4c 45 00 00 00 0a 44 5a 1c 4e 49 fc b2 e4 db 00 0c 95 6e 50 f0 38 43 eb 56 7a 32 e0 ce 54 1e 5f dd 08 d6 26 4b ae a0 e5 8f 0d df 84 5d c1 ce 07 79 33 7c 91 89 c3 0b 91 6e 7d 62 94 96 ac 85 18 ac 6b c7 50 9e 61");
         assert_eq!(tag, expected_tag);
     }
 
     #[test]
     #[ignore]
     fn full_pg_test() {
-        let path = "../gutenberg/data/raw/";
+        let path = "../gutenberg2/cache/epub_copy/";
         let merkle_tree = build_merkle_tree_from_directory(path);
-        println!("Merkle tree built from directory {} has root hash: {:x?}... and contains {} leaves", path, &merkle_tree.get_root_hash()[..4], merkle_tree.num_leaves);
+        println!("Merkle tree built from directory {} has root hash: {:x?}... and contains {} leaves", path, HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
         merkle_tree.verify_tree();
         println!("Tree verified.");
     }
