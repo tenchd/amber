@@ -132,7 +132,7 @@ impl MerkleTree {
         MerkleTree { root_index, num_leaves, nodes }
     }
 
-    // Assumes files are all in a single directory and have names of the form "PG<number>_raw.txt". All other files are ignored. The order of the files in the tree is determined by the number in the filename, with smaller numbers coming first. For example, "PG1_raw.txt" would be the first leaf, "PG2_raw.txt" would be the second leaf, and so on.
+    // Assumes files are all in a single directory and have names of the form "pg<number>.txt". All other files are ignored. The order of the files in the tree is determined by the number in the filename, with smaller numbers coming first. For example, "pg1.txt" would be the first leaf, "pg2.txt" would be the second leaf, and so on.
     fn new_from_files(filepaths: Vec<&str>) -> Self {
         let num_leaves = filepaths.len();
         let mut nodes: Vec<MerkleNode> = vec![];
@@ -339,6 +339,7 @@ fn get_filenames_from_directory(path: &str) -> Vec<String> {
     //println!("Building Merkle tree from files: {:?}", filepaths);
     println!("Number of files: {}.", filepaths.len());
     //println!("First ten files in the set: {:#?}", &filepaths[0..100]);
+    println!("Last item in the set: {}", &filepaths.last().unwrap());
     filepaths
 }
 
@@ -379,12 +380,14 @@ fn build_timestamp(corpus_path: &str) {
 }
 
 fn main() {
-    // let settings = Config::builder()
-    //                 .add_source(config::File::with_name("config"))
-    //                 .build()
-    //                 .unwrap();
-    // let corpus_path = settings.get_string("corpus_path").unwrap();
+    let settings = Config::builder()
+                    .add_source(config::File::with_name("config"))
+                    .build()
+                    .unwrap();
+    let corpus_path = settings.get_string("corpus_path").unwrap();
     let tree_filename = "timestamp/pgtree.json";
+
+    //get_filenames_from_directory(&corpus_path);
     //build_timestamp(&corpus_path);
     build_doc_and_tag_from_saved_tree(tree_filename);
 }

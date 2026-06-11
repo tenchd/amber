@@ -2,6 +2,7 @@ If the above conditions hold, you can be sure the merkle tree is valid, and can 
 If you have two versions of this document which both point to different Bitcoin transactions, and both are valid, you should trust the one which appears earlier in the chain. This is because once I publish this document and merkle tree, it is easy for a malicious actor to make their own merkle tree with altered contents, and then repeat my process to timestamp their tree on the chain. In this case, their blockchain transaction would occur in a later block than mine.
 
 Recovering the Merkle Tree 
+[probably delete this section]
 If you have access to this document, but not the Merkle tree it refers to, you can rebuild the Merkle tree as long as you have genuine, unaltered copies of raw text files of ALL PG works up to number XXXXX. If you follow the instructions above for building the Merkle tree from the files, use the Rust code contained below in this document, or use the Github project linked to in this document, you should end up with a Merkle tree with the correct root hash.
 [revisit this once i figure out which files are missing and why]
 

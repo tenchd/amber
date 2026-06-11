@@ -41,10 +41,13 @@ I have not been able to think of a way to provide a similar level of proof that 
 Indexing Project Gutenberg Raw Text Files
 Each work in the Project Gutenberg collection is indexed by a unique positive integer. For example, PG1 is "The Declaration of Independence of the United States of America", and PG100 is "The Complete Works of William Shakespeare". I use these unique integers as identifiers during Merkle tree construction.
 Each Project Gutenberg work is typically available in several different formats, including popular ebook formats like .epub and .mobi. We will use the plain text (UTF-8 encoded) version of each work, because these are the simplest and the least likely to change over time.
-[insert discussion of not all works having raw text versions]
+
+I downloaded the PG corpus directly from their website. They make nearly all of their works available as zipped tar file, updated weekly, at https://www.gutenberg.org/cache/epub/feeds/txt-files.tar.zip. This collection omits works in the corpus that have no plain text version available (such as PG40) or that are not really books (such as PG50, which simply lists the first 1 million digits of pi). The highest PG index in the collection I downloaded was 78827, but the number of Merkle leaves is a little lower than that, because of these missing works.
 
 Merkle Tree Construction and Serialization
 I constructed the Merkle tree of the Project Gutenberg plain text files in the same way a Bitcoin miner computes the Merkle root hash of the block of transactions. That is to say, let the unique integer identifiers of the works be the ordering of the files. First I compute the double SHA256 hash of each file. These comprise the leaves of the Merkle tree. Then for each adjacent pair of leaves in the ordering, I double hash the concatenation of their hashes to produce the hash of their parent node. The process is repeated at each level until the root is reached. If there is an odd number of nodes at some level, the last node's hash is concatenated with itself and then double SHA256 hashed to get the parent hash.
+Note that if some work has PG index X, it may not be the Xth leaf in the merkle tree because some of the works are not present in the plain text corpus.
+
 The tree is serialized as XXXX. [todo]
 
 It is possible and totally acceptable to serialize the Merkle tree in another form for reasons such as reducing total size. If you encounter the tree serialized in another form and are able to deserialize it, you can trust it as genuine provided it still passes verification (see below).
