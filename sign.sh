@@ -1,10 +1,10 @@
 #!/bin/bash
 # fill in the four variables below with the correct values
-private_key_path="private_key.pem"
-public_key_path="public_key.pem"
-merkle_root_hash="8f2cb7ce0b83bcab38cb7957a4ef0d68c8872ab452e2d7abafcab1c49f90e205"
-date="June 10, 2026"
-output_document="../test_example.txt"
+private_key_path=$1
+public_key_path=$2
+merkle_root_hash=$3
+date=$4
+output_document=$5
 
 message="${merkle_root_hash} ${date}"
 

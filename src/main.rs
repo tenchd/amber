@@ -355,7 +355,7 @@ fn main() {
 
     let document_filename = "test_example.txt";
     let identifier = "PGMERKLE";
-    crate::tag::write_document(document_filename, "10", "2:30", 953058, identifier, deserialized.num_leaves.try_into().unwrap(), deserialized.get_root_hash());
+    crate::tag::write_document(document_filename, "June 10, 2026", "2:30", 953058, identifier, deserialized.num_leaves.try_into().unwrap(), deserialized.get_root_hash());
     let tag = crate::tag::create_chain_tag(identifier, deserialized.num_leaves.try_into().unwrap(), deserialized.get_root_hash(), document_filename);
     println!("Tag is {:x?}", hex_fmt::HexFmt(tag));
 }

@@ -1,6 +1,8 @@
 use std::fs::{File, read_to_string};
 use std::io::{Write,Read};
+use std::process::Command;
 use hex_fmt::HexFmt;
+use config::Config;
 
 use crate::double_hash_from_file;
 pub fn create_chain_tag_prefix(identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32]) -> Vec<u8> {
@@ -25,9 +27,9 @@ pub fn create_chain_tag(identifier: &str, num_merkle_leaves: u32, merkle_root_ha
     result
 }
 
-pub fn write_document(output_filename: &str, day: &str, time: &str, block_lockout: usize, identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32]) {
+pub fn write_document(output_filename: &str, date: &str, time: &str, block_lockout: usize, identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32]) {
     let mut pieces: Vec<String> = vec![];
-    let line1 = format!("On June {}, 2026, at roughly {} UTC, I built a merkle tree from the raw text files of the works listed on Project Gutenberg and wrote the root hash of this merge tree to the Bitcoin blockchain in block {}, or one of several blocks immediately following.\n", day, time, block_lockout);
+    let line1 = format!("On {}, at roughly {} UTC, I built a merkle tree from the raw text files of the works listed on Project Gutenberg and wrote the root hash of this merge tree to the Bitcoin blockchain in block {}, or one of several blocks immediately following.\n", date, time, block_lockout);
     pieces.push(line1);
     let line2 = read_to_string("src/static_piece1.txt").expect("couldn't find first static piece");
     pieces.push(line2);
@@ -54,9 +56,29 @@ First, you must verify that this document and the accompanying Merkle tree are v
     let line4 = read_to_string("src/static_piece2.txt").expect("couldn't find second static piece");
     pieces.push(line4);
 
-    let mut file = File::create(output_filename).expect("filed to create file");
+    let mut file = File::create(output_filename).expect("failed to create file");
     for piece in pieces {
         file.write_all(&piece.into_bytes()).expect("couldn't write line");
     }
+
+    let settings = Config::builder()
+                    .add_source(config::File::with_name("config"))
+                    .build()
+                    .unwrap();
+
+    let private_key_path = settings.get_string("private_key_path").unwrap();
+    let public_key_path = settings.get_string("public_key_path").unwrap();
+    let merkle_root_hash_string = format!("{}", HexFmt(merkle_root_hash));
+
+    let sh_output = Command::new("sh")
+                                .arg("sign.sh")
+                                .arg(private_key_path)
+                                .arg(public_key_path)
+                                .arg(merkle_root_hash_string)
+                                .arg(date)
+                                .arg(output_filename)
+                                .output()
+                                .expect("failed to execute process");
+    println!("output of command: {}", String::from_utf8(sh_output.stdout).unwrap());
 }
 
