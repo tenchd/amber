@@ -3,12 +3,14 @@ use hex_fmt::HexFmt;
 //use sha2::digest::const_oid::ObjectIdentifier;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
+use std::str::SplitWhitespace;
 //use serde_json::Result;
 use std::{fmt, fs};
 use std::fs::File;
-use std::io::{Read,Write};
+use std::io::{Read,Write,BufReader,self, prelude::*,};
 use std::collections::HashMap;
 use config::Config;
+use base64::prelude::*;
 
 //fn double_hash(input: &[u8]) -> Array<u8, <Sha256 as OutputSizeUser>::OutputSize> {
 pub fn double_hash(input: &[u8]) -> [u8; 32] {
@@ -151,6 +153,58 @@ impl MerkleTree {
         MerkleTree { root_index, num_leaves, nodes }
     }
 
+    pub fn new_from_fossilized_tree(tree_filename: &str) -> Self {
+        let file = File::open(tree_filename).expect("couldn't open fossil tree file");
+        let mut reader = BufReader::new(file);
+        let mut fossil_hashes: Vec<[u8; 32]> = vec![];
+
+        // need to read first few header lines!
+        let mut header_lines: Vec<String> = vec!["".to_string(); 3];
+        for i in 0..3 {
+            reader.read_line(&mut header_lines[i]).expect("Failed to read line");
+        }
+
+        // TODO:check that header lines match format
+
+        let words  = header_lines[1].split_whitespace().collect::<Vec<&str>>();
+        let num_leaves: NodeHandle = words[3].parse().expect("Unable to parse num_leaves from line 2 of file");
+
+        for line in reader.lines() {
+            let clean_line = line.expect("could not read line");
+            let fossil_hash = BASE64_STANDARD.decode(clean_line).expect("Could not decode line");
+            assert!(fossil_hash.len() == 32, "fossil hash is incorrect length");
+            fossil_hashes.push(fossil_hash.try_into().expect("Could not convert to bytes"));
+        }
+
+        let mut nodes: Vec<MerkleNode> = vec![];
+
+        nodes.push(MerkleNode { hash: [0u8; 32], index: 0, left: 0, right: 0, parent: 0 }); // dummy node at index 0
+        for (index, hash) in fossil_hashes.iter().enumerate() {
+            if index == num_leaves {
+                break;
+            }
+            nodes.push(MerkleNode::new_leaf(*hash, index + 1));
+        }
+        let root_index = MerkleTree::build_tree(&mut nodes, num_leaves, true);
+
+        let tree = MerkleTree { root_index, num_leaves, nodes };
+        for node in &tree.nodes {
+            println!("node {} has parent {}, left child {}. right child {}", node.index, node.parent, node.left, node.right);
+        }
+        tree.verify_tree();
+        // make sure all hashes match fossil
+        for i in 0..fossil_hashes.len() {
+            let fossil_hash = fossil_hashes[i];
+            let tree_hash = tree.nodes[i+1].hash;
+            if fossil_hash != tree_hash {
+                println!("Warning: tree is valid but the hashes don't match those in the fossil file at position {}. That's very weird.", i);
+                break;
+            }
+        }
+
+        tree
+    }
+
     pub fn display_state(nodes: &Vec<MerkleNode>) {
         println!("---Merkle Tree State:----");
         for node in nodes {
@@ -206,6 +260,8 @@ impl MerkleTree {
 
         nodes.len() - 1
     }
+
+    
 
     pub fn get_root_hash(&self) -> [u8; 32] {
         self.nodes[self.root_index].hash
@@ -295,7 +351,7 @@ impl MerkleTree {
                 continue;
             }
 
-            assert!(node.left != 0);
+            assert!(node.left != 0, "node {:x?}", node);
             let left_index = &self.nodes[node.left];
             let left_hash = left_index.hash;
             if node.right > 0 {
@@ -305,20 +361,38 @@ impl MerkleTree {
                 assert!(node.hash == computed_hash, 
                     "Merkle tree verification failed.\n 
                     Node {}'s hash does not match the double SHA256 hash of the concatenation of its children's hashes.\n
-                    Left child has index {} and hash {:x?}.\n
-                    Right child has index {} and hash {:x?}.\n
-                    The double SHA256 hash of their concatenated hashes is {:x?}, but parent node {}'s hash is {:x?}.",
-                node.index, left_index, left_hash, right_index, right_hash,computed_hash, node.index, node.hash);
+                    Left child has index {} and hash {}.\n
+                    Right child has index {} and hash {}.\n
+                    The double SHA256 hash of their concatenated hashes is {}, but parent node {}'s hash is {}.",
+                node.index, left_index, HexFmt(left_hash), right_index, HexFmt(right_hash), HexFmt(computed_hash), node.index, HexFmt(node.hash));
             }
             else {
                 let computed_hash = double_hash(&[left_hash, left_hash].concat());
                 assert!(node.hash == computed_hash, 
                     "Merkle tree verification failed.\n
                     Node {}'s hash does not match the double SHA256 hash of the self-concatenation of its child's hash.\n
-                    Left (only) child has index {} and hash {:x?}.\n
-                    Concatenating it with itself and double SHA256 hashing is {:x?}, but parent node {}'s hash is {:x?}.",
-                    node.index, left_index, left_hash, computed_hash, node.index, node.hash);
+                    Left (only) child has index {} and hash {}.\n
+                    Concatenating it with itself and double SHA256 hashing gives {}, but parent node {}'s hash is {}.",
+                    node.index, left_index, HexFmt(left_hash), HexFmt(computed_hash), node.index, HexFmt(node.hash));
             }
         }
+    }
+
+    pub fn fossilize_tree(&self, tree_filename: &str, date: &str) {
+        let mut file = File::create(tree_filename).expect("failed to create file");
+        let header_line = format!("Merkle tree. Created on {} from Project Gutenberg corpus of plain text files.\n", date);
+        let num_leaves_line = format!("Number of leaves: {}\n", self.num_leaves);
+        let explain_line = "Each line below is the hash (in base64) of a merkle node. Tree is binary. Each parent hash is the double SHA256 hash of the concatenation of its two child hashes. If the parent has only one child, its hash is the double SHA256 hash of the child hash concatenated with itself. Final line of file is root hash.\n";
+        file.write_all(header_line.as_bytes()).unwrap();
+        file.write_all(num_leaves_line.as_bytes()).unwrap();
+        file.write_all(explain_line.as_bytes()).unwrap();
+
+        for i in 1..self.nodes.len() {
+            let line = format!("{}\n", BASE64_STANDARD.encode(self.nodes[i].hash));
+            file.write_all(line.as_bytes()).unwrap();
+        }
+        // pub root_index: NodeHandle,
+        // pub num_leaves: usize,
+        // pub nodes: Vec<MerkleNode>,
     }
 }

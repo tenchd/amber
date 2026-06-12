@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+base64 = "0.22.1"
 config = "0.15.23"
 hex-literal = "1.1.0"
 hex_fmt = "0.3.0"

@@ -150,6 +150,17 @@ use config::Config;
     }
 
     #[test]
+    fn custom_serialization() {
+        let path = "testing/small_corpus";
+        let merkle_tree = build_merkle_tree_from_directory(path);
+        let test_filename = "testing/custom_pg_test.txt";
+        let date = "Christmas";
+        merkle_tree.fossilize_tree(test_filename, date);
+        let unfossilized_tree = MerkleTree::new_from_fossilized_tree(test_filename);
+        assert!(merkle_tree.get_root_hash() == unfossilized_tree.get_root_hash());
+    }
+
+    #[test]
     fn serialization_write() {
         let path = "testing/small_corpus";
         let merkle_tree = build_merkle_tree_from_directory(path);
