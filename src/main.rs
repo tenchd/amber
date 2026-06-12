@@ -12,6 +12,7 @@ use serde::{Serialize, Deserialize};
 use std::{fmt, fs};
 use std::fs::File;
 use std::io::{Read,Write};
+use std::collections::HashMap;
 use config::Config;
 
 //fn double_hash(input: &[u8]) -> Array<u8, <Sha256 as OutputSizeUser>::OutputSize> {
@@ -97,7 +98,7 @@ impl fmt::Display for MerkleNode {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct MerkleProof {
-    leaf_index: usize,
+    leaf_index: NodeHandle,
     proof_hashes: Vec<[u8; 32]>,
     proof_directions: Vec<bool>, // true for left, false for right
 }
@@ -114,9 +115,10 @@ impl fmt::Display for MerkleProof {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct MerkleTree {
-    root_index: usize,
+    root_index: NodeHandle,
     num_leaves: usize,
     nodes: Vec<MerkleNode>,
+    //hash_lookup: HashMap<[u8; 32], NodeHandle>
 }
 
 #[allow(dead_code)]
@@ -129,6 +131,11 @@ impl MerkleTree {
             nodes.push(MerkleNode::new_leaf(double_hash(d).into(), index + 1));
         }
         let root_index = MerkleTree::build_tree(&mut nodes, num_leaves, false);
+        // let mut hash_lookup = HashMap::<[u8;32],NodeHandle>::new();
+        // for i in 1..num_leaves + 1 {
+        //     let hash = nodes[i].hash;
+        //     hash_lookup.insert(hash,i);
+        // }
         MerkleTree { root_index, num_leaves, nodes }
     }
 
@@ -141,6 +148,11 @@ impl MerkleTree {
             nodes.push(MerkleNode::new_leaf_from_file(filepath, index + 1));
         }
         let root_index = MerkleTree::build_tree(&mut nodes, num_leaves, false);
+        // let mut hash_lookup = HashMap::<[u8;32],NodeHandle>::new();
+        // for i in 1..num_leaves + 1 {
+        //     let hash = nodes[i].hash;
+        //     hash_lookup.insert(hash,i);
+        // }
         MerkleTree { root_index, num_leaves, nodes }
     }
 
