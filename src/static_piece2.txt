@@ -17,6 +17,7 @@ While the threat of cultural dementia is real, we already have the technical mea
 - working with existing conservation and archival organizations
 - including works from more sources, world cultures, and languages
 - building a volunteer, decentralized, resilient effort to preserve exact canonical versions of texts, as well as their secure timestamps
+- developing archival file formats that contain merkle proofs and blockchain pointers in file headers
 
 Who Am I?
 It may be useful for me to establish my identity in the future. For that reason I share my public key here, as well as a signature of the Merkle tree root hash and the date with my private key.
