@@ -120,17 +120,17 @@ use config::Config;
         let expected_hash = hex!("80b621c7642162e6cb9c342ad2c0a900867175c664a292eb0ad311e9ca92f23e");
 
         let path = "testing/small_corpus/ignore.txt";
-        let hash = crate::double_hash_from_file(path);
+        let hash = crate::merkle::double_hash_from_file(path);
         assert!(hash == expected_hash, "Hash does not match expected value");
         println!("Double hash for {}: {}", path, HexFmt(&hash[..4]));
 
         let data = b"This is a short test file.";
-        let hash = crate::double_hash(data);
+        let hash = crate::merkle::double_hash(data);
         assert!(hash == expected_hash, "Hash does not match expected value");
         println!("Double hash for data: {}", HexFmt(&hash[..4]));
 
         let new_path = "testing/dummy_explain.txt";
-        let new_hash = crate::double_hash_from_file(new_path);
+        let new_hash = crate::merkle::double_hash_from_file(new_path);
         println!("Hash of dummy doc: {}", HexFmt(new_hash));
     }
 

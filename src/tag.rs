@@ -3,7 +3,7 @@ use std::io::{Write,Read};
 use std::process::Command;
 use hex_fmt::HexFmt;
 use config::Config;
-use crate::double_hash_from_file;
+use crate::merkle::double_hash_from_file;
 
 pub fn create_chain_tag_prefix(identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32]) -> Vec<u8> {
     assert!(identifier.is_ascii(), "Identifier must be ascii characters only.");
