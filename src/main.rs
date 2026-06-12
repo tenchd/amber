@@ -50,18 +50,19 @@ fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
     let filepaths = get_filenames_from_directory(path);
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
 }
-fn build_doc_and_tag_from_saved_tree(tree_filename: &str){
+fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str){
     println!("reading merkle tree from file.");
-    let json_data = fs::read_to_string(tree_filename).expect("failed to read file");
-    let deserialized: MerkleTree = serde_json::from_str(&json_data).unwrap();
-    println!("Merkle tree has root hash: {:x?}... and contains {} leaves", HexFmt(&deserialized.get_root_hash()[..4]), deserialized.num_leaves);
-    deserialized.verify_tree();
+    //let json_data = fs::read_to_string(tree_filename).expect("failed to read file");
+    //let deserialized: MerkleTree = serde_json::from_str(&json_data).unwrap();
+    let unfossilized: MerkleTree = MerkleTree::new_from_fossilized_tree(tree_filename);
+    println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
+    unfossilized.verify_tree();
     println!("Merkle tree verified.");
 
     let document_filename = "timestamp/explain.txt";
     let identifier = "PGMERKLE";
-    crate::tag::write_document(document_filename, "June 11, 2026", "13:50", 953259, identifier, deserialized.num_leaves.try_into().unwrap(), deserialized.get_root_hash());
-    let tag = crate::tag::create_chain_tag(identifier, deserialized.num_leaves.try_into().unwrap(), deserialized.get_root_hash(), document_filename);
+    crate::tag::write_document(document_filename, date, "13:50", 953259, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash());
+    let tag = crate::tag::create_chain_tag(identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), document_filename);
     println!("Wrote explainer document to file {}", document_filename);
     //println!("Tag is {}", hex_fmt::HexFmt(&tag));
     let tag_filename = "timestamp/tag.txt";
@@ -72,14 +73,13 @@ fn build_doc_and_tag_from_saved_tree(tree_filename: &str){
 }
 
 fn build_timestamp(corpus_path: &str) {
+    let date = "June 12, 2026";
     let tree = build_merkle_tree_from_directory(corpus_path);
-    let tree_filename = "timestamp/pgtree.json";
-    let serialized = serde_json::to_string(&tree).unwrap();
-    let mut file = File::create(tree_filename).expect("failed to create file");
-    file.write_all(serialized.as_bytes()).expect("failed to write data");
+    let tree_filename = "timestamp/pgtree.txt";
+    tree.fossilize_tree(tree_filename, date);
     println!("wrote tree to file.");
 
-    build_doc_and_tag_from_saved_tree(tree_filename);
+    build_doc_and_tag_from_saved_tree(tree_filename, date);
 }
 
 fn main() {
@@ -88,9 +88,10 @@ fn main() {
                     .build()
                     .unwrap();
     let corpus_path = settings.get_string("corpus_path").unwrap();
-    let tree_filename = "timestamp/pgtree.json";
+    let tree_filename = "timestamp/pgtree.txt";
+    let date = "June 12, 2026";
 
     //get_filenames_from_directory(&corpus_path);
     //build_timestamp(&corpus_path);
-    build_doc_and_tag_from_saved_tree(tree_filename);
+    build_doc_and_tag_from_saved_tree(tree_filename, date);
 }

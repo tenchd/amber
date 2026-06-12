@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{Write,Read};
 use crate::{MerkleTree, build_merkle_tree_from_directory};
 use hex_literal::hex;
@@ -158,6 +158,7 @@ use config::Config;
         merkle_tree.fossilize_tree(test_filename, date);
         let unfossilized_tree = MerkleTree::new_from_fossilized_tree(test_filename);
         assert!(merkle_tree.get_root_hash() == unfossilized_tree.get_root_hash());
+        fs::remove_file(test_filename).unwrap();
     }
 
     #[test]

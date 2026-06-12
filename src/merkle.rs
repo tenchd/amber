@@ -185,12 +185,12 @@ impl MerkleTree {
             }
             nodes.push(MerkleNode::new_leaf(*hash, index + 1));
         }
-        let root_index = MerkleTree::build_tree(&mut nodes, num_leaves, true);
+        let root_index = MerkleTree::build_tree(&mut nodes, num_leaves, false);
 
         let tree = MerkleTree { root_index, num_leaves, nodes };
-        for node in &tree.nodes {
-            println!("node {} has parent {}, left child {}. right child {}", node.index, node.parent, node.left, node.right);
-        }
+        // for node in &tree.nodes {
+        //     println!("node {} has parent {}, left child {}. right child {}", node.index, node.parent, node.left, node.right);
+        // }
         tree.verify_tree();
         // make sure all hashes match fossil
         for i in 0..fossil_hashes.len() {
@@ -201,7 +201,7 @@ impl MerkleTree {
                 break;
             }
         }
-
+        //TODO: verify new root hash matches last line of file
         tree
     }
 
