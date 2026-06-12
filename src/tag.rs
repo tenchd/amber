@@ -29,7 +29,7 @@ pub fn create_chain_tag(identifier: &str, num_merkle_leaves: u32, merkle_root_ha
 
 pub fn write_document(output_filename: &str, date: &str, time: &str, block_lockout: usize, identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32]) {
     let mut pieces: Vec<String> = vec![];
-    let line1 = format!("On {}, at roughly {} UTC, I built a merkle tree from the raw text files of the works listed on Project Gutenberg and wrote the root hash of this merge tree to the Bitcoin blockchain in block {}, or one of several blocks immediately following.\n", date, time, block_lockout);
+    let line1 = format!("On {}, at roughly {} UTC, I built a merkle tree from the raw text files of the works listed on Project Gutenberg and wrote the root hash of this merkle tree to the Bitcoin blockchain in block {}, or one of several blocks immediately following.\n", date, time, block_lockout);
     pieces.push(line1);
     let line2 = read_to_string("src/static_piece1.txt").expect("couldn't find first static piece");
     pieces.push(line2);
