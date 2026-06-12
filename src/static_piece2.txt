@@ -1,5 +1,6 @@
 If the above conditions hold, you can be sure the merkle tree is valid, and can use it to verify PG documents safely.
-If you have two versions of this document which both point to different Bitcoin transactions, and both are valid, you should trust the one which appears earlier in the chain. This is because once I publish this document and merkle tree, it is easy for a malicious actor to make their own merkle tree with altered contents, and then repeat my process to timestamp their tree on the chain. In this case, their blockchain transaction would occur in a later block than mine.
+To verify that a text file was part of the PG corpus in 2026, simply double SHA256 hash the document. If there is a leaf node in the Merkle tree whose hash matches exactly, you have verified that the text file is part of the corpus. Otherwise, the text file cannot be verified, and we can conclude that it does not exactly match any of the original text files included in the Merkle tree.
+If you have two versions of this document which point to different Bitcoin transactions, and both are valid, you should trust the one which appears earlier in the chain. This is because once I publish this document and merkle tree, it is easy for a malicious actor to make their own merkle tree with altered contents, and then repeat my process to timestamp their tree on the chain. In this case, their blockchain transaction would occur in a later block than mine.
 
 Recovering the Merkle Tree 
 [probably delete this section]

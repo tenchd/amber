@@ -21,7 +21,7 @@ use config::Config;
             b"Data 7",
         ];
         let merkle_tree = MerkleTree::new_from_data(data.clone());
-        println!("Merkle tree has root hash: {:x?}... and contains {} leaves", HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
+        println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
         merkle_tree.verify_tree();
 
         for i in 0..merkle_tree.nodes.len() {
@@ -59,12 +59,6 @@ use config::Config;
         ];
         let merkle_tree = MerkleTree::new_from_data(data.clone());
         merkle_tree.verify_tree();
-
-        // let test_data = b"Data 7";
-        // let test_index = 7;
-        // let proof = merkle_tree.produce_proof(test_index);
-        // println!("Proof for leaf index {}: {}", test_index, proof);
-        // assert!(merkle_tree.verify_proof(test_data, &proof), "Proof should be valid for data: {:?}", String::from_utf8_lossy(test_data));
 
         for (i, d) in data.iter().enumerate() {
             println!("testing proof for leaf index {} (data: {:?})", i + 1, String::from_utf8_lossy(d));
@@ -108,16 +102,16 @@ use config::Config;
     fn build_tree_from_files() {
         let path = "testing/small_corpus";
         let merkle_tree = build_merkle_tree_from_directory(path);
-        println!("Merkle tree built from directory {} has root hash: {:x?}... and contains {} leaves", path, HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
+        println!("Merkle tree built from directory {} has root hash: {}... and contains {} leaves", path, HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
         merkle_tree.verify_tree();
-        assert!(merkle_tree.verify_with_index_from_file("testing/small_corpus/pg1.txt", 1), "tree should say yes to PG11_raw.txt at index 1");
-        assert!(!merkle_tree.verify_with_index_from_file("testing/small_corpus/pg1.txt", 2), "tree should say no to PG11_raw.txt at index 2");
-        assert!(!merkle_tree.verify_with_index_from_file("testing/small_corpus/pg2.txt", 1), "tree should say no to PG50_raw.txt at index 1");
-        assert!(merkle_tree.verify_without_index_from_file("testing/small_corpus/pg1.txt"), "tree should say yes to PG11_raw.txt without index");
+        assert!(merkle_tree.verify_with_index_from_file("testing/small_corpus/pg1.txt", 1), "tree should say yes to pg1.txt at index 1");
+        assert!(!merkle_tree.verify_with_index_from_file("testing/small_corpus/pg1.txt", 2), "tree should say no to pg1.txt at index 2");
+        assert!(!merkle_tree.verify_with_index_from_file("testing/small_corpus/pg2.txt", 1), "tree should say no to pg2.txt at index 1");
+        assert!(merkle_tree.verify_without_index_from_file("testing/small_corpus/pg1.txt"), "tree should say yes to pg1.txt");
         assert!(!merkle_tree.verify_without_index_from_file("testing/small_corpus/ignore.txt"), "tree should say no to file not in Merkle tree");
         let proof = merkle_tree.produce_proof(1);
-        assert!(merkle_tree.verify_proof_from_file("testing/small_corpus/pg1.txt", &proof), "proof should be valid for PG11_raw.txt");
-        println!("Proof for PG11_raw.txt: {}", proof);
+        assert!(merkle_tree.verify_proof_from_file("testing/small_corpus/pg1.txt", &proof), "proof should be valid for pg1.txt.txt");
+        println!("Proof for pg1.txt: {}", proof);
     }
 
     #[test]
@@ -128,12 +122,12 @@ use config::Config;
         let path = "testing/small_corpus/ignore.txt";
         let hash = crate::double_hash_from_file(path);
         assert!(hash == expected_hash, "Hash does not match expected value");
-        println!("Double hash for {}: {:x?}", path, &hash[..4]);
+        println!("Double hash for {}: {}", path, HexFmt(&hash[..4]));
 
         let data = b"This is a short test file.";
         let hash = crate::double_hash(data);
         assert!(hash == expected_hash, "Hash does not match expected value");
-        println!("Double hash for data: {:x?}", &hash[..4]);
+        println!("Double hash for data: {}", HexFmt(&hash[..4]));
 
         let new_path = "testing/dummy_explain.txt";
         let new_hash = crate::double_hash_from_file(new_path);
