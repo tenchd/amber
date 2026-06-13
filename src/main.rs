@@ -9,7 +9,16 @@ use hex_fmt::HexFmt;
 use std::fs::File;
 use std::io::{Write};
 use config::Config;
+use clap::Parser;
 use crate::merkle::MerkleTree;
+
+// command line parsing
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(short, long, default_value_t = false)]
+    build_tree: bool,
+}
 
 
 // Scan current directory for files of the form "pg<number>", add them to a vector. All other files are ignored. This vector of file paths is used to build the merkle tree leaves.
@@ -34,8 +43,8 @@ fn get_filenames_from_directory(path: &str) -> Vec<String> {
         let b_num: usize = b.split("pg").nth(1).unwrap().split(".txt").nth(0).unwrap().parse().unwrap();
         a_num.cmp(&b_num)
     });
-    println!("Number of files: {}.", filepaths.len());
-    println!("Last item in the set: {}", &filepaths.last().unwrap());
+    println!("Building a Merkle tree from {} files. This may take a couple of minutes.", filepaths.len());
+    //println!("Last item in the set: {}", &filepaths.last().unwrap());
     filepaths
 }
 
@@ -63,8 +72,9 @@ fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str, time: &str
 
 fn build_timestamp(corpus_path: &str, tree_filename: &str, date: &str, time: &str, block_lockout: usize, identifier: &str) {
     let tree = build_merkle_tree_from_directory(corpus_path);
+    println!("Merkle tree built. Root hash is {}", HexFmt(tree.get_root_hash()));
     tree.fossilize_tree(tree_filename, date);
-    println!("wrote tree to file.");
+    println!("wrote tree to file {}", tree_filename);
 
     build_doc_and_tag_from_saved_tree(tree_filename, date, time, block_lockout, identifier);
 }
@@ -81,8 +91,13 @@ fn main() {
     let block_lockout: usize = settings.get_string("block_lockout").unwrap().parse().expect("couldn't parse block lockout");
     let identifier = settings.get_string("identifier").unwrap();
 
-    //get_filenames_from_directory(&corpus_path);
+    let args = Args::parse();
 
-    //build_timestamp(&corpus_path, &tree_filename, &date, &time, block_lockout, &identifier);
-    build_doc_and_tag_from_saved_tree(&tree_filename, &date, &time, block_lockout, &identifier);
+    if args.build_tree {
+        build_timestamp(&corpus_path, &tree_filename, &date, &time, block_lockout, &identifier);
+    }
+    else {
+        build_doc_and_tag_from_saved_tree(&tree_filename, &date, &time, block_lockout, &identifier);
+    }
+
 }

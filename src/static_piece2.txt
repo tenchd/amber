@@ -1,12 +1,12 @@
-If the above conditions hold, you can be sure the merkle tree is valid, and can use it to verify PG documents safely.
-To verify that a text file was part of the PG corpus in 2026, simply double SHA256 hash the document. If there is a leaf node in the Merkle tree whose hash matches exactly, you have verified that the text file is part of the corpus. Otherwise, the text file cannot be verified, and we can conclude that it does not exactly match any of the original text files included in the Merkle tree.
+If the above conditions hold, you can be sure the Merkle tree is valid, and can use it to verify PG texts safely.
+To verify that a text file was part of the PG corpus in 2026, simply double SHA256 hash the file. If there is a leaf node in the Merkle tree whose hash matches exactly, you have verified that the text file is part of the corpus. Otherwise, the text file cannot be verified, and we can conclude that it does not exactly match any of the original text files included in the Merkle tree.
 
 Preservation and Dissemination
-PG works are likely to survive even absent direct archival efforts because they are available for free and include many of the most popular and influential books in history. Ironically, another reason these works are likely to persist is because they are a curated collection of high-quality human-generated natural language, which is useful for training LLMs.
-This document and merkle tree do not carry the same incentives to be preserved and used for other purposes. They are only useful or interesting insofar as they help establish trust in provenance of PG works. 
+PG texts are likely to survive even absent direct archival efforts because they are available for free and include many of the most popular and influential books in history. Ironically, another reason these texts are likely to persist is because they are a curated collection of high-quality human-generated natural language, which is useful for training LLMs.
+This document and Merkle tree do not carry the same incentives to be preserved and used for other purposes. They are only useful or interesting insofar as they help establish trust in provenance of PG texts. 
 For that reason, please save this document and Merkle tree to your computer, without altering their contents. Back them up in multiple locations. Share them with other people. Print out a physical copy of this document and store it where it will last a long time. If you are a bookbinder, consider printing the base64 dump of the Merkle tree as a bound book. If you have access to other forms of long-term storage media, use that as well. 
 Remember, even though future people may have no particular reason to trust you, if you manage to preserve a copy of the genuine versions of this document and the Merkle tree, they can verify them as genuine by referring to the blockchain message. The challenge is simply ensuring that these files persist into the future, so they can be used to reestablish trust in provenance if it has been lost. 
-Finally, it may also be useful to download and store the Project Gutenberg raw text files yourself, as well. This is because Project Gutenberg has an errata process where small changes (typo corrections, etc) can be made to PG works. Since any change to the raw text file changes the hash signature, texts that are errata-ed after the creation of this Merkle tree can no longer be verified if the original is lost. By preserving the current state of PG works, you help ensure more of them will remain verifiable long into the future.
+Finally, it may also be useful to download and store the Project Gutenberg raw text files yourself, as well. This is because Project Gutenberg has an errata process where small changes (typo corrections, etc) can be made to PG texts. Since any change to the raw text file changes the hash signature, texts that are errata-ed after the creation of this Merkle tree can no longer be verified if the original is lost. By preserving the current state of PG texts, you help ensure more of them will remain verifiable long into the future.
 
 This is Not Hard To Do
 Cryptographically-secure hashes and Merkle trees have been in use for decades. I am also not the first to establish proof of document existence via blockchain, though to my knowledge so far this technique has mostly been used in business and legal applications.
@@ -14,11 +14,11 @@ Cryptographically-secure hashes and Merkle trees have been in use for decades. I
 While the threat of cultural dementia is real, we already have the means to defend against it. But we must act soon. This Project Gutenberg secure timestamp is merely a first step. There is much more that can be done, including:
 - supporting more types of data (audio, video, etc)
 - working with existing conservation and archival organizations
-- including works from more sources, world cultures, and languages
+- including texts from more sources, world cultures, and languages
 - building a volunteer, decentralized, resilient effort to preserve exact canonical versions of texts, as well as their secure timestamps
-- developing archival file formats that contain merkle proofs and blockchain pointers in file headers
+- developing archival file formats that contain Merkle proofs and blockchain pointers in file headers
 
 Who Am I?
 It may be useful for me to establish my identity in the future. For that reason I share my public key here, as well as a signature of the Merkle tree root hash and the date with my private key.
-For instance, I may use this key pair to sign an open-source implementation of the code I wrote to produce the merkle tree and this document. This implementation is intended to make using and disseminating the merkle tree easier, though in theory this document by itself contains all the information a competent coder should need.
+For instance, I may use this key pair to sign an open-source implementation of the code I wrote to produce the Merkle tree and this document. This implementation is intended to make using and disseminating the Merkle tree easier, though in theory this document by itself contains all the information a competent coder should need.
 

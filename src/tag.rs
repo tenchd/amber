@@ -31,14 +31,14 @@ pub fn create_chain_tag(identifier: &str, num_merkle_leaves: u32, merkle_root_ha
 // Inserts relevant details about the merkle tree, target block, day & time, etc. into the explanatory document and writes the document as a txt file.
 pub fn write_document(output_filename: &str, date: &str, time: &str, block_lockout: usize, identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32]) {
     let mut pieces: Vec<String> = vec![];
-    let line1 = format!("On {}, at roughly {} UTC, I built a merkle tree from the raw text files of the works listed on Project Gutenberg and wrote the root hash of this merkle tree to the Bitcoin blockchain in block {}, or one of several blocks immediately following.\n", date, time, block_lockout);
+    let line1 = format!("On {}, at roughly {} UTC, I built a Merkle tree from the raw text files of the works listed on Project Gutenberg (PG) and wrote the root hash of this Merkle tree to the Bitcoin blockchain in block {}, or one of several blocks immediately following.\n", date, time, block_lockout);
     pieces.push(line1);
     let line2 = read_to_string("src/static_piece1.txt").expect("couldn't find first static piece");
     pieces.push(line2);
     let tag_prefix = create_chain_tag_prefix(identifier, num_merkle_leaves, merkle_root_hash);
     let line3 = format!("- {} in ascii (8 bytes): {}
-- 4 bytes representing the number of leaves in the merkle tree ({}) as an unsigned integer: {}
-- the merkle tree root hash (32 bytes) {}
+- 4 bytes representing the number of leaves in the Merkle tree ({}) as an unsigned integer: {}
+- the Merkle tree root hash (32 bytes) {}
 - the SHA256 double hash of this document 
 
 So the message written out is 
@@ -48,8 +48,8 @@ followed by the 32 byte double SHA256 hash of this document.
 I set a lockout to my transaction of block {} and provided a high transaction fee. Hopefully this will result in the transaction being mined in block {}, but if not it should appear in one of the next few blocks mined. It's not possible to be sure a priori which block it will end up in due to the way Bitcoin mining works.
 
 Verification
-Let's say you have this document, a file containing the merkle tree, and some text files. You would like to make sure that the text files were part of the PG corpus in 2026.
-First, you must verify that this document and the Merkle tree are valid. To do this, first verify that there is a transation on the Bitcoin blockchain in block {} or shortly thereafter containing the message described above. The merkle tree root hash in the blockchain message should exactly match the root hash written in this file, and the SHA256 double hash of this document should match exactly as well. Further, the merkle tree should be valid (meaning the hash relationships between nodes are correct) and the root hash should match the one written in this file. The merkle tree should have {} leaves.\n", identifier, HexFmt(identifier.as_bytes()),
+Let's say you have this document, a file containing the Merkle tree, and some text files. You would like to make sure that the text files were part of the PG corpus in 2026.
+First, you must verify that this document and the Merkle tree are valid. To do this, first verify that there is a transation on the Bitcoin blockchain in block {} or shortly thereafter containing the message described above. The Merkle tree root hash in the blockchain message should exactly match the root hash written in this file, and the SHA256 double hash of this document should match exactly as well. Further, the Merkle tree should be valid (meaning the hash relationships between nodes are correct) and the root hash should match the one written in this file. The Merkle tree should have {} leaves.\n", identifier, HexFmt(identifier.as_bytes()),
                                                                                     num_merkle_leaves, HexFmt(num_merkle_leaves.to_be_bytes()),
                                                                                     HexFmt(merkle_root_hash),
                                                                                     HexFmt(tag_prefix),
