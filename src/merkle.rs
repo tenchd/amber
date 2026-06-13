@@ -1,7 +1,6 @@
 
 use hex_fmt::HexFmt;
 use sha2::{Sha256, Digest};
-use serde::{Serialize, Deserialize};
 use std::{fmt};
 use std::fs::File;
 use std::io::{Read,Write,BufReader, prelude::*,};
@@ -48,7 +47,7 @@ pub fn double_hash_from_file(filepath: &str) -> [u8; 32] {
 type NodeHandle = usize;
 
 // represents a single node in the merkle tree. Contains a hash, an index, and pointers to parent and children.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct MerkleNode {
     pub hash: [u8; 32],
     pub index: NodeHandle,
@@ -95,7 +94,7 @@ impl fmt::Display for MerkleNode {
 }
 
 // A Merkle proof for a file is the set of hashes you need to apply to the file to reach the root. Constructed only from a MerkleTree object, so has no constructor of its own.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct MerkleProof {
     leaf_index: NodeHandle,
     proof_hashes: Vec<[u8; 32]>,
@@ -144,7 +143,7 @@ impl fmt::Display for MerkleProof {
 // The Merkle tree represents its nodes as a vec of MerkleNode objects. The last MerkleNode in the vec is the root node.
 // The Merkle tree supports verifying files, producing Merkle proofs for files, and serializing into/deserializing from my custom "fossilized" format. 
 // The tree contains an auxilliary hashmap that maps file hashes to tree leaves. This allows for fast verification of files when you don't know a priori which leaf the file's hash was stored in.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct MerkleTree {
     pub root_index: NodeHandle,
     pub num_leaves: usize,
