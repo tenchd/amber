@@ -1,3 +1,6 @@
+#[allow(dead_code)]
+#[allow(unused_imports)]
+
 mod merkle;
 mod tag;
 mod tests;
@@ -58,7 +61,7 @@ fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str, time: &str
     println!("Wrote tag to file {}", tag_filename);
 }
 
-fn build_timestamp(corpus_path: &str, date: &str, time: &str, tree_filename: &str, block_lockout: usize, identifier: &str) {
+fn build_timestamp(corpus_path: &str, tree_filename: &str, date: &str, time: &str, block_lockout: usize, identifier: &str) {
     let tree = build_merkle_tree_from_directory(corpus_path);
     tree.fossilize_tree(tree_filename, date);
     println!("wrote tree to file.");
@@ -72,14 +75,14 @@ fn main() {
                     .build()
                     .unwrap();
     let corpus_path = settings.get_string("corpus_path").unwrap();
-    let tree_filename = "timestamp/pgtree.txt";
-    let date = "June 12, 2026";
-    let time = "12:00";
-    let block_lockout = 953259;
-    let identifier = "PGMERKLE";
+    let tree_filename = settings.get_string("tree_filename").unwrap();
+    let date = settings.get_string("date").unwrap();
+    let time = settings.get_string("time").unwrap();
+    let block_lockout: usize = settings.get_string("block_lockout").unwrap().parse().expect("couldn't parse block lockout");
+    let identifier = settings.get_string("identifier").unwrap();
 
     //get_filenames_from_directory(&corpus_path);
 
-    build_timestamp(&corpus_path, date, time, tree_filename, block_lockout, identifier);
-    //build_doc_and_tag_from_saved_tree(tree_filename, date, time, block_lockout, identifier);
+    //build_timestamp(&corpus_path, &tree_filename, &date, &time, block_lockout, &identifier);
+    build_doc_and_tag_from_saved_tree(&tree_filename, &date, &time, block_lockout, &identifier);
 }
