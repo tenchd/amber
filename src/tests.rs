@@ -1,13 +1,10 @@
-
-
 #[cfg(test)]
 mod tests {
-use std::fs::{self, File};
-use std::io::{Write,Read};
-use crate::{MerkleTree, build_merkle_tree_from_directory};
-use hex_literal::hex;
-use hex_fmt::HexFmt;
-use config::Config;
+    use std::fs;
+    use crate::{MerkleTree, build_merkle_tree_from_directory};
+    use hex_literal::hex;
+    use hex_fmt::HexFmt;
+    use config::Config;
 
     #[test]
     fn basic_test() {
@@ -63,7 +60,7 @@ use config::Config;
         for (i, d) in data.iter().enumerate() {
             println!("testing proof for leaf index {} (data: {:?})", i + 1, String::from_utf8_lossy(d));
             let proof = merkle_tree.produce_proof(i + 1);
-            assert!(merkle_tree.verify_proof(d, &proof), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
+            assert!(proof.verify_proof_for_data(d, merkle_tree.get_root_hash()), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
         }
     }
 
@@ -93,7 +90,7 @@ use config::Config;
             for (i, d) in data_refs.iter().enumerate() {
                 //println!("testing proof for leaf index {} (data: {:?})", i + 1, String::from_utf8_lossy(d));
                 let proof = merkle_tree.produce_proof(i + 1);
-                assert!(merkle_tree.verify_proof(d, &proof), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
+                assert!(proof.verify_proof_for_data(d, merkle_tree.get_root_hash()), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
             }
         }
     }
@@ -110,7 +107,7 @@ use config::Config;
         assert!(merkle_tree.verify_without_index_from_file("testing/small_corpus/pg1.txt"), "tree should say yes to pg1.txt");
         assert!(!merkle_tree.verify_without_index_from_file("testing/small_corpus/ignore.txt"), "tree should say no to file not in Merkle tree");
         let proof = merkle_tree.produce_proof(1);
-        assert!(merkle_tree.verify_proof_from_file("testing/small_corpus/pg1.txt", &proof), "proof should be valid for pg1.txt.txt");
+        assert!(proof.verify_proof_for_file("testing/small_corpus/pg1.txt", merkle_tree.get_root_hash()), "proof should be valid for pg1.txt.txt");
         println!("Proof for pg1.txt: {}", proof);
     }
 
@@ -135,23 +132,7 @@ use config::Config;
     }
 
     #[test]
-    #[ignore]
-    fn basic_serialization() {
-        let path = "testing/small_corpus";
-        let merkle_tree = build_merkle_tree_from_directory(path);
-        let original_root_hash = merkle_tree.get_root_hash();
-        //println!("Merkle tree built from directory {} has root hash: {:x?}... and contains {} leaves", path, HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
-        let serialized = serde_json::to_string(&merkle_tree).unwrap();
-        //println!("Serialized Merkle tree: {}", serialized);
-        let deserialized: MerkleTree = serde_json::from_str(&serialized).unwrap();
-        //println!("Deserialized Merkle tree has root hash: {:x?}... and contains {} leaves", HexFmt(&deserialized.get_root_hash()[..4]), deserialized.num_leaves);
-        assert!(deserialized.get_root_hash() == original_root_hash);
-        deserialized.verify_tree();
-        println!("Deserialized tree verified.");
-    }
-
-    #[test]
-    fn custom_serialization() {
+    fn fossilization_stability() {
         let path = "testing/small_corpus";
         let merkle_tree = build_merkle_tree_from_directory(path);
         let test_filename = "testing/custom_pg_test.txt";
@@ -160,32 +141,6 @@ use config::Config;
         let unfossilized_tree = MerkleTree::new_from_fossilized_tree(test_filename);
         assert!(merkle_tree.get_root_hash() == unfossilized_tree.get_root_hash());
         fs::remove_file(test_filename).unwrap();
-    }
-
-    #[test]
-    #[ignore]
-    fn serialization_write() {
-        let path = "testing/small_corpus";
-        let merkle_tree = build_merkle_tree_from_directory(path);
-        let original_root_hash = merkle_tree.get_root_hash();
-        println!("Merkle tree built from directory {} has root hash: {:x?}... and contains {} leaves", path, HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
-        let serialized = serde_json::to_string(&merkle_tree).unwrap();
-        let tree_filename = "pgtree_test.json";
-        let mut file = File::create(tree_filename).expect("failed to create file");
-        file.write_all(serialized.as_bytes()).expect("failed to write data");
-        println!("wrote tree to file.");
-
-        println!("reading tree from file:");
-        let json_data = std::fs::read_to_string(tree_filename).expect("failed to read file");
-        let deserialized: MerkleTree = serde_json::from_str(&json_data).unwrap();
-        println!("Deserialized Merkle tree has root hash: {:x?}... and contains {} leaves", HexFmt(&deserialized.get_root_hash()[..4]), deserialized.num_leaves);
-        deserialized.verify_tree();
-        println!("Deserialized tree verified.");
-        println!("Deserialized Merkle tree has root hash: {:x?}... and contains {} leaves", HexFmt(&deserialized.get_root_hash()[..4]), deserialized.num_leaves);
-        assert!(deserialized.get_root_hash() == original_root_hash);
-        deserialized.verify_tree();
-        println!("Deserialized tree verified.");
-        std::fs::remove_file(tree_filename).expect("couldn't delete file");
     }
 
     #[test]

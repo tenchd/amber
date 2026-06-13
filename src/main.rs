@@ -1,26 +1,18 @@
-#![allow(dead_code)]
-#![allow(unused_imports)]
-
 mod merkle;
 mod tag;
 mod tests;
 
 use hex_fmt::HexFmt;
-//use sha2::digest::const_oid::ObjectIdentifier;
-use sha2::{Sha256, Digest};
-use serde::{Serialize, Deserialize};
-//use serde_json::Result;
-use std::{fmt, fs};
 use std::fs::File;
-use std::io::{Read,Write};
-use std::collections::HashMap;
+use std::io::{Write};
 use config::Config;
 use crate::merkle::MerkleTree;
 
 
-
+// Scan current directory for files of the form "pg<number>", add them to a vector. This vector of file paths is used to build the merkle tree leaves.
+// As per the specification for building the merkle tree from the PG text files, this list of file paths MUST be sorted in increasing order of PG index.
+// If you use a different order, the root hash of the merkle tree will be wrong.
 fn get_filenames_from_directory(path: &str) -> Vec<String> {
-    // scan current directory for files of the form "PG<number>_raw.txt", add them to a vector, and then build the tree from that vector of file paths.
     let mut filepaths: Vec<String> = std::fs::read_dir(path)
         .expect("Failed to read directory")
         .filter_map(|entry| {
@@ -39,9 +31,7 @@ fn get_filenames_from_directory(path: &str) -> Vec<String> {
         let b_num: usize = b.split("pg").nth(1).unwrap().split(".txt").nth(0).unwrap().parse().unwrap();
         a_num.cmp(&b_num)
     });
-    //println!("Building Merkle tree from files: {:?}", filepaths);
     println!("Number of files: {}.", filepaths.len());
-    //println!("First ten files in the set: {:#?}", &filepaths[0..100]);
     println!("Last item in the set: {}", &filepaths.last().unwrap());
     filepaths
 }
@@ -52,8 +42,6 @@ fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
 }
 fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str){
     println!("reading merkle tree from file.");
-    //let json_data = fs::read_to_string(tree_filename).expect("failed to read file");
-    //let deserialized: MerkleTree = serde_json::from_str(&json_data).unwrap();
     let unfossilized: MerkleTree = MerkleTree::new_from_fossilized_tree(tree_filename);
     println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
     unfossilized.verify_tree();
@@ -64,7 +52,6 @@ fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str){
     crate::tag::write_document(document_filename, date, "13:50", 953259, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash());
     let tag = crate::tag::create_chain_tag(identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), document_filename);
     println!("Wrote explainer document to file {}", document_filename);
-    //println!("Tag is {}", hex_fmt::HexFmt(&tag));
     let tag_filename = "timestamp/tag.txt";
     let tag_string = format!("{}", HexFmt(&tag));
     let mut file = File::create(tag_filename).expect("failed to create file");
@@ -92,7 +79,7 @@ fn main() {
     let date = "June 12, 2026";
 
     //get_filenames_from_directory(&corpus_path);
-    
+
     //build_timestamp(&corpus_path);
     build_doc_and_tag_from_saved_tree(tree_filename, date);
 }

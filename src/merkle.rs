@@ -1,18 +1,14 @@
 
 use hex_fmt::HexFmt;
-//use sha2::digest::const_oid::ObjectIdentifier;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
-use std::str::SplitWhitespace;
-//use serde_json::Result;
-use std::{fmt, fs};
+use std::{fmt};
 use std::fs::File;
-use std::io::{Read,Write,BufReader,self, prelude::*,};
+use std::io::{Read,Write,BufReader, prelude::*,};
 use std::collections::HashMap;
-use config::Config;
 use base64::prelude::*;
 
-//fn double_hash(input: &[u8]) -> Array<u8, <Sha256 as OutputSizeUser>::OutputSize> {
+// apply SHA256 hash twice to input bytes.
 pub fn double_hash(input: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(input);
@@ -25,6 +21,7 @@ pub fn double_hash(input: &[u8]) -> [u8; 32] {
     hash_bytes_length
 }
 
+// apply SHA256 hash twice to file contents.
 pub fn double_hash_from_file(filepath: &str) -> [u8; 32] {
     let mut file = File::open(filepath).expect("Failed to open file");
     let mut hasher = Sha256::new();
@@ -47,9 +44,10 @@ pub fn double_hash_from_file(filepath: &str) -> [u8; 32] {
     hash_bytes_length
 }
 
-// nodes are owned by the 'nodes' vector in the MerkleTree struct. 0 means none.
+// nodes are owned by the 'nodes' vector in the MerkleTree struct. a NodeHandle is a indentifier/index for a merkle node in the vector. 1-indexed; 0 means none.
 type NodeHandle = usize;
 
+// represents a single node in the merkle tree. Contains a hash, an index, and pointers to parent and children.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MerkleNode {
     pub hash: [u8; 32],
@@ -60,17 +58,19 @@ pub struct MerkleNode {
 }
 
 impl MerkleNode {
+    // create a new leaf node from a provided hash.
     fn new_leaf(hash: [u8; 32], index: usize) -> Self {
         MerkleNode { hash, index, left: 0, right: 0, parent: 0 }
     }
 
+    // create a new leaf node from a file.
     fn new_leaf_from_file(filepath: &str, index: usize) -> Self {
         let hash = double_hash_from_file(filepath);
         MerkleNode { hash, index, left: 0, right: 0, parent: 0 }
     }
 
+    // create a new internal (non-leaf) node by concatenating child hashes and then double hashing.
     fn new_internal(left: &mut MerkleNode, right: &mut MerkleNode, index: usize) -> Self {
-        //println!("Creating internal node {} with left child {} and right child {}", index, left.index, right.index);
         let hash = double_hash(&[left.hash, right.hash].concat());
         let new_node = MerkleNode { hash, index, left: left.index, right: right.index, parent: 0 };
         left.parent = index;
@@ -78,8 +78,8 @@ impl MerkleNode {
         new_node
     }
 
+    // create a new internal (non-leaf) node with only one child.
     fn new_internal_end(left: &mut MerkleNode, index: usize) -> Self {
-        //println!("Creating internal node {} with left child {} and no right child", index, left.index);
         let hash = double_hash(&[left.hash, left.hash].concat());
         let new_node = MerkleNode { hash, index, left: left.index, right: 0, parent: 0 };
         left.parent = index;
@@ -87,29 +87,63 @@ impl MerkleNode {
     }
 }
 
+// Display pretty-prints only the first 4 bytes of node hash, to be more human-readable.
 impl fmt::Display for MerkleNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "MerkleNode {{ hash prefix: {:x?}, index: {}, left: {}, right: {}, parent: {} }}", &self.hash[..4], self.index, self.left, self.right, self.parent)
     }
 }
 
+// A Merkle proof for a file is the set of hashes you need to apply to the file to reach the root. Constructed only from a MerkleTree object, so has no constructor of its own.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MerkleProof {
     leaf_index: NodeHandle,
     proof_hashes: Vec<[u8; 32]>,
     proof_directions: Vec<bool>, // true for left, false for right
 }
+
+#[allow(dead_code)]
+impl MerkleProof {
+    // verifies a proof starting from the leaf hash, proceeding along the leaf-to-root path encoded by the proof until the root hash is reached. If the proof is valid, this computed root hash will match the Merkle tree root hash.
+    pub fn verify_proof(&self, starting_hash: [u8; 32], target_root_hash: [u8; 32]) -> bool {
+        let mut computed_hash = starting_hash;
+        for (i, sibling_hash) in self.proof_hashes.iter().enumerate() {
+            if self.proof_directions[i] {
+                computed_hash = double_hash(&[computed_hash, *sibling_hash].concat());
+            } else {
+                computed_hash = double_hash(&[*sibling_hash, computed_hash].concat());
+            }
+        }
+        computed_hash == target_root_hash
+    }
+
+    // verifies that some data is part of a merkle tree (represented by its root hash).
+    pub fn verify_proof_for_data(&self, data: &[u8], target_root_hash: [u8; 32]) -> bool {
+        let starting_hash = double_hash(data);
+        self.verify_proof(starting_hash, target_root_hash)
+    }
+
+    // verifies that some file is part of a merkle tree (represented by its root hash).
+    pub fn verify_proof_for_file(&self, filepath: &str, target_root_hash: [u8; 32]) -> bool {
+        let starting_hash = double_hash_from_file(filepath);
+        self.verify_proof(starting_hash, target_root_hash)
+    }
+}
+
 impl fmt::Display for MerkleProof {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "MerkleProof for leaf_index {}:", self.leaf_index)?;
         for (i, hash) in self.proof_hashes.iter().enumerate() {
             let direction = if self.proof_directions[i] { "left" } else { "right" };
-            write!(f, "\n  {} sibling hash: {:x?}", direction, &hash[..4])?;
+            write!(f, "\n  {} sibling hash: {}", direction, HexFmt(&hash[..4]))?;
         }      
         Ok(())
     }
 }
 
+// The Merkle tree represents its nodes as a vec of MerkleNode objects. The last MerkleNode in the vec is the root node.
+// The Merkle tree supports verifying files, producing Merkle proofs for files, and serializing into/deserializing from my custom "fossilized" format. 
+// The tree contains an auxilliary hashmap that maps file hashes to tree leaves. This allows for fast verification of files when you don't know a priori which leaf the file's hash was stored in.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MerkleTree {
     pub root_index: NodeHandle,
@@ -120,6 +154,7 @@ pub struct MerkleTree {
 
 #[allow(dead_code)]
 impl MerkleTree {
+    // build tree from bytes. used for testing.
     pub fn new_from_data(data: Vec<&[u8]>) -> Self {
         let num_leaves = data.len();
         let mut nodes: Vec<MerkleNode> = vec![];
@@ -132,7 +167,7 @@ impl MerkleTree {
         MerkleTree { root_index, num_leaves, nodes, hash_lookup }
     }
 
-    // Assumes files are all in a single directory and have names of the form "pg<number>.txt". All other files are ignored. The order of the files in the tree is determined by the number in the filename, with smaller numbers coming first. For example, "pg1.txt" would be the first leaf, "pg2.txt" would be the second leaf, and so on.
+    // build tree from a collection of files. Intended to be used with get_filenames_from_directory to produce the vec of filepaths sorted by PG index, but of course you can write your own code to supply it with an arbitrary sequence of files if you wish.
     pub fn new_from_files(filepaths: Vec<&str>) -> Self {
         let num_leaves = filepaths.len();
         let mut nodes: Vec<MerkleNode> = vec![];
@@ -145,6 +180,7 @@ impl MerkleTree {
         MerkleTree { root_index, num_leaves, nodes, hash_lookup }
     }
 
+    // rebuild tree that has been written to a file in my "fossilized" format. 
     pub fn new_from_fossilized_tree(tree_filename: &str) -> Self {
         let file = File::open(tree_filename).expect("couldn't open fossil tree file");
         let mut reader = BufReader::new(file);
@@ -161,6 +197,7 @@ impl MerkleTree {
         let words  = header_lines[1].split_whitespace().collect::<Vec<&str>>();
         let num_leaves: NodeHandle = words[3].parse().expect("Unable to parse num_leaves from line 2 of file");
 
+        // read the fossilized sequence of merkle tree node hashes.
         for line in reader.lines() {
             let clean_line = line.expect("could not read line");
             let fossil_hash = BASE64_STANDARD.decode(clean_line).expect("Could not decode line");
@@ -170,6 +207,7 @@ impl MerkleTree {
 
         let mut nodes: Vec<MerkleNode> = vec![];
 
+        // populate the nodes vec with the leaf nodes from the fossil hashes.
         nodes.push(MerkleNode { hash: [0u8; 32], index: 0, left: 0, right: 0, parent: 0 }); // dummy node at index 0
         for (index, hash) in fossil_hashes.iter().enumerate() {
             if index == num_leaves {
@@ -180,12 +218,10 @@ impl MerkleTree {
         let root_index = MerkleTree::build_tree(&mut nodes, num_leaves, false);
         let hash_lookup = MerkleTree::build_hashmap(&nodes, num_leaves);
         
-
+        // build the rest of the tree from the leaves
         let tree = MerkleTree { root_index, num_leaves, nodes, hash_lookup };
-        // for node in &tree.nodes {
-        //     println!("node {} has parent {}, left child {}. right child {}", node.index, node.parent, node.left, node.right);
-        // }
         tree.verify_tree();
+
         // make sure all hashes match fossil
         assert!(&tree.get_root_hash() == fossil_hashes.last().unwrap());
         for i in 0..fossil_hashes.len() {
@@ -207,6 +243,8 @@ impl MerkleTree {
         println!("-------------------------");
     }
 
+    // The above constructors populate the nodes vec with the leaf nodes, and then pass the vec to this function which builds the rest of the tree from the leaves.
+    // The constructors only differ in how they get the leaf nodes.
     fn build_tree(nodes: &mut Vec<MerkleNode>, num_leaves: usize, debug: bool) -> usize {
         let mut current_level_start = 1;
         let mut next_level_start: usize = num_leaves + 1;
@@ -225,7 +263,6 @@ impl MerkleTree {
                         println!("inner case");
                     }
                     let (left_side, right_side) = nodes.split_at_mut(i + 1);
-                    //println!("splitting at index {} into left {:#?} and right {:#?}", i, left_side, right_side);
                     let mut left = &mut left_side[i];
                     let mut right = &mut right_side[0];
                     let parent = MerkleNode::new_internal(&mut left, &mut right, current_pointer);
@@ -255,6 +292,7 @@ impl MerkleTree {
         nodes.len() - 1
     }
 
+    // build the auxilliary hashmap.
     fn build_hashmap(nodes: &Vec<MerkleNode>, num_leaves: usize) -> HashMap<[u8; 32], NodeHandle> {
         let mut hash_lookup = HashMap::<[u8;32],NodeHandle>::new();
         for i in 1..num_leaves + 1 {
@@ -265,6 +303,7 @@ impl MerkleTree {
         hash_lookup
     }
 
+    // return the root hash of the merkle tree.
     pub fn get_root_hash(&self) -> [u8; 32] {
         self.nodes[self.root_index].hash
     }
@@ -283,34 +322,36 @@ impl MerkleTree {
         node.hash == leaf_hash
     }
 
+    // Returns whether some data was used to build a specific leaf of the merkle tree.
     pub fn verify_with_index(&self, data: &[u8], index: usize) -> bool {
         self.is_a_leaf(&self.nodes[index]) && self.matches_hash(&self.nodes[index], data)
     }
 
+    // returns whether a file was used to build a specific leaf of the merkle tree.
     pub fn verify_with_index_from_file(&self, filepath: &str, index: usize) -> bool {
         self.is_a_leaf(&self.nodes[index]) && self.matches_hash_from_file(&self.nodes[index], filepath)
     }
 
+    // returns whether some data was included in the merkle tree.
     pub fn verify_without_index(&self, data: &[u8]) -> bool {
         let hash = double_hash(data);
         let present = self.hash_lookup.contains_key(&hash);
         present
-        //self.nodes.iter().any(|node| self.is_a_leaf(node) && self.matches_hash(node, data))
     }
 
+    // returns whether some file was included in the merkle tree.
     pub fn verify_without_index_from_file(&self, filepath: &str) -> bool {
         let hash = double_hash_from_file(filepath);
         let present = self.hash_lookup.contains_key(&hash);
         present
-        //self.nodes.iter().any(|node| self.is_a_leaf(node) && self.matches_hash_from_file(node, filepath))
     }
 
+    // builds a Merkle inclusion proof for some leaf of the tree.
     pub fn produce_proof(&self, index: usize) -> MerkleProof {
         let mut proof_hashes = Vec::new();
         let mut proof_directions = Vec::new();
         let mut current_index = index;
         while current_index != self.root_index {
-            //println!("Current index: {}, hash: {:x?}", current_index, &self.nodes[current_index].hash[..4]);
             let parent_index = self.nodes[current_index].parent;
             let sibling_index = if self.nodes[parent_index].left == current_index {
                 self.nodes[parent_index].right
@@ -329,30 +370,7 @@ impl MerkleTree {
         MerkleProof { leaf_index: index, proof_hashes, proof_directions }
     }
 
-    pub fn verify_proof(&self, data: &[u8], proof: &MerkleProof) -> bool {
-        let mut computed_hash = double_hash(data);
-        for (i, sibling_hash) in proof.proof_hashes.iter().enumerate() {
-            if proof.proof_directions[i] {
-                computed_hash = double_hash(&[computed_hash, *sibling_hash].concat());
-            } else {
-                computed_hash = double_hash(&[*sibling_hash, computed_hash].concat());
-            }
-        }
-        computed_hash == self.get_root_hash()
-    }
-
-    pub fn verify_proof_from_file(&self, filepath: &str, proof: &MerkleProof) -> bool {
-        let mut computed_hash = double_hash_from_file(filepath);
-        for (i, sibling_hash) in proof.proof_hashes.iter().enumerate() {
-            if proof.proof_directions[i] {
-                computed_hash = double_hash(&[computed_hash, *sibling_hash].concat());
-            } else {
-                computed_hash = double_hash(&[*sibling_hash, computed_hash].concat());
-            }
-        }
-        computed_hash == self.get_root_hash()
-    }
-
+    // checks that each parent hash follows from its child hashes; i.e., the tree is a valid Merkle tree.
     pub fn verify_tree(&self) {
         for node in self.nodes.iter() {
             if self.is_a_leaf(&node) || node.index == 0 {
@@ -386,6 +404,7 @@ impl MerkleTree {
         }
     }
 
+    // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
     pub fn fossilize_tree(&self, tree_filename: &str, date: &str) {
         let mut file = File::create(tree_filename).expect("failed to create file");
         let header_line = format!("Merkle tree. Created on {} from Project Gutenberg corpus of plain text files.\n", date);
@@ -399,8 +418,5 @@ impl MerkleTree {
             let line = format!("{}\n", BASE64_STANDARD.encode(self.nodes[i].hash));
             file.write_all(line.as_bytes()).unwrap();
         }
-        // pub root_index: NodeHandle,
-        // pub num_leaves: usize,
-        // pub nodes: Vec<MerkleNode>,
     }
 }
