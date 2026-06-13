@@ -115,7 +115,7 @@ pub struct MerkleTree {
     pub root_index: NodeHandle,
     pub num_leaves: usize,
     pub nodes: Vec<MerkleNode>,
-    //hash_lookup: HashMap<[u8; 32], NodeHandle>
+    hash_lookup: HashMap<[u8; 32], NodeHandle>
 }
 
 #[allow(dead_code)]
@@ -128,12 +128,8 @@ impl MerkleTree {
             nodes.push(MerkleNode::new_leaf(double_hash(d).into(), index + 1));
         }
         let root_index = MerkleTree::build_tree(&mut nodes, num_leaves, false);
-        // let mut hash_lookup = HashMap::<[u8;32],NodeHandle>::new();
-        // for i in 1..num_leaves + 1 {
-        //     let hash = nodes[i].hash;
-        //     hash_lookup.insert(hash,i);
-        // }
-        MerkleTree { root_index, num_leaves, nodes }
+        let hash_lookup = MerkleTree::build_hashmap(&nodes, num_leaves);
+        MerkleTree { root_index, num_leaves, nodes, hash_lookup }
     }
 
     // Assumes files are all in a single directory and have names of the form "pg<number>.txt". All other files are ignored. The order of the files in the tree is determined by the number in the filename, with smaller numbers coming first. For example, "pg1.txt" would be the first leaf, "pg2.txt" would be the second leaf, and so on.
@@ -145,12 +141,8 @@ impl MerkleTree {
             nodes.push(MerkleNode::new_leaf_from_file(filepath, index + 1));
         }
         let root_index = MerkleTree::build_tree(&mut nodes, num_leaves, false);
-        // let mut hash_lookup = HashMap::<[u8;32],NodeHandle>::new();
-        // for i in 1..num_leaves + 1 {
-        //     let hash = nodes[i].hash;
-        //     hash_lookup.insert(hash,i);
-        // }
-        MerkleTree { root_index, num_leaves, nodes }
+        let hash_lookup = MerkleTree::build_hashmap(&nodes, num_leaves);
+        MerkleTree { root_index, num_leaves, nodes, hash_lookup }
     }
 
     pub fn new_from_fossilized_tree(tree_filename: &str) -> Self {
@@ -186,13 +178,16 @@ impl MerkleTree {
             nodes.push(MerkleNode::new_leaf(*hash, index + 1));
         }
         let root_index = MerkleTree::build_tree(&mut nodes, num_leaves, false);
+        let hash_lookup = MerkleTree::build_hashmap(&nodes, num_leaves);
+        
 
-        let tree = MerkleTree { root_index, num_leaves, nodes };
+        let tree = MerkleTree { root_index, num_leaves, nodes, hash_lookup };
         // for node in &tree.nodes {
         //     println!("node {} has parent {}, left child {}. right child {}", node.index, node.parent, node.left, node.right);
         // }
         tree.verify_tree();
         // make sure all hashes match fossil
+        assert!(&tree.get_root_hash() == fossil_hashes.last().unwrap());
         for i in 0..fossil_hashes.len() {
             let fossil_hash = fossil_hashes[i];
             let tree_hash = tree.nodes[i+1].hash;
@@ -201,7 +196,6 @@ impl MerkleTree {
                 break;
             }
         }
-        //TODO: verify new root hash matches last line of file
         tree
     }
 
@@ -261,7 +255,15 @@ impl MerkleTree {
         nodes.len() - 1
     }
 
-    
+    fn build_hashmap(nodes: &Vec<MerkleNode>, num_leaves: usize) -> HashMap<[u8; 32], NodeHandle> {
+        let mut hash_lookup = HashMap::<[u8;32],NodeHandle>::new();
+        for i in 1..num_leaves + 1 {
+            let hash = nodes[i].hash;
+            hash_lookup.insert(hash,i);
+        }
+
+        hash_lookup
+    }
 
     pub fn get_root_hash(&self) -> [u8; 32] {
         self.nodes[self.root_index].hash
@@ -290,11 +292,17 @@ impl MerkleTree {
     }
 
     pub fn verify_without_index(&self, data: &[u8]) -> bool {
-        self.nodes.iter().any(|node| self.is_a_leaf(node) && self.matches_hash(node, data))
+        let hash = double_hash(data);
+        let present = self.hash_lookup.contains_key(&hash);
+        present
+        //self.nodes.iter().any(|node| self.is_a_leaf(node) && self.matches_hash(node, data))
     }
 
     pub fn verify_without_index_from_file(&self, filepath: &str) -> bool {
-        self.nodes.iter().any(|node| self.is_a_leaf(node) && self.matches_hash_from_file(node, filepath))
+        let hash = double_hash_from_file(filepath);
+        let present = self.hash_lookup.contains_key(&hash);
+        present
+        //self.nodes.iter().any(|node| self.is_a_leaf(node) && self.matches_hash_from_file(node, filepath))
     }
 
     pub fn produce_proof(&self, index: usize) -> MerkleProof {

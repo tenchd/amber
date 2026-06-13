@@ -11,7 +11,7 @@ Finally, it may also be useful to download and store the Project Gutenberg raw t
 This is Not Hard To Do
 Cryptographically-secure hashes and Merkle trees have been in use for decades. I am also not the first to establish proof of document existence via blockchain, though to my knowledge so far this technique has mostly been used in business and legal applications.
 
-While the threat of cultural dementia is real, we already have the technical means to defend against it. But we must act soon. This Project Gutenberg secure timestamp is merely a first step. There is much more that can be done, including:
+While the threat of cultural dementia is real, we already have the means to defend against it. But we must act soon. This Project Gutenberg secure timestamp is merely a first step. There is much more that can be done, including:
 - supporting more types of data (audio, video, etc)
 - working with existing conservation and archival organizations
 - including works from more sources, world cultures, and languages

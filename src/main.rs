@@ -92,6 +92,7 @@ fn main() {
     let date = "June 12, 2026";
 
     //get_filenames_from_directory(&corpus_path);
+    
     //build_timestamp(&corpus_path);
     build_doc_and_tag_from_saved_tree(tree_filename, date);
 }
