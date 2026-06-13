@@ -9,8 +9,8 @@ use config::Config;
 use crate::merkle::MerkleTree;
 
 
-// Scan current directory for files of the form "pg<number>", add them to a vector. This vector of file paths is used to build the merkle tree leaves.
-// As per the specification for building the merkle tree from the PG text files, this list of file paths MUST be sorted in increasing order of PG index.
+// Scan current directory for files of the form "pg<number>", add them to a vector. All other files are ignored. This vector of file paths is used to build the merkle tree leaves.
+// As per the specification for building the merkle tree from the PG text files, this list of file paths MUST be sorted in increasing order of PG index, because that is the order the leaves of the merkle tree should have.
 // If you use a different order, the root hash of the merkle tree will be wrong.
 fn get_filenames_from_directory(path: &str) -> Vec<String> {
     let mut filepaths: Vec<String> = std::fs::read_dir(path)
@@ -40,7 +40,7 @@ fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
     let filepaths = get_filenames_from_directory(path);
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
 }
-fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str){
+fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str, time: &str, block_lockout: usize, identifier: &str){
     println!("reading merkle tree from file.");
     let unfossilized: MerkleTree = MerkleTree::new_from_fossilized_tree(tree_filename);
     println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
@@ -48,8 +48,7 @@ fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str){
     println!("Merkle tree verified.");
 
     let document_filename = "timestamp/explain.txt";
-    let identifier = "PGMERKLE";
-    crate::tag::write_document(document_filename, date, "13:50", 953259, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash());
+    crate::tag::write_document(document_filename, date, time, block_lockout, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash());
     let tag = crate::tag::create_chain_tag(identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), document_filename);
     println!("Wrote explainer document to file {}", document_filename);
     let tag_filename = "timestamp/tag.txt";
@@ -59,14 +58,12 @@ fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str){
     println!("Wrote tag to file {}", tag_filename);
 }
 
-fn build_timestamp(corpus_path: &str) {
-    let date = "June 12, 2026";
+fn build_timestamp(corpus_path: &str, date: &str, time: &str, tree_filename: &str, block_lockout: usize, identifier: &str) {
     let tree = build_merkle_tree_from_directory(corpus_path);
-    let tree_filename = "timestamp/pgtree.txt";
     tree.fossilize_tree(tree_filename, date);
     println!("wrote tree to file.");
 
-    build_doc_and_tag_from_saved_tree(tree_filename, date);
+    build_doc_and_tag_from_saved_tree(tree_filename, date, time, block_lockout, identifier);
 }
 
 fn main() {
@@ -77,9 +74,12 @@ fn main() {
     let corpus_path = settings.get_string("corpus_path").unwrap();
     let tree_filename = "timestamp/pgtree.txt";
     let date = "June 12, 2026";
+    let time = "12:00";
+    let block_lockout = 953259;
+    let identifier = "PGMERKLE";
 
     //get_filenames_from_directory(&corpus_path);
 
-    //build_timestamp(&corpus_path);
-    build_doc_and_tag_from_saved_tree(tree_filename, date);
+    build_timestamp(&corpus_path, date, time, tree_filename, block_lockout, identifier);
+    //build_doc_and_tag_from_saved_tree(tree_filename, date, time, block_lockout, identifier);
 }
