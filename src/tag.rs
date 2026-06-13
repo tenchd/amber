@@ -1,10 +1,11 @@
 use std::fs::{File, read_to_string};
-use std::io::{Write,Read};
+use std::io::{Write};
 use std::process::Command;
 use hex_fmt::HexFmt;
 use config::Config;
 use crate::merkle::double_hash_from_file;
 
+// Create the identifier, num_leaves, and root hash part of the tag that will be written to the blockchain.
 pub fn create_chain_tag_prefix(identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32]) -> Vec<u8> {
     assert!(identifier.is_ascii(), "Identifier must be ascii characters only.");
     assert!(identifier.len() == 8, "Identifier must have exactly 8 characters. You supplied {}", identifier.len());
@@ -27,6 +28,7 @@ pub fn create_chain_tag(identifier: &str, num_merkle_leaves: u32, merkle_root_ha
     result
 }
 
+// Inserts relevant details about the merkle tree, target block, day & time, etc. into the explanatory document and writes the document as a txt file.
 pub fn write_document(output_filename: &str, date: &str, time: &str, block_lockout: usize, identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32]) {
     let mut pieces: Vec<String> = vec![];
     let line1 = format!("On {}, at roughly {} UTC, I built a merkle tree from the raw text files of the works listed on Project Gutenberg and wrote the root hash of this merkle tree to the Bitcoin blockchain in block {}, or one of several blocks immediately following.\n", date, time, block_lockout);
