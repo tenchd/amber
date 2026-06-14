@@ -30,7 +30,6 @@ fn get_filenames_from_directory(path: &str) -> Vec<String> {
         .filter_map(|entry| {
             let entry = entry.expect("Failed to read directory entry");
             let filename = entry.file_name().into_string().expect("Failed to convert OsString to String");
-            //if filename.starts_with("PG") && filename.ends_with("_raw.txt") {
             if filename.starts_with("pg") && filename.ends_with(".txt") {
                 Some(entry.path().to_str().unwrap().to_string())
             } else {
@@ -44,7 +43,6 @@ fn get_filenames_from_directory(path: &str) -> Vec<String> {
         a_num.cmp(&b_num)
     });
     println!("Building a Merkle tree from {} files. This may take a couple of minutes.", filepaths.len());
-    //println!("Last item in the set: {}", &filepaths.last().unwrap());
     filepaths
 }
 

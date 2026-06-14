@@ -25,13 +25,12 @@ I assume the following conditions continue to hold in the future:
 - Finding a SHA256 hash collision remains computationally infeasible.
 - Genuine, unaltered versions of the raw text files hosted by Project Gutenberg survive.
 - This document, and the accompanying Merkle tree, survive.
-- The message I wrote on the Bitcoin blockchain containing the Merkle root hash and the hash of this document remain readable and provably unaltered (i.e., the blockchain is not edited in some kind of 51% attack).
+- The message I wrote on the Bitcoin blockchain containing the Merkle root hash and the hash of this document remains readable and provably unaltered (i.e., the blockchain is not edited in some kind of 51% attack).
 - The Project Gutenberg text numbering scheme stays the same (see below).
 
-Two Audiences
 I am writing this document to be read by my contemporaries, as well as by those who will come after us. 
-To my contemporaries, this document is intended to convince you of the value of this secure timestamp, so that you might test it, disseminate it, and preserve in long-term-stable storage media. More, I hope that it inspires you to find other ways to safeguard humanity's collective cultural memory from degradation. 
-To our descendants, this document is intended to instruct you on how to use the secure timestamp for verification of literary texts. More, it is a request that you remember we who have come before you, and remember our stories, as we have done for those who came before us. 
+To my contemporaries, this document is intended to convince you of the value of this secure timestamp, so that you might test it, disseminate it, and preserve in long-term-stable storage media. I hope that it also inspires you to find other ways to safeguard humanity's collective cultural memory from degradation. 
+To our descendants, this document is intended to instruct you on how to use the secure timestamp for verification of literary texts. It is also a request that you remember we who have come before you, and remember our stories, as we have done for those who came before us. 
 
 Trust in Provenance
 Technically speaking, this secure timestamp establishes the fact that each included text file existed in June 2026, but nothing else. For example, they certify that a plain text file containing a novel titled Don Quixote (PG996) existed in June 2026, but do not conclusively prove that this is truly a novel published in the early seventeenth century by Miguel de Cervantes, or that it is a faithful and accurate translation into English from the original Spanish, or that it was obtained from the Project Gutenberg website.
