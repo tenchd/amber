@@ -33,8 +33,8 @@ To my contemporaries, this document is intended to convince you of the value of 
 To our descendants, this document is intended to instruct you on how to use the secure timestamp for verification of literary texts. It is also a request that you remember we who have come before you, and remember our stories, as we have done for those who came before us. 
 
 Trust in Provenance
-Technically speaking, this secure timestamp establishes the fact that each included text file existed in June 2026, but nothing else. For example, they certify that a plain text file containing a novel titled Don Quixote (PG996) existed in June 2026, but do not conclusively prove that this is truly a novel published in the early seventeenth century by Miguel de Cervantes, or that it is a faithful and accurate translation into English from the original Spanish, or that it was obtained from the Project Gutenberg website.
-This proof of existence alone is likely to be sufficient, because today it is still relatively expensive to produce convincing forgeries of literary texts.
+Technically speaking, this secure timestamp establishes the fact that each included text file existed in June 2026, but nothing else. For example, it certifies that a plain text file containing a novel titled Don Quixote (PG996) existed in June 2026, but does not conclusively prove that it is truly a novel published in the early seventeenth century by Miguel de Cervantes, or that it is a faithful and accurate translation into English from the original Spanish, or that it was obtained from the Project Gutenberg website.
+Proof of existence in 2026 alone is likely to be sufficient for most purposes, because today it is still relatively expensive to produce convincing forgeries of literary texts.
 I have not been able to think of a way to provide a similar level of proof that the files I included in the Merkle tree are from Project Gutenberg and further that I did not alter them. I encourage my contemporaries to carefully test this secure timestamp on your own: download plain text files from Project Gutenberg and verify them with the Merkle tree.
 
 Indexing Project Gutenberg Raw Text Files
@@ -45,13 +45,13 @@ I downloaded the PG corpus directly from their website. They make nearly all of 
 
 Merkle Tree Construction and Serialization
 I constructed the Merkle tree of the Project Gutenberg plain text files in the same way a Bitcoin miner computes the Merkle root hash of the block of transactions. That is to say, let the unique integer identifiers of the texts be the ordering of the files. First I compute the double SHA256 hash of each file. These comprise the leaves of the Merkle tree. Then for each adjacent pair of leaves in the ordering, I double hash the concatenation of their hashes to produce the hash of their parent node. The process is repeated at each level until the root is reached. If there is an odd number of nodes at some level, the last node's hash is concatenated with itself and then double SHA256 hashed to get the parent hash.
-Note that if some text has PG ID X, it may not be the Xth leaf in the Merkle tree because some of the texts are not present in the plain text corpus.
+Note that if some text has PG ID X, it may not map to the Xth leaf in the Merkle tree because some of the texts are not present in the plain text corpus.
 
 The Merkle tree is written to file according to the following specification, which is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. First there are three header lines that read:
 "Merkle tree. Created on <date> from Project Gutenberg corpus of plain text files."
 "Number of leaves: <# leaves>"
 "Each line below is the hash (in base64) of a Merkle node. Tree is binary. Each parent hash is the double SHA256 hash of the concatenation of its two child hashes. If the parent has only one child, its hash is the double SHA256 hash of the child hash concatenated with itself. Final line of file is root hash."
-This is followed by the list of hashes in the Merkle tree. First the leaves are listed in order, followed by the nodes in the next level written in increasing order of left child. This is repeated for every level until the root, which is the last hash written to the file.
+This is followed by the list of hashes in the Merkle tree. First the leaf hashes are listed in order. Next the hashes of the nodes in the next level are listed in increasing order of left child. This is repeated for every level until the root, which is the last hash written to the file.
 
 It is possible and totally acceptable to serialize the Merkle tree in another form for reasons such as reducing total size. If you encounter the tree serialized in another form and are able to deserialize it, you can trust it as genuine provided it still passes verification (see below).
 
