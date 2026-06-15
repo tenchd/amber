@@ -169,4 +169,15 @@ mod tests {
         merkle_tree.verify_tree();
         println!("Tree verified.");
     }
+
+    #[test]
+    fn verify_altered_file(){
+        let test_filename = "timestamp/pgmerkle.txt";
+        let merkle_tree = MerkleTree::new_from_fossilized_tree(test_filename);
+        let genuine_text = "testing/pg996.txt";
+        assert!(merkle_tree.verify_without_index_from_file(genuine_text));
+        // now try with an altered version I made.
+        let altered_text = "testing/pg996_altered_copy.txt";
+        assert!(!merkle_tree.verify_without_index_from_file(altered_text));
+    }
 }

@@ -18,7 +18,7 @@ My goal in providing this secure timestamp is:
 - To provide cryptographic-strength, censorship- and tamper-resistant proof that each Project Gutenberg text existed today. This can be used to re-establish trust in the provenance of literary texts.
 
 I do NOT intend this secure timestamp to:
-- independently prove any Project Gutenberg text is authentic (not a forgery, correctly translated, complete, etc.).
+- independently prove that any Project Gutenberg text is authentic (not a forgery, correctly translated, complete, etc.).
 - directly preserve the actual contents of any Project Gutenberg text. The Merkle tree stores hashes of the texts but not the texts themselves.
 
 I assume the following conditions continue to hold in the future:

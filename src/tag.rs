@@ -45,7 +45,7 @@ So the message written out is
 {} 
 followed by the 32 byte double SHA256 hash of this document.
 
-I set a lockout to my transaction of block {} and provided a high transaction fee. Hopefully this will result in the transaction being mined in block {}, but if not it should appear in one of the next few blocks mined. It's not possible to be sure a priori which block it will end up in due to the way Bitcoin mining works.
+I set a locktime to my transaction of block {} and provided a high transaction fee. Hopefully this will result in the transaction being mined in block {}, but if not it should appear in one of the next few blocks mined. It's not possible to be sure a priori which block it will end up in due to the way Bitcoin mining works.
 
 Verification
 Let's say you have this document, a file containing the Merkle tree, and some text files. You would like to make sure that the text files were part of the PG corpus in 2026.
