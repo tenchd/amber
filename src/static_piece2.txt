@@ -20,5 +20,5 @@ While the threat of cultural dementia is real, we already have the means to defe
 
 Who Am I?
 It may be useful for me to establish my identity in the future. For that reason I share my public key here, as well as a signature of the Merkle tree root hash and the date with my private key.
-For instance, I may use this key pair to sign an open-source implementation of the code I wrote to produce the Merkle tree and this document. This implementation is intended to make using and disseminating the Merkle tree easier, though in theory this document by itself contains all the information a competent coder should need.
+For instance, I may use this key pair to sign a release of the source code I wrote to produce the Merkle tree and this document. This implementation is intended to make using and disseminating the Merkle tree easier, though in theory this document by itself contains all the information a competent coder should need.
 
