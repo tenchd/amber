@@ -56,4 +56,4 @@ This is followed by the list of hashes in the Merkle tree. First the leaf hashes
 It is possible and totally acceptable to serialize the Merkle tree in another form for reasons such as reducing total size. If you encounter the tree serialized in another form and are able to deserialize it, you can trust it as genuine provided it still passes verification (see below).
 
 Blockchain Message
-I wrote the message to the blockchain using the OP_RETURN script command. The resulting Bitcoin transation therefore does nothing interesting except write the following 76 bytes of data into the block:
+I wrote the message to the blockchain using the OP_RETURN script command. The resulting Bitcoin transaction therefore does nothing interesting except write the following 76 bytes of data into the block:
