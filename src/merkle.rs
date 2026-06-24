@@ -194,7 +194,7 @@ impl MerkleTree {
         // TODO:check that header lines match format
 
         let words  = header_lines[1].split_whitespace().collect::<Vec<&str>>();
-        let num_leaves: NodeHandle = words[3].parse().expect("Unable to parse num_leaves from line 2 of file");
+        let num_leaves: NodeHandle = words[4].parse().expect("Unable to parse num_leaves from line 2 of file");
 
         // read the fossilized sequence of merkle tree node hashes.
         for line in reader.lines() {
@@ -406,9 +406,9 @@ impl MerkleTree {
     // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
     pub fn fossilize_tree(&self, tree_filename: &str, date: &str) {
         let mut file = File::create(tree_filename).expect("failed to create file");
-        let header_line = format!("Merkle tree. Created on {} from Project Gutenberg corpus of plain text files.\n", date);
-        let num_leaves_line = format!("Number of leaves: {}\n", self.num_leaves);
-        let explain_line = "Each line below is the hash (in base64) of a merkle node. Tree is binary. Each parent hash is the double SHA256 hash of the concatenation of its two child hashes. If the parent has only one child, its hash is the double SHA256 hash of the child hash concatenated with itself. Final line of file is root hash.\n";
+        let header_line = format!("# Merkle tree. Created on {} from Project Gutenberg corpus of plain text files.\n", date);
+        let num_leaves_line = format!("# Number of leaves: {}\n", self.num_leaves);
+        let explain_line = "# Each line below is the hash (in base64) of a merkle node. Tree is binary. Each parent hash is the double SHA256 hash of the concatenation of its two child hashes. If the parent has only one child, its hash is the double SHA256 hash of the child hash concatenated with itself. Final line of file is root hash.\n";
         file.write_all(header_line.as_bytes()).unwrap();
         file.write_all(num_leaves_line.as_bytes()).unwrap();
         file.write_all(explain_line.as_bytes()).unwrap();
