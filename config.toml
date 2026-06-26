@@ -1,6 +1,6 @@
 corpus_path="../gutenberg/cache/epub_copy/"
-private_key_path = "../private_key.pem"
-public_key_path = "../public_key.pem"
+private_key_path = "../merkle_signing_private_key_new.pem"
+public_key_path = "../merkle_signing_public_key.pem"
 tree_filename="timestamp/pgmerkle.txt"
 date ="June 25, 2026"
 time="18:40"
