@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use crate::{MerkleTree, build_merkle_tree_from_directory};
+    use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::double_hash_from_file};
     use hex_literal::hex;
     use hex_fmt::HexFmt;
     use config::Config;
@@ -179,5 +179,12 @@ mod tests {
         // now try with an altered version I made.
         let altered_text = "testing/pg996_altered_copy.txt";
         assert!(!merkle_tree.verify_without_index_from_file(altered_text));
+    }
+
+    #[test]
+    #[ignore]
+    fn verify_explain_hash(){
+        let explain_hash = double_hash_from_file("timestamp/explain.txt");
+        println!("Double SHA256 hash of explain.txt: {}", HexFmt(explain_hash));
     }
 }
