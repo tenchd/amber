@@ -4,3 +4,4 @@
 test_example.txt
 timestamp/*
 config.toml
+/canonical_timestamp/pgmerkle.txt

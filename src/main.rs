@@ -1,6 +1,3 @@
-#[allow(dead_code)]
-#[allow(unused_imports)]
-
 mod merkle;
 mod tag;
 mod tests;
@@ -18,6 +15,15 @@ use crate::merkle::MerkleTree;
 struct Args {
     #[arg(short, long, default_value_t = false)]
     build_tree: bool,
+
+    #[arg(short, long, default_value_t = false)]
+    tag: bool,
+
+    #[arg(short, long, default_value_t = false)]
+    generate_timestamp: bool,
+
+    #[arg(short, long, default_value_t = ("".to_string()))]
+    verify_file: String,
 }
 
 
@@ -50,31 +56,61 @@ fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
     let filepaths = get_filenames_from_directory(path);
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
 }
-fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str, time: &str, block_lockout: usize, identifier: &str){
+fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str, time: &str, locktime: usize, identifier: &str){
     println!("reading merkle tree from file.");
     let unfossilized: MerkleTree = MerkleTree::new_from_fossilized_tree(tree_filename);
     println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
     unfossilized.verify_tree();
-    println!("Merkle tree verified.");
+    println!("Merkle tree is valid.");
 
-    let document_filename = "timestamp/explain.txt";
-    crate::tag::write_document(document_filename, date, time, block_lockout, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash());
+    let document_filename = "generated_timestamp/explain.txt";
+    crate::tag::write_document(document_filename, date, time, locktime, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash());
     let tag = crate::tag::create_chain_tag(identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), document_filename);
     println!("Wrote explainer document to file {}", document_filename);
-    let tag_filename = "timestamp/tag.txt";
+    let tag_filename = "generated_timestamp/tag.txt";
     let tag_string = format!("{}", HexFmt(&tag));
     let mut file = File::create(tag_filename).expect("failed to create file");
     file.write_all(&tag_string.into_bytes()).expect("failed to write tag");
     println!("Wrote tag to file {}", tag_filename);
 }
 
-fn build_timestamp(corpus_path: &str, tree_filename: &str, date: &str, time: &str, block_lockout: usize, identifier: &str) {
+fn build_timestamp(corpus_path: &str, tree_filename: &str, date: &str, time: &str, locktime: usize, identifier: &str) {
     let tree = build_merkle_tree_from_directory(corpus_path);
     println!("Merkle tree built. Root hash is {}", HexFmt(tree.get_root_hash()));
     tree.fossilize_tree(tree_filename, date);
     println!("wrote tree to file {}", tree_filename);
 
-    build_doc_and_tag_from_saved_tree(tree_filename, date, time, block_lockout, identifier);
+    build_doc_and_tag_from_saved_tree(tree_filename, date, time, locktime, identifier);
+}
+
+fn verify_file(tree_filename: &str, filepath: &str){
+    println!("reading merkle tree from file.");
+    let unfossilized: MerkleTree = MerkleTree::new_from_fossilized_tree(tree_filename);
+    println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
+    unfossilized.verify_tree();
+    println!("Merkle tree is valid.");
+
+    let contains = unfossilized.verify_without_index_from_file(filepath);
+    if contains {
+        println!("{} is in the Merkle tree.", filepath);
+    }
+    else {
+        println!("{} is NOT in the Merkle tree.", filepath);
+    }
+}
+
+fn compute_tag(identifier: &str, tree_filename: &str, explain_filepath: &str) {
+    println!("reading merkle tree from file.");
+    let unfossilized: MerkleTree = MerkleTree::new_from_fossilized_tree(tree_filename);
+    println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
+    unfossilized.verify_tree();
+    println!("Merkle tree is valid.");
+
+    let num_leaves = unfossilized.num_leaves.try_into().unwrap();
+    let root_hash = unfossilized.get_root_hash();
+    let tag = tag::create_chain_tag(identifier, num_leaves, root_hash, explain_filepath);
+    let opcodes = "6a4c4c"; //hex of opcodes used to write to bitcoin blockchain via OP_RETURN
+    println!("Blockchain message should be\n{}{}", opcodes, HexFmt(tag));
 }
 
 fn main() {
@@ -83,19 +119,31 @@ fn main() {
                     .build()
                     .unwrap();
     let corpus_path = settings.get_string("corpus_path").unwrap();
-    let tree_filename = settings.get_string("tree_filename").unwrap();
+    let canonical_tree_filename = "canonical_timestamp/pgmerkle.txt";
+    let generated_tree_filename = "generated_timestamp/pgmerkle.txt";
     let date = settings.get_string("date").unwrap();
     let time = settings.get_string("time").unwrap();
-    let block_lockout: usize = settings.get_string("block_lockout").unwrap().parse().expect("couldn't parse block lockout");
+    let locktime: usize = settings.get_string("locktime").unwrap().parse().expect("couldn't parse block lockout");
     let identifier = settings.get_string("identifier").unwrap();
 
     let args = Args::parse();
 
-    if args.build_tree {
-        build_timestamp(&corpus_path, &tree_filename, &date, &time, block_lockout, &identifier);
+    if args.verify_file != "".to_string(){
+        let filepath = args.verify_file;
+        verify_file(&canonical_tree_filename, &filepath);
+    }
+    else if args.tag {
+        let explain_filepath = "canonical_timestamp/canonical_explain.txt";
+        compute_tag(&identifier, &canonical_tree_filename, &explain_filepath);
+    }
+    else if args.generate_timestamp {
+        build_doc_and_tag_from_saved_tree(&canonical_tree_filename, &date, &time, locktime, &identifier);
+    }
+    else if args.build_tree {
+        build_timestamp(&corpus_path, &generated_tree_filename, &date, &time, locktime, &identifier);
     }
     else {
-        build_doc_and_tag_from_saved_tree(&tree_filename, &date, &time, block_lockout, &identifier);
+        panic!("Need to provide a command line argument");
     }
 
 }

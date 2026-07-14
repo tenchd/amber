@@ -1,4 +1,3 @@
-
 use hex_fmt::HexFmt;
 use sha2::{Sha256, Digest};
 use std::{fmt};

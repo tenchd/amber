@@ -1,8 +1,7 @@
 corpus_path="/path/to/corpus"
 private_key_path = "path/to/private/key"
 public_key_path = "path/to/public/key"
-tree_filename="timestamp/pgmerkle.txt"
 date ="fill_in_date"
 time="fill_in_time"
-block_lockout=<put block lockout here>
+locktime=0
 identifier="PGMERKLE" 

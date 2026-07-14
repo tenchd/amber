@@ -1,3 +1,4 @@
+On ${date}, at roughly ${time} UTC, I built a Merkle tree from the raw text files of the works listed on Project Gutenberg (PG) and wrote the root hash of this Merkle tree to the Bitcoin blockchain in block ${locktime}, or one of several blocks immediately following.
 This document explains how to use the Merkle tree I built, along with the blockchain transaction timestamping its root hash, to certify that a text file is an exact, unaltered copy of a literary text provided to the public by Project Gutenberg in 2026.
 The same blockchain transaction also contains a cryptographically-secure SHA256 hash of this text file (the one you are reading right now) as well. This is the canonical version of the text file, and should be preserved exactly to ensure that it can be verified.
 
@@ -57,3 +58,41 @@ It is possible and totally acceptable to serialize the Merkle tree in another fo
 
 Blockchain Message
 I wrote the message to the blockchain using the OP_RETURN script command. The resulting Bitcoin transaction therefore does nothing interesting except write the following 76 bytes of data into the block:
+- ${identifier} in ascii (8 bytes): ${identifier_hex}
+- 4 bytes representing the number of leaves in the Merkle tree (${num_merkle_leaves}) as an unsigned integer: ${num_merkle_leaves_hex}
+- the Merkle tree root hash (32 bytes) ${merkle_root_hash}
+- the SHA256 double hash of this document 
+
+So the message written out is 
+${tag_prefix} 
+followed by the 32 byte double SHA256 hash of this document.
+
+I set a locktime to my transaction of block ${locktime} and provided a high transaction fee. Hopefully this will result in the transaction being mined in block ${locktime}, but if not it should appear in one of the next few blocks mined. It's not possible to be sure a priori which block it will end up in due to the way Bitcoin mining works.
+
+Verification
+Let's say you have this document, a file containing the Merkle tree, and some text files. You would like to make sure that the text files were part of the PG corpus in 2026.
+First, you must verify that this document and the Merkle tree are valid. To do this, first verify that there is a transaction on the Bitcoin blockchain in block ${locktime} or shortly thereafter containing the message described above. The Merkle tree root hash in the blockchain message should exactly match the root hash written in this file, and the SHA256 double hash of this document should match exactly as well. Further, the Merkle tree should be valid (meaning the hash relationships between nodes are correct) and the root hash should match the one written in this file. The Merkle tree should have ${num_merkle_leaves} leaves.
+If the above conditions hold, you can be sure the Merkle tree is valid, and can use it to verify PG texts safely.
+To verify that a text file was part of the PG corpus in 2026, simply double SHA256 hash the file. If there is a leaf node in the Merkle tree whose hash matches exactly, you have verified that the text file is part of the corpus. Otherwise, the text file cannot be verified, and you can conclude that it does not exactly match any of the original text files included in the Merkle tree.
+
+Preservation and Dissemination
+PG texts are likely to survive even absent direct archival efforts because they are available for free and include many of the most popular and influential books in history. Ironically, another reason these texts are likely to persist is because they are a curated collection of high-quality human-generated natural language texts, which is useful for training LLMs.
+This document and Merkle tree do not carry the same incentives to be preserved and used for other purposes. They are only useful or interesting insofar as they help establish trust in provenance of PG texts. 
+For that reason, please save this document and Merkle tree to your computer, without altering their contents. Back them up in multiple locations. Share them with other people. Print out a physical copy of this document (with whitespace characters explicitly notated, so it can be reconstructed exactly as a .txt file) and store it where it will last a long time. If you are a bookbinder, consider printing the base64 dump of the Merkle tree as a bound book. If you have access to other forms of long-term storage media, use that as well. 
+Remember, even though future people may have no particular reason to trust you, if you manage to preserve a copy of the genuine versions of this document and the Merkle tree, they can verify them as genuine by referring to the blockchain message. The challenge is simply to ensure that these files persist into the future, so they can be used to reestablish trust in provenance if it has been lost. 
+Finally, it may also be useful to download and store the Project Gutenberg raw text files yourself, as well. This is because Project Gutenberg has an errata process where small changes (typo corrections, etc) can be made to PG texts. Since any change to the raw text file changes the hash signature, texts that are errata-ed after the creation of this Merkle tree can no longer be verified if the original is lost. By preserving the current state of PG texts, you help ensure more of them will remain verifiable long into the future.
+
+This is Not Hard To Do
+Cryptographically-secure hashes and Merkle trees have been in use for decades. I am also not the first to establish proof of document existence via blockchain, though to my knowledge so far this technique has mostly been used in business and legal applications.
+
+While the threat of cultural dementia is real, we already have the means to defend against it. But we must act soon. This Project Gutenberg secure timestamp is merely a first step. There is much more that can be done, including:
+- supporting more types of data (audio, video, etc)
+- working with existing conservation and archival organizations
+- including texts from more sources, world cultures, and languages
+- building a volunteer, decentralized, resilient effort to preserve exact canonical versions of texts, as well as their secure timestamps
+- developing archival file formats that contain Merkle proofs and blockchain pointers in file headers
+
+Who Am I?
+It may be useful for me to establish my identity in the near future. For that reason I share my public key here, as well as a signature of the Merkle tree root hash and the date with my private key. Note that the key pair is ECDSA and thus not post-quantum.
+For instance, I may use this key pair to sign a release of the source code I wrote to produce the Merkle tree and this document. This implementation is intended to make using and disseminating the Merkle tree easier, though in theory this document by itself contains all the information a competent coder should need.
+

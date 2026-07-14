@@ -1,0 +1,105 @@
+On June 26, 2026, at roughly 16:45 UTC, I built a Merkle tree from the raw text files of the works listed on Project Gutenberg (PG) and wrote the root hash of this Merkle tree to the Bitcoin blockchain in block 955521, or one of several blocks immediately following.
+This document explains how to use the Merkle tree I built, along with the blockchain transaction timestamping its root hash, to certify that a text file is an exact, unaltered copy of a literary text provided to the public by Project Gutenberg in 2026.
+The same blockchain transaction also contains a cryptographically-secure SHA256 hash of this text file (the one you are reading right now) as well. This is the canonical version of the text file, and should be preserved exactly to ensure that it can be verified.
+
+Motivation
+The motivation for this work is to preserve a clear historical record of literary expression far into the future.
+While the primary challenge of literary and historical conservation efforts across the centuries has been preserving texts, it has also been vital to identify forgeries because they obscure our view of the past.
+If current technological trends continue, large-language models (LLMs) will drastically reduce the cost of creating convincing forgeries of historical texts. 
+In such a case, we can expect a massive flood of such forgeries to be created, for the same reason that spam email is ubiquitous: because spamming is cheap and low-risk for the spammer, and might give them some small benefit. 
+Some of the forgeries will be made maliciously, by political, religious, or corporate actors that seek to rewrite inconvenient aspects of the historical record. More will be the result of error, misconfiguration, and laziness. 
+Imagine the plight of our descendants two hundred years from now, who might wish to read a transcript of John Brown's remarks upon being found guilty of treason and insurrection. Even if the true transcript survives, it may be indistinguishable among many convincingly altered versions. Intentional, politically-motivated alterations could include intensifying or removing Brown's appeals to Christianity, removing his denial of treasonous intent, or rewriting his professed abolitionist motivations into something cruder and more mercenary. Any one of these changes would fundamentally alter the text, and the historical understanding of any reader who accepted it as real. And how could our descendants know which is real, for this or any other text? What truths about our past we have managed to preserve would be lost to a totalizing cultural and historical dementia.
+One possible way to avoid this distressing hypothetical future is to rely on a trusted institution to maintain genuine copies of important texts. One obvious candidate is the Project Gutenberg organization, which maintains a large corpus of public-domain texts and makes them available to download for free. However, we see in history that institutions often shift priorities, make mistakes, become influenced or undermined by outside forces, or even cease to exist. It would be better to have a means of re-establishing trust in the provenance of literary texts, even after they have passed into the hands of untrusted parties.
+To that end, the goal of this project is to provide cryptographic-strength, censorship- and tamper-resistant proof that each Project Gutenberg text existed today. Such proof would allow our hypothetical descendants in the above example to verify that the unaltered version of Brown's speech (which appears in its entirety in W. E. B. DuBois' biography "John Brown" on Project Gutenberg, PG62799) was, in fact, the version that existed in June 2026 and not a forgery produced later.
+As I write this, there is still time to avert this concerning possible future. I do not yet see much evidence of proliferation of convincing forgeries. I suspect that, for the moment, creating a convincing forgery is still too inconvenient to be done at scale. But it's only a matter of time before this happens. If we do not prepare, we risk denying our descendants the irreplaceable gift of the literary record, from which we have benefitted for millennia. 
+
+Scope
+This work has three components: this document, the Merkle tree, and the blockchain message. Taken together, they comprise a secure timestamp of the PG corpus.
+My goal in providing this secure timestamp is:
+- To provide cryptographic-strength, censorship- and tamper-resistant proof that each Project Gutenberg text existed today. This can be used to re-establish trust in the provenance of literary texts.
+
+I do NOT intend this secure timestamp to:
+- independently prove that any Project Gutenberg text is authentic (not a forgery, correctly translated, complete, etc.).
+- directly preserve the actual contents of any Project Gutenberg text. The Merkle tree stores hashes of the texts but not the texts themselves.
+
+I assume the following conditions continue to hold in the future:
+- Finding a SHA256 hash collision remains computationally infeasible.
+- Genuine, unaltered versions of the raw text files hosted by Project Gutenberg survive.
+- This document, and the accompanying Merkle tree, survive.
+- The message I wrote on the Bitcoin blockchain containing the Merkle root hash and the hash of this document remains readable and provably unaltered (i.e., the blockchain is not edited in some kind of 51% attack).
+- The Project Gutenberg text numbering scheme stays the same (see below).
+
+I am writing this document to be read by my contemporaries, as well as by those who will come after us. 
+To my contemporaries, this document is intended to convince you of the value of this secure timestamp, so that you might test it, disseminate it, and preserve in long-term-stable storage media. I hope that it also inspires you to find other ways to safeguard humanity's collective cultural memory from degradation. 
+To our descendants, this document is intended to instruct you on how to use the secure timestamp for verification of literary texts. It is also a request that you remember those of us who have come before you, and remember our stories, as we have done for those who came before us. 
+
+Trust in Provenance
+Technically speaking, this secure timestamp establishes the fact that each included text file existed in June 2026, but nothing else. For example, it certifies that a plain text file containing a novel titled Don Quixote (PG996) existed in June 2026, but does not conclusively prove that it is truly a novel published in the early seventeenth century by Miguel de Cervantes, or that it is a faithful and accurate translation into English from the original Spanish, or that it was obtained from the Project Gutenberg website.
+Proof of existence in 2026 alone is likely to be sufficient for most purposes, because today it is still relatively expensive to produce convincing forgeries of literary texts.
+I have not been able to think of a way to provide a similar level of proof that the files I included in the Merkle tree are from Project Gutenberg and further that I did not alter them. I encourage my contemporaries to carefully test this secure timestamp on your own: download plain text files from Project Gutenberg and verify them with the Merkle tree.
+
+Indexing Project Gutenberg Raw Text Files
+Each text in the Project Gutenberg corpus is identified by a unique positive integer. For example, PG1 is "The Declaration of Independence of the United States of America", and PG100 is "The Complete Works of William Shakespeare". I use these unique integers as identifiers during Merkle tree construction.
+Each Project Gutenberg text is typically available in several different formats, including popular ebook formats like .epub and .mobi. I use the plain text (UTF-8 encoded) version of each text, because these are the simplest and the least likely to change over time.
+
+I downloaded the PG corpus directly from their website on June 11th. They make nearly all of their texts available as zipped tar file, updated weekly, at https://www.gutenberg.org/cache/epub/feeds/txt-files.tar.zip. This collection omits texts in the corpus that have no plain text version available (such as PG40) or that are not really books (such as PG50, which simply lists the first 1 million digits of pi). The highest PG ID in the collection I downloaded was 78827, but the number of Merkle leaves is a little lower than that, because of these missing texts.
+
+Merkle Tree Construction and Serialization
+I constructed the Merkle tree of the Project Gutenberg plain text files in the same way a Bitcoin miner computes the Merkle root hash of a block of transactions. That is to say, let the unique integer identifiers of the texts be the ordering of the files. First I compute the double SHA256 hash of each file. These comprise the leaves of the Merkle tree. Then for each adjacent pair of leaves in the ordering, I double hash the concatenation of their hashes to produce the hash of their parent node. The process is repeated at each level until the root is reached. If there is an odd number of nodes at some level, the last node's hash is concatenated with itself and then double SHA256 hashed to get the parent hash.
+Note that if some text has PG ID X, it may not map to the Xth leaf in the Merkle tree because some of the texts are not present in the plain text corpus.
+
+The Merkle tree is written to file according to the following specification, which is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. First there are three header lines that read:
+"# Merkle tree. Created on <date> from Project Gutenberg corpus of plain text files."
+"# Number of leaves: <# leaves>"
+"# Each line below is the hash (in base64) of a Merkle node. Tree is binary. Each parent hash is the double SHA256 hash of the concatenation of its two child hashes. If the parent has only one child, its hash is the double SHA256 hash of the child hash concatenated with itself. Final line of file is root hash."
+This is followed by the list of hashes in the Merkle tree. First the leaf hashes are listed in order. Next the hashes of the nodes in the next level are listed in increasing order of left child. This is repeated for every level until the root, which is the last hash written to the file.
+
+It is possible and totally acceptable to serialize the Merkle tree in another form for reasons such as reducing total size. If you encounter the tree serialized in another form and are able to deserialize it, you can trust it as genuine provided it still passes verification (see below).
+
+Blockchain Message
+I wrote the message to the blockchain using the OP_RETURN script command. The resulting Bitcoin transaction therefore does nothing interesting except write the following 76 bytes of data into the block:
+- PGMERKLE in ascii (8 bytes): 50474d45524b4c45
+- 4 bytes representing the number of leaves in the Merkle tree (77113) as an unsigned integer: 00012d39
+- the Merkle tree root hash (32 bytes) e56bf7ee52b351da728a072dd6146450616de1e310d9243cf8428d777081dde1
+- the SHA256 double hash of this document 
+
+So the message written out is 
+50474d45524b4c4500012d39e56bf7ee52b351da728a072dd6146450616de1e310d9243cf8428d777081dde1 
+followed by the 32 byte double SHA256 hash of this document.
+
+I set a locktime to my transaction of block 955521 and provided a high transaction fee. Hopefully this will result in the transaction being mined in block 955521, but if not it should appear in one of the next few blocks mined. It's not possible to be sure a priori which block it will end up in due to the way Bitcoin mining works.
+
+Verification
+Let's say you have this document, a file containing the Merkle tree, and some text files. You would like to make sure that the text files were part of the PG corpus in 2026.
+First, you must verify that this document and the Merkle tree are valid. To do this, first verify that there is a transaction on the Bitcoin blockchain in block 955521 or shortly thereafter containing the message described above. The Merkle tree root hash in the blockchain message should exactly match the root hash written in this file, and the SHA256 double hash of this document should match exactly as well. Further, the Merkle tree should be valid (meaning the hash relationships between nodes are correct) and the root hash should match the one written in this file. The Merkle tree should have 77113 leaves.
+If the above conditions hold, you can be sure the Merkle tree is valid, and can use it to verify PG texts safely.
+To verify that a text file was part of the PG corpus in 2026, simply double SHA256 hash the file. If there is a leaf node in the Merkle tree whose hash matches exactly, you have verified that the text file is part of the corpus. Otherwise, the text file cannot be verified, and you can conclude that it does not exactly match any of the original text files included in the Merkle tree.
+
+Preservation and Dissemination
+PG texts are likely to survive even absent direct archival efforts because they are available for free and include many of the most popular and influential books in history. Ironically, another reason these texts are likely to persist is because they are a curated collection of high-quality human-generated natural language texts, which is useful for training LLMs.
+This document and Merkle tree do not carry the same incentives to be preserved and used for other purposes. They are only useful or interesting insofar as they help establish trust in provenance of PG texts. 
+For that reason, please save this document and Merkle tree to your computer, without altering their contents. Back them up in multiple locations. Share them with other people. Print out a physical copy of this document (with whitespace characters explicitly notated, so it can be reconstructed exactly as a .txt file) and store it where it will last a long time. If you are a bookbinder, consider printing the base64 dump of the Merkle tree as a bound book. If you have access to other forms of long-term storage media, use that as well. 
+Remember, even though future people may have no particular reason to trust you, if you manage to preserve a copy of the genuine versions of this document and the Merkle tree, they can verify them as genuine by referring to the blockchain message. The challenge is simply to ensure that these files persist into the future, so they can be used to reestablish trust in provenance if it has been lost. 
+Finally, it may also be useful to download and store the Project Gutenberg raw text files yourself, as well. This is because Project Gutenberg has an errata process where small changes (typo corrections, etc) can be made to PG texts. Since any change to the raw text file changes the hash signature, texts that are errata-ed after the creation of this Merkle tree can no longer be verified if the original is lost. By preserving the current state of PG texts, you help ensure more of them will remain verifiable long into the future.
+
+This is Not Hard To Do
+Cryptographically-secure hashes and Merkle trees have been in use for decades. I am also not the first to establish proof of document existence via blockchain, though to my knowledge so far this technique has mostly been used in business and legal applications.
+
+While the threat of cultural dementia is real, we already have the means to defend against it. But we must act soon. This Project Gutenberg secure timestamp is merely a first step. There is much more that can be done, including:
+- supporting more types of data (audio, video, etc)
+- working with existing conservation and archival organizations
+- including texts from more sources, world cultures, and languages
+- building a volunteer, decentralized, resilient effort to preserve exact canonical versions of texts, as well as their secure timestamps
+- developing archival file formats that contain Merkle proofs and blockchain pointers in file headers
+
+Who Am I?
+It may be useful for me to establish my identity in the near future. For that reason I share my public key here, as well as a signature of the Merkle tree root hash and the date with my private key. Note that the key pair is ECDSA and thus not post-quantum.
+For instance, I may use this key pair to sign a release of the source code I wrote to produce the Merkle tree and this document. This implementation is intended to make using and disseminating the Merkle tree easier, though in theory this document by itself contains all the information a competent coder should need.
+
+-----BEGIN PUBLIC KEY-----
+MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEkKd9MtgRWeRMPINgkltgeYMt4gNx0FkV
+L5wrmANlUTWSLJORZs/0hZrsTrhA7r17cPNv4WGWBEAehX70EPnzdw==
+-----END PUBLIC KEY-----
+Signature of message "e56bf7ee52b351da728a072dd6146450616de1e310d9243cf8428d777081dde1 June 26, 2026":
+MEUCIHHEHP2RhFWYlgazxOa3pMCAyumgLfwwyrZcpTpYz3JyAiEAiLwLpbpP+wxh
+ZKWrzJeBvM1RMolMBpUWoR3Q5uOKfVU=
