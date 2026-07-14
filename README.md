@@ -1,3 +1,13 @@
+Amber is a Rust utility that makes it easy to create a cryptographically-secure timestamp of a corpus. 
+
+It is based on the [reference implementation](https://github.com/tenchd/secure_timestamp) associated with the [June 2026 secure timestamp](https://www.davidtench.com/timestamp) of the Project Gutenberg corpus.
+
+This repo is in active development and is not ready for general use. Check back soon.
+
+Old readme below
+
+---
+
 On June 26, 2026, I encoded the Project Gutenberg corpus into a Merkle tree and wrote the root hash on the Bitcoin blockchain at [block 955522](https://blockstream.info/tx/b82b914e29fb08e65e49156231b68c38c3bcb246f6a7d8ec22477478a9f1b832?expand). This comprises a secure timestamp of the Project Gutenberg corpus. In other words, the Merkle tree and the block containing its root hash provide cryptographic-strength proof that each Project Gutenberg text existed in June 2026.
 
 Proving that texts existed in 2026 may be valuable in the future if advances in LLMs make it cheap to produce convincing forgeries of cultural texts. By proving that a text existed in 2026, we may be able to conclude that it is genuine because it predates these large-scale forgery methods.
