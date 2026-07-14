@@ -101,11 +101,13 @@ mod tests {
         let merkle_tree = build_merkle_tree_from_directory(path);
         println!("Merkle tree built from directory {} has root hash: {}... and contains {} leaves", path, HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
         merkle_tree.verify_tree();
-        assert!(merkle_tree.verify_with_index_from_file("testing/small_corpus/pg1.txt", 1), "tree should say yes to pg1.txt at index 1");
-        assert!(!merkle_tree.verify_with_index_from_file("testing/small_corpus/pg1.txt", 2), "tree should say no to pg1.txt at index 2");
-        assert!(!merkle_tree.verify_with_index_from_file("testing/small_corpus/pg2.txt", 1), "tree should say no to pg2.txt at index 1");
+        // index lookups commented out for now because i'm not sure i'm going to use them, and because in general we don't yet know if/how to sort the filenames.
+        // assert!(merkle_tree.verify_with_index_from_file("testing/small_corpus/pg1.txt", 1), "tree should say yes to pg1.txt at index 1");
+        // assert!(!merkle_tree.verify_with_index_from_file("testing/small_corpus/pg1.txt", 2), "tree should say no to pg1.txt at index 2");
+        // assert!(!merkle_tree.verify_with_index_from_file("testing/small_corpus/pg2.txt", 1), "tree should say no to pg2.txt at index 1");
         assert!(merkle_tree.verify_without_index_from_file("testing/small_corpus/pg1.txt"), "tree should say yes to pg1.txt");
-        assert!(!merkle_tree.verify_without_index_from_file("testing/small_corpus/ignore.txt"), "tree should say no to file not in Merkle tree");
+        assert!(merkle_tree.verify_without_index_from_file("testing/small_corpus/amber.jpg"), "tree should say yes to amber.jpg");
+        assert!(merkle_tree.verify_without_index_from_file("testing/small_corpus/another_subdirectory/example_doc.docx"), "tree should say yes to amber.jpg");
         let proof = merkle_tree.produce_proof(1);
         assert!(proof.verify_proof_for_file("testing/small_corpus/pg1.txt", merkle_tree.get_root_hash()), "proof should be valid for pg1.txt.txt");
         println!("Proof for pg1.txt: {}", proof);
@@ -114,21 +116,18 @@ mod tests {
     #[test]
     fn double_hash_match() {
         // got the following value from applying sha25sum twice to a file with contents "This is a short test file.".
-        let expected_hash = hex!("80b621c7642162e6cb9c342ad2c0a900867175c664a292eb0ad311e9ca92f23e");
+        let expected_hash = hex!("788480f6d1312efdc351d804105641a8245a121a1bdcab8a7007abbc8b6ea115");
 
-        let path = "testing/small_corpus/ignore.txt";
+        let path = "testing/small_corpus/textfile.txt";
         let hash = crate::merkle::double_hash_from_file(path);
+        println!("Double hash for {}: {}", path, HexFmt(&hash));
         assert!(hash == expected_hash, "Hash does not match expected value");
         println!("Double hash for {}: {}", path, HexFmt(&hash[..4]));
 
-        let data = b"This is a short test file.";
+        let data = b"This is an example text file.";
         let hash = crate::merkle::double_hash(data);
         assert!(hash == expected_hash, "Hash does not match expected value");
         println!("Double hash for data: {}", HexFmt(&hash[..4]));
-
-        let new_path = "testing/dummy_explain.txt";
-        let new_hash = crate::merkle::double_hash_from_file(new_path);
-        println!("Hash of dummy doc: {}", HexFmt(new_hash));
     }
 
     #[test]
@@ -147,52 +146,33 @@ mod tests {
     fn basic_tag() {
         let path = "testing/small_corpus";
         let merkle_tree = build_merkle_tree_from_directory(path);
-        let identifier = "PGMERKLE";
+        let identifier = "XMPLMRKL";
         let merkle_root_hash = merkle_tree.get_root_hash();
+        println!("{}", HexFmt(merkle_root_hash));
         let num_leaves: u32 = merkle_tree.num_leaves.try_into().expect("Too many leaves to write as u32");
         let explainer_file_path = "testing/dummy_explain.txt";
         let tag = crate::tag::create_chain_tag(identifier, num_leaves, merkle_root_hash, explainer_file_path); 
-        let expected_tag = hex!("50 47 4d 45 52 4b 4c 45 00 00 00 0a 44 5a 1c 4e 49 fc b2 e4 db 00 0c 95 6e 50 f0 38 43 eb 56 7a 32 e0 ce 54 1e 5f dd 08 d6 26 4b ae a0 e5 8f 0d df 84 5d c1 ce 07 79 33 7c 91 89 c3 0b 91 6e 7d 62 94 96 ac 85 18 ac 6b c7 50 9e 61");
+        let expected_tag = hex!("58 4d 50 4c 4d 52 4b 4c 00 00 00 0e ba 20 ce ff 80 d2 c9 fd ac f2 31 58 40 ec 11 a5 08 1c b6 3d a1 76 f4 9a b3 f5 81 a0 7e c3 91 8e a0 e5 8f 0d df 84 5d c1 ce 07 79 33 7c 91 89 c3 0b 91 6e 7d 62 94 96 ac 85 18 ac 6b c7 50 9e 61");
+        println!("{}", HexFmt(&tag));
         assert_eq!(tag, expected_tag);
     }
 
     #[test]
     #[ignore]
-    fn full_pg_test() {
-        let settings = Config::builder()
-                    .add_source(config::File::with_name("config"))
-                    .build()
-                    .unwrap();
-        let path = settings.get_string("corpus_path").unwrap();
-        let merkle_tree = build_merkle_tree_from_directory(&path);
-        println!("Merkle tree built from directory {} has root hash: {}... and contains {} leaves", path, HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
-        merkle_tree.verify_tree();
-        println!("Tree verified.");
-    }
-
-    #[test]
-    #[ignore]
     fn verify_altered_file(){
-        let test_filename = "canonical_timestamp/pgmerkle.txt";
-        let merkle_tree = MerkleTree::new_from_fossilized_tree(test_filename);
-        let genuine_text = "testing/pg996.txt";
+        let path = "testing/small_corpus";
+        let merkle_tree = build_merkle_tree_from_directory(path);
+        let genuine_text = "testing/small_corpus/textfile.txt";
         assert!(merkle_tree.verify_without_index_from_file(genuine_text));
         // now try with an altered version I made.
-        let altered_text = "testing/pg996_altered_copy.txt";
+        let altered_text = "testing/altered_textfile.txt";
         assert!(!merkle_tree.verify_without_index_from_file(altered_text));
     }
 
     #[test]
     #[ignore]
-    fn verify_explain_hash(){
-        let explain_hash = double_hash_from_file("canonical_timestamp/canonical_explain.txt");
-        println!("Double SHA256 hash of explain.txt: {}", HexFmt(explain_hash));
-    }
-
-    #[test]
-    #[ignore]
     fn authenticate_entire_corpus(){
-        let test_filename = "canonical_timestamp/pgmerkle.txt";
+        let test_filename = "generated_timestamp/merkle.txt";
         let merkle_tree = MerkleTree::new_from_fossilized_tree(test_filename);
         let settings = Config::builder()
                     .add_source(config::File::with_name("config"))

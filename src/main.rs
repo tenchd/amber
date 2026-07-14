@@ -7,47 +7,42 @@ use std::fs::File;
 use std::io::{Write};
 use config::Config;
 use clap::Parser;
+use walkdir::WalkDir;
 use crate::merkle::MerkleTree;
 
 // command line parsing
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[command(version, about, long_about = Option::None)]
 struct Args {
     #[arg(short, long, default_value_t = false)]
     build_tree: bool,
 
-    #[arg(short, long, default_value_t = false)]
-    tag: bool,
+    // #[arg(short, long, default_value_t = false)]
+    // tag: bool,
 
-    #[arg(short, long, default_value_t = false)]
-    generate_timestamp: bool,
+    // #[arg(short, long, default_value_t = false)]
+    // generate_timestamp: bool,
 
-    #[arg(short, long, default_value_t = ("".to_string()))]
-    verify_file: String,
+    // #[arg(short, long, default_value_t = ("".to_string()))]
+    // verify_file: String,
 }
 
 
-// Scan current directory for files of the form "pg<number>", add them to a vector. All other files are ignored. This vector of file paths is used to build the merkle tree leaves.
-// As per the specification for building the merkle tree from the PG text files, this list of file paths MUST be sorted in increasing order of PG index, because that is the order the leaves of the merkle tree should have.
-// If you use a different order, the root hash of the merkle tree will be wrong.
+// Scans corpus top-level directory recursively to gather the files that will be put in the merkle tree.
 fn get_filenames_from_directory(path: &str) -> Vec<String> {
-    let mut filepaths: Vec<String> = std::fs::read_dir(path)
-        .expect("Failed to read directory")
+    let filepaths: Vec<String> = WalkDir::new(path)
+        .into_iter()
+        //.expect("Failed to read directory")
         .filter_map(|entry| {
             let entry = entry.expect("Failed to read directory entry");
-            let filename = entry.file_name().into_string().expect("Failed to convert OsString to String");
-            if filename.starts_with("pg") && filename.ends_with(".txt") {
+            if !entry.file_type().is_dir() {
                 Some(entry.path().to_str().unwrap().to_string())
-            } else {
-                None 
+            }
+            else {
+                Option::None
             }
         })
         .collect();
-    filepaths.sort_by(|a, b| {
-        let a_num: usize = a.split("pg").nth(1).unwrap().split(".txt").nth(0).unwrap().parse().unwrap();
-        let b_num: usize = b.split("pg").nth(1).unwrap().split(".txt").nth(0).unwrap().parse().unwrap();
-        a_num.cmp(&b_num)
-    });
     println!("Building a Merkle tree from {} files. This may take a couple of minutes.", filepaths.len());
     filepaths
 }
@@ -119,8 +114,7 @@ fn main() {
                     .build()
                     .unwrap();
     let corpus_path = settings.get_string("corpus_path").unwrap();
-    let canonical_tree_filename = "canonical_timestamp/pgmerkle.txt";
-    let generated_tree_filename = "generated_timestamp/pgmerkle.txt";
+    let generated_tree_filename = "generated_timestamp/merkle.txt";
     let date = settings.get_string("date").unwrap();
     let time = settings.get_string("time").unwrap();
     let locktime: usize = settings.get_string("locktime").unwrap().parse().expect("couldn't parse block lockout");
@@ -128,18 +122,18 @@ fn main() {
 
     let args = Args::parse();
 
-    if args.verify_file != "".to_string(){
-        let filepath = args.verify_file;
-        verify_file(&canonical_tree_filename, &filepath);
-    }
-    else if args.tag {
-        let explain_filepath = "canonical_timestamp/canonical_explain.txt";
-        compute_tag(&identifier, &canonical_tree_filename, &explain_filepath);
-    }
-    else if args.generate_timestamp {
-        build_doc_and_tag_from_saved_tree(&canonical_tree_filename, &date, &time, locktime, &identifier);
-    }
-    else if args.build_tree {
+    // if args.verify_file != "".to_string(){
+    //     let filepath = args.verify_file;
+    //     verify_file(&canonical_tree_filename, &filepath);
+    // }
+    // else if args.tag {
+    //     let explain_filepath = "canonical_timestamp/canonical_explain.txt";
+    //     compute_tag(&identifier, &canonical_tree_filename, &explain_filepath);
+    // }
+    // else if args.generate_timestamp {
+    //     build_doc_and_tag_from_saved_tree(&canonical_tree_filename, &date, &time, locktime, &identifier);
+    // }
+    if args.build_tree {
         build_timestamp(&corpus_path, &generated_tree_filename, &date, &time, locktime, &identifier);
     }
     else {
