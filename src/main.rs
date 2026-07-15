@@ -23,8 +23,8 @@ struct Args {
     // #[arg(short, long, default_value_t = false)]
     // generate_timestamp: bool,
 
-    // #[arg(short, long, default_value_t = ("".to_string()))]
-    // verify_file: String,
+    #[arg(short, long, default_value_t = ("".to_string()))]
+    verify_file: String,
 }
 
 
@@ -49,6 +49,7 @@ fn get_filenames_from_directory(path: &str) -> Vec<String> {
 
 fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
     let filepaths = get_filenames_from_directory(path);
+    println!("{}", filepaths.first().unwrap());
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
 }
 fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str, time: &str, locktime: usize, identifier: &str){
@@ -122,10 +123,11 @@ fn main() {
 
     let args = Args::parse();
 
-    // if args.verify_file != "".to_string(){
-    //     let filepath = args.verify_file;
-    //     verify_file(&canonical_tree_filename, &filepath);
-    // }
+    if args.verify_file != "".to_string(){
+        let filepath = args.verify_file;
+        let provided_tree_filename = settings.get_string("provided_tree_path").unwrap();
+        verify_file(&provided_tree_filename, &filepath);
+    }
     // else if args.tag {
     //     let explain_filepath = "canonical_timestamp/canonical_explain.txt";
     //     compute_tag(&identifier, &canonical_tree_filename, &explain_filepath);
@@ -133,7 +135,7 @@ fn main() {
     // else if args.generate_timestamp {
     //     build_doc_and_tag_from_saved_tree(&canonical_tree_filename, &date, &time, locktime, &identifier);
     // }
-    if args.build_tree {
+    else if args.build_tree {
         build_timestamp(&corpus_path, &generated_tree_filename, &date, &time, locktime, &identifier);
     }
     else {

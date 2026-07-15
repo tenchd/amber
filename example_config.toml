@@ -1,6 +1,7 @@
 corpus_path="/path/to/corpus"
 private_key_path = "path/to/private/key"
 public_key_path = "path/to/public/key"
+provided_tree_path = "path/to/provided/tree"
 date ="fill_in_date"
 time="fill_in_time"
 locktime=0

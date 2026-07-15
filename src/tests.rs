@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::double_hash_from_file};
+    use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::MerkleProof};
     use hex_literal::hex;
     use hex_fmt::HexFmt;
     use config::Config;
@@ -60,7 +60,7 @@ mod tests {
         for (i, d) in data.iter().enumerate() {
             println!("testing proof for leaf index {} (data: {:?})", i + 1, String::from_utf8_lossy(d));
             let proof = merkle_tree.produce_proof(i + 1);
-            assert!(proof.verify_proof_for_data(d, merkle_tree.get_root_hash()), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
+            assert!(proof.verify_proof_for_data(d), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
         }
     }
 
@@ -90,7 +90,7 @@ mod tests {
             for (i, d) in data_refs.iter().enumerate() {
                 //println!("testing proof for leaf index {} (data: {:?})", i + 1, String::from_utf8_lossy(d));
                 let proof = merkle_tree.produce_proof(i + 1);
-                assert!(proof.verify_proof_for_data(d, merkle_tree.get_root_hash()), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
+                assert!(proof.verify_proof_for_data(d), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
             }
         }
     }
@@ -109,8 +109,9 @@ mod tests {
         assert!(merkle_tree.verify_without_index_from_file("testing/small_corpus/amber.jpg"), "tree should say yes to amber.jpg");
         assert!(merkle_tree.verify_without_index_from_file("testing/small_corpus/another_subdirectory/example_doc.docx"), "tree should say yes to amber.jpg");
         let proof = merkle_tree.produce_proof(1);
-        assert!(proof.verify_proof_for_file("testing/small_corpus/pg1.txt", merkle_tree.get_root_hash()), "proof should be valid for pg1.txt.txt");
-        println!("Proof for pg1.txt: {}", proof);
+        //below is brittle; relies on a specific ordering of the files in the merkle tree which my code doesn't explicitly enforce. fix this later when i rethink indices
+        assert!(proof.verify_proof_for_file("testing/small_corpus/pg6.txt"), "proof should be valid for pg6.txt");
+        println!("Proof for pg6.txt: {}", proof);
     }
 
     #[test]
@@ -131,7 +132,7 @@ mod tests {
     }
 
     #[test]
-    fn fossilization_stability() {
+    fn tree_fossilization_stability() {
         let path = "testing/small_corpus";
         let merkle_tree = build_merkle_tree_from_directory(path);
         let test_filename = "testing/custom_pg_test.txt";
@@ -140,6 +141,26 @@ mod tests {
         let unfossilized_tree = MerkleTree::new_from_fossilized_tree(test_filename);
         assert!(merkle_tree.get_root_hash() == unfossilized_tree.get_root_hash());
         fs::remove_file(test_filename).unwrap();
+    }
+
+    #[test]
+    fn proof_fossilization_stability() {
+        let path = "testing/small_corpus";
+        let merkle_tree = build_merkle_tree_from_directory(path);
+        let temp_proof_filename = "testing/temp_proof.txt";
+        for i in 0..merkle_tree.num_leaves {
+            let proof = merkle_tree.produce_proof(i+1);
+            proof.fossilize_proof(temp_proof_filename);
+            let unfossilized = MerkleProof::new_from_file(temp_proof_filename);
+            assert_eq!(proof.root_hash, unfossilized.root_hash);
+            let proof_length = proof.proof_hashes.len();
+            assert_eq!(proof_length, unfossilized.proof_hashes.len());
+            for i in 0..proof_length {
+                assert_eq!(proof.proof_hashes[i], unfossilized.proof_hashes[i]);
+                assert_eq!(proof.proof_directions[i], unfossilized.proof_directions[i]);
+            }
+        }
+        fs::remove_file(temp_proof_filename).unwrap();
     }
 
     #[test]

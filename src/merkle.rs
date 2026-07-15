@@ -95,15 +95,69 @@ impl fmt::Display for MerkleNode {
 // A Merkle proof for a file is the set of hashes you need to apply to the file to reach the root. Constructed only from a MerkleTree object, so has no constructor of its own.
 #[derive(Debug)]
 pub struct MerkleProof {
-    leaf_index: NodeHandle,
-    proof_hashes: Vec<[u8; 32]>,
-    proof_directions: Vec<bool>, // true for left, false for right
+    pub root_hash: [u8; 32],
+    pub proof_hashes: Vec<[u8; 32]>,
+    pub proof_directions: Vec<bool>, // true for left, false for right
 }
 
 #[allow(dead_code)]
 impl MerkleProof {
+    pub fn new_from_file(proof_filepath: &str) -> MerkleProof {
+        let mut proof_hashes: Vec<[u8; 32]> = vec![];
+        let mut proof_directions: Vec<bool> = vec![];
+
+        let file = File::open(proof_filepath).expect("couldn't open proof file");
+        let mut reader = BufReader::new(file);
+
+        let mut header_lines: Vec<String> = vec!["".to_string(); 4];
+        for i in 0..4 {
+            reader.read_line(&mut header_lines[i]).expect("Failed to read line");
+        }
+
+        let mut root_hash_line: String = "".to_string();
+        reader.read_line(&mut root_hash_line).expect("could not read root hash line");
+        root_hash_line = root_hash_line.trim_end().to_string();
+        let root_hash = BASE64_STANDARD.decode(root_hash_line).expect("Could not decode line");
+        let root_hash_bytes: [u8; 32] = root_hash.try_into().unwrap();
+
+        for line in reader.lines() {
+            let clean_line = line.expect("could not read line");
+            let parts: Vec<&str> = clean_line.split(',').collect();
+            assert!(parts.len() == 2, "proof line does not have two parts separated by comma");
+            let fossil_hash = BASE64_STANDARD.decode(parts[0]).expect("Could not decode line");
+            assert!(fossil_hash.len() == 32, "fossil hash is incorrect length");
+            proof_hashes.push(fossil_hash.try_into().expect("Could not convert to bytes"));
+            let direction = parts[1].trim().parse::<bool>().expect("Could not parse direction as boolean");
+            proof_directions.push(direction);
+        }
+
+        MerkleProof { root_hash: root_hash_bytes, proof_hashes, proof_directions }
+    }
+
+    // 
+    pub fn fossilize_proof(&self, filename: &str) {
+        let mut file = File::create(filename).expect("failed to create file");
+        let header_line = format!("# Merkle proof. The first uncommented line is the root hash. Each subsequent line is a hash in base64 followed by a boolean (separated by a comma).\n");
+        let header_line2 = format!("# Each non-root line represents a step in the leaf-to-root Merkle proof path: the hash of the sibling node and the boolean indicates whether the sibling is the left (true) or right (false) sibling.\n");
+        let header_line3 = format!("# To verify the proof, double SHA256 hash the file. Then for each line in the proof, concatenate the current hash with the sibling hash on the left (if true) or on the right (if false) and double SHA256 hash the concatenation. The end result should match the root hash.\n");
+        let header_line4 = format!("# Locate the root hash on the blockchain to prove that the file existed at the time of the blockchain transaction that contains it.\n");
+
+        file.write_all(header_line.as_bytes()).unwrap();
+        file.write_all(header_line2.as_bytes()).unwrap();
+        file.write_all(header_line3.as_bytes()).unwrap();
+        file.write_all(header_line4.as_bytes()).unwrap();
+
+        let root_hash_line = format!("{}\n", BASE64_STANDARD.encode(self.root_hash));
+        file.write_all(root_hash_line.as_bytes()).unwrap();
+
+        for i in 0..self.proof_hashes.len() {
+            let line = format!("{},{}\n", BASE64_STANDARD.encode(self.proof_hashes[i]), self.proof_directions[i]);
+            file.write_all(line.as_bytes()).unwrap();
+        }
+    }
+
     // verifies a proof starting from the leaf hash, proceeding along the leaf-to-root path encoded by the proof until the root hash is reached. If the proof is valid, this computed root hash will match the Merkle tree root hash.
-    pub fn verify_proof(&self, starting_hash: [u8; 32], target_root_hash: [u8; 32]) -> bool {
+    pub fn verify_proof(&self, starting_hash: [u8; 32]) -> bool {
         let mut computed_hash = starting_hash;
         for (i, sibling_hash) in self.proof_hashes.iter().enumerate() {
             if self.proof_directions[i] {
@@ -112,25 +166,27 @@ impl MerkleProof {
                 computed_hash = double_hash(&[*sibling_hash, computed_hash].concat());
             }
         }
-        computed_hash == target_root_hash
+        computed_hash == self.root_hash
     }
 
     // verifies that some data is part of a merkle tree (represented by its root hash).
-    pub fn verify_proof_for_data(&self, data: &[u8], target_root_hash: [u8; 32]) -> bool {
+    pub fn verify_proof_for_data(&self, data: &[u8]) -> bool {
         let starting_hash = double_hash(data);
-        self.verify_proof(starting_hash, target_root_hash)
+        self.verify_proof(starting_hash)
     }
 
     // verifies that some file is part of a merkle tree (represented by its root hash).
-    pub fn verify_proof_for_file(&self, filepath: &str, target_root_hash: [u8; 32]) -> bool {
+    pub fn verify_proof_for_file(&self, filepath: &str) -> bool {
         let starting_hash = double_hash_from_file(filepath);
-        self.verify_proof(starting_hash, target_root_hash)
+        self.verify_proof(starting_hash)
     }
 }
 
 impl fmt::Display for MerkleProof {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "MerkleProof for leaf_index {}:", self.leaf_index)?;
+        write!(f, "MerkleProof:\n")?;
+        write!(f, "root hash: {}\n", HexFmt(self.root_hash)).unwrap();
+        write!(f, "Proof steps:").unwrap();
         for (i, hash) in self.proof_hashes.iter().enumerate() {
             let direction = if self.proof_directions[i] { "left" } else { "right" };
             write!(f, "\n  {} sibling hash: {}", direction, HexFmt(&hash[..4]))?;
@@ -346,6 +402,7 @@ impl MerkleTree {
 
     // builds a Merkle inclusion proof for some leaf of the tree.
     pub fn produce_proof(&self, index: usize) -> MerkleProof {
+        assert!(index != 0);
         let mut proof_hashes = Vec::new();
         let mut proof_directions = Vec::new();
         let mut current_index = index;
@@ -365,7 +422,9 @@ impl MerkleTree {
             proof_directions.push(self.nodes[parent_index].left == current_index);
             current_index = parent_index;
         }
-        MerkleProof { leaf_index: index, proof_hashes, proof_directions }
+
+        let root_hash = self.get_root_hash();
+        MerkleProof { root_hash, proof_hashes, proof_directions }
     }
 
     // checks that each parent hash follows from its child hashes; i.e., the tree is a valid Merkle tree.
