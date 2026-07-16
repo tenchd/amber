@@ -6,6 +6,7 @@ mod tests {
     use hex_fmt::HexFmt;
     use config::Config;
 
+
     #[test]
     fn basic_test() {
         let data: Vec<&[u8]> = vec![
@@ -28,7 +29,7 @@ mod tests {
 
         for (i, d) in data.iter().enumerate() {
             let actual_index = i + 1;
-            let is_valid = merkle_tree.verify_without_index(d);
+            let is_valid = merkle_tree.verify(d);
             assert!(is_valid, "Data: {:?} at index {} should be valid", String::from_utf8_lossy(d), actual_index);
         }
 
@@ -39,7 +40,7 @@ mod tests {
             b"Data 5.",
         ];
         for (_, d) in invalid_data.iter().enumerate() {
-            assert!(!merkle_tree.verify_without_index(d), "Data: {:?} should be invalid", String::from_utf8_lossy(d));
+            assert!(!merkle_tree.verify(d), "Data: {:?} should be invalid", String::from_utf8_lossy(d));
         }
     }
 
@@ -76,15 +77,15 @@ mod tests {
             println!("Merkle tree has root hash: {:x?}... and contains {} leaves", HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
             merkle_tree.verify_tree();
 
-            assert!(merkle_tree.verify_with_index(b"Data 50", 51), "Data 50 should be valid");
-            assert!(!merkle_tree.verify_with_index(b"Data 50", 52), "Data 50 should not be valid at index 52");
-            assert!(!merkle_tree.verify_with_index(b"Invalid data", 51), "Invalid data should not be valid at index 51");
-            assert!(merkle_tree.verify_without_index(b"Data 500"), "Data 500 should be valid without index");
-            assert!(!merkle_tree.verify_without_index(b"Invalid data"), "Invalid data should not be valid without index");
+            // assert!(merkle_tree.verify_with_index(b"Data 50", 51), "Data 50 should be valid");
+            // assert!(!merkle_tree.verify_with_index(b"Data 50", 52), "Data 50 should not be valid at index 52");
+            // assert!(!merkle_tree.verify_with_index(b"Invalid data", 51), "Invalid data should not be valid at index 51");
+            assert!(merkle_tree.verify(b"Data 500"), "Data 500 should be valid without index");
+            assert!(!merkle_tree.verify(b"Invalid data"), "Invalid data should not be valid without index");
 
             for i in 0..num_leaves {
                 let data_str = format!("Data {}", i);
-                assert!(merkle_tree.verify_without_index(data_str.as_bytes()), "Data {} should be valid", i);
+                assert!(merkle_tree.verify(data_str.as_bytes()), "Data {} should be valid", i);
             }
 
             for (i, d) in data_refs.iter().enumerate() {
@@ -105,9 +106,9 @@ mod tests {
         // assert!(merkle_tree.verify_with_index_from_file("testing/small_corpus/pg1.txt", 1), "tree should say yes to pg1.txt at index 1");
         // assert!(!merkle_tree.verify_with_index_from_file("testing/small_corpus/pg1.txt", 2), "tree should say no to pg1.txt at index 2");
         // assert!(!merkle_tree.verify_with_index_from_file("testing/small_corpus/pg2.txt", 1), "tree should say no to pg2.txt at index 1");
-        assert!(merkle_tree.verify_without_index_from_file("testing/small_corpus/pg1.txt"), "tree should say yes to pg1.txt");
-        assert!(merkle_tree.verify_without_index_from_file("testing/small_corpus/amber.jpg"), "tree should say yes to amber.jpg");
-        assert!(merkle_tree.verify_without_index_from_file("testing/small_corpus/another_subdirectory/example_doc.docx"), "tree should say yes to amber.jpg");
+        assert!(merkle_tree.verify_from_file("testing/small_corpus/pg1.txt"), "tree should say yes to pg1.txt");
+        assert!(merkle_tree.verify_from_file("testing/small_corpus/amber.jpg"), "tree should say yes to amber.jpg");
+        assert!(merkle_tree.verify_from_file("testing/small_corpus/another_subdirectory/example_doc.docx"), "tree should say yes to amber.jpg");
         let proof = merkle_tree.produce_proof(1);
         //below is brittle; relies on a specific ordering of the files in the merkle tree which my code doesn't explicitly enforce. fix this later when i rethink indices
         assert!(proof.verify_proof_for_file("testing/small_corpus/pg6.txt"), "proof should be valid for pg6.txt");
@@ -179,15 +180,14 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn verify_altered_file(){
         let path = "testing/small_corpus";
         let merkle_tree = build_merkle_tree_from_directory(path);
         let genuine_text = "testing/small_corpus/textfile.txt";
-        assert!(merkle_tree.verify_without_index_from_file(genuine_text));
+        assert!(merkle_tree.verify_from_file(genuine_text));
         // now try with an altered version I made.
         let altered_text = "testing/altered_textfile.txt";
-        assert!(!merkle_tree.verify_without_index_from_file(altered_text));
+        assert!(!merkle_tree.verify_from_file(altered_text));
     }
 
     #[test]
@@ -202,7 +202,7 @@ mod tests {
         let path = settings.get_string("corpus_path").unwrap();
         let filepaths = crate::get_filenames_from_directory(&path);
         for filepath in filepaths{
-            assert!(merkle_tree.verify_without_index_from_file(&filepath), "file at path {} did not authenticate", filepath);
+            assert!(merkle_tree.verify_from_file(&filepath), "file at path {} did not authenticate", filepath);
         }
     }
 }

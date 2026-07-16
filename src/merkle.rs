@@ -1,3 +1,4 @@
+use clap::builder::NonEmptyStringValueParser;
 use hex_fmt::HexFmt;
 use sha2::{Sha256, Digest};
 use std::{fmt};
@@ -42,7 +43,7 @@ pub fn double_hash_from_file(filepath: &str) -> [u8; 32] {
     hash_bytes_length
 }
 
-// nodes are owned by the 'nodes' vector in the MerkleTree struct. a NodeHandle is a indentifier/index for a merkle node in the vector. 1-indexed; 0 means none.
+// nodes are owned by the 'nodes' vector in the MerkleTree struct. a NodeHandle is a identifier/index for a merkle node in the vector. 1-indexed; 0 means none.
 type NodeHandle = usize;
 
 // represents a single node in the merkle tree. Contains a hash, an index, and pointers to parent and children.
@@ -377,31 +378,32 @@ impl MerkleTree {
     }
 
     // Returns whether some data was used to build a specific leaf of the merkle tree.
-    pub fn verify_with_index(&self, data: &[u8], index: usize) -> bool {
-        self.is_a_leaf(&self.nodes[index]) && self.matches_hash(&self.nodes[index], data)
-    }
+    // pub fn verify_with_index(&self, data: &[u8], index: usize) -> bool {
+    //     self.is_a_leaf(&self.nodes[index]) && self.matches_hash(&self.nodes[index], data)
+    // }
 
     // returns whether a file was used to build a specific leaf of the merkle tree.
-    pub fn verify_with_index_from_file(&self, filepath: &str, index: usize) -> bool {
-        self.is_a_leaf(&self.nodes[index]) && self.matches_hash_from_file(&self.nodes[index], filepath)
-    }
+    // pub fn verify_with_index_from_file(&self, filepath: &str, index: usize) -> bool {
+    //     self.is_a_leaf(&self.nodes[index]) && self.matches_hash_from_file(&self.nodes[index], filepath)
+    // }
 
     // returns whether some data was included in the merkle tree.
-    pub fn verify_without_index(&self, data: &[u8]) -> bool {
+    pub fn verify(&self, data: &[u8]) -> bool {
         let hash = double_hash(data);
         let present = self.hash_lookup.contains_key(&hash);
         present
     }
 
     // returns whether some file was included in the merkle tree.
-    pub fn verify_without_index_from_file(&self, filepath: &str) -> bool {
+    pub fn verify_from_file(&self, filepath: &str) -> bool {
         let hash = double_hash_from_file(filepath);
         let present = self.hash_lookup.contains_key(&hash);
         present
     }
 
     // builds a Merkle inclusion proof for some leaf of the tree.
-    pub fn produce_proof(&self, index: usize) -> MerkleProof {
+    pub fn produce_proof(&self, index: NodeHandle) -> MerkleProof {
+
         assert!(index != 0);
         let mut proof_hashes = Vec::new();
         let mut proof_directions = Vec::new();
@@ -425,6 +427,18 @@ impl MerkleTree {
 
         let root_hash = self.get_root_hash();
         MerkleProof { root_hash, proof_hashes, proof_directions }
+    }
+
+    pub fn produce_proof_from_file(&self, filepath: &str) -> MerkleProof {
+        let starting_hash = double_hash_from_file(filepath);
+        let index: NodeHandle = *self.hash_lookup.get(&starting_hash).expect("File hash not found in Merkle tree.");
+        self.produce_proof(index)
+    }
+
+    pub fn produce_proof_from_data(&self, data: &[u8]) -> MerkleProof {
+        let starting_hash = double_hash(data);
+        let index: NodeHandle = *self.hash_lookup.get(&starting_hash).expect("File hash not found in Merkle tree.");
+        self.produce_proof(index)
     }
 
     // checks that each parent hash follows from its child hashes; i.e., the tree is a valid Merkle tree.

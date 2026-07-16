@@ -1,6 +1,7 @@
 mod merkle;
 mod tag;
 mod tests;
+mod verify;
 
 use hex_fmt::HexFmt;
 use std::fs::File;
@@ -8,7 +9,10 @@ use std::io::{Write};
 use config::Config;
 use clap::Parser;
 use walkdir::WalkDir;
-use crate::merkle::MerkleTree;
+use crate::{
+    merkle::{MerkleProof, MerkleTree},
+    verify::verify_timestamp,
+};
 
 // command line parsing
 #[derive(Parser, Debug)]
@@ -17,16 +21,18 @@ struct Args {
     #[arg(short, long, default_value_t = false)]
     build_tree: bool,
 
-    // #[arg(short, long, default_value_t = false)]
-    // tag: bool,
+    #[arg(short, long, default_value_t = false)]
+    generate_timestamp: bool,
 
-    // #[arg(short, long, default_value_t = false)]
-    // generate_timestamp: bool,
+    #[arg(short, long, default_value_t = false)]
+    verify_timestamp: bool,
 
     #[arg(short, long, default_value_t = ("".to_string()))]
-    verify_file: String,
-}
+    file_to_verify: String,
 
+    #[arg(short, long, default_value_t = ("".to_string()))]
+    proof_verify: String,
+}
 
 // Scans corpus top-level directory recursively to gather the files that will be put in the merkle tree.
 fn get_filenames_from_directory(path: &str) -> Vec<String> {
@@ -86,7 +92,7 @@ fn verify_file(tree_filename: &str, filepath: &str){
     unfossilized.verify_tree();
     println!("Merkle tree is valid.");
 
-    let contains = unfossilized.verify_without_index_from_file(filepath);
+    let contains = unfossilized.verify_from_file(filepath);
     if contains {
         println!("{} is in the Merkle tree.", filepath);
     }
@@ -95,18 +101,15 @@ fn verify_file(tree_filename: &str, filepath: &str){
     }
 }
 
-fn compute_tag(identifier: &str, tree_filename: &str, explain_filepath: &str) {
-    println!("reading merkle tree from file.");
-    let unfossilized: MerkleTree = MerkleTree::new_from_fossilized_tree(tree_filename);
-    println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
-    unfossilized.verify_tree();
-    println!("Merkle tree is valid.");
-
-    let num_leaves = unfossilized.num_leaves.try_into().unwrap();
-    let root_hash = unfossilized.get_root_hash();
-    let tag = tag::create_chain_tag(identifier, num_leaves, root_hash, explain_filepath);
-    let opcodes = "6a4c4c"; //hex of opcodes used to write to bitcoin blockchain via OP_RETURN
-    println!("Blockchain message should be\n{}{}", opcodes, HexFmt(tag));
+fn verify_proof(filepath: &str, proof_file: &str) {
+    let proof = MerkleProof::new_from_file(proof_file);
+    let result = proof.verify_proof_for_file(filepath);
+    if result {
+        println!("File {} was verified by proof file {} for root hash {}. If you locate this root hash on the blockchain, you have proven that the file existed at the time of the blockchain transaction that contains it.", filepath, proof_file, HexFmt(proof.root_hash));
+    }
+    else {
+        println!("File {} failed to verify for proof file {}. It does NOT certify any timestamp for the file.", filepath, proof_file);
+    }
 }
 
 fn main() {
@@ -116,6 +119,8 @@ fn main() {
                     .unwrap();
     let corpus_path = settings.get_string("corpus_path").unwrap();
     let generated_tree_filename = "generated_timestamp/merkle.txt";
+    let provided_tree_filename = settings.get_string("provided_tree_path").unwrap();
+    let provided_explain_filename = settings.get_string("provided_explain_path").unwrap();
     let date = settings.get_string("date").unwrap();
     let time = settings.get_string("time").unwrap();
     let locktime: usize = settings.get_string("locktime").unwrap().parse().expect("couldn't parse block lockout");
@@ -123,21 +128,38 @@ fn main() {
 
     let args = Args::parse();
 
-    if args.verify_file != "".to_string(){
-        let filepath = args.verify_file;
-        let provided_tree_filename = settings.get_string("provided_tree_path").unwrap();
-        verify_file(&provided_tree_filename, &filepath);
+    if args.build_tree {
+        build_timestamp(&corpus_path, &generated_tree_filename, &date, &time, locktime, &identifier);
+        if args.file_to_verify != "".to_string() {
+            println!("Ignoring verification request. Building tree+timestamp.")
+        }
+    }
+    else if args.generate_timestamp {
+        build_doc_and_tag_from_saved_tree(&provided_tree_filename, &date, &time, locktime, &identifier);
+        if args.file_to_verify != "".to_string() {
+            println!("Ignoring verification request. Building timestamp.");
+        }
+    }
+    else if args.verify_timestamp {
+        let result = verify_timestamp(&identifier, &provided_tree_filename, &provided_explain_filename);
+        if !result {
+            println!("failed to verify");
+        }
+    }
+    else if args.file_to_verify != "".to_string() {
+        let filepath = args.file_to_verify;
+        if args.proof_verify != "".to_string() {
+            let proof_file = args.proof_verify;
+            verify_proof(&filepath, &proof_file);
+        }
+        else {
+            verify_file(&provided_tree_filename, &filepath);
+        }
     }
     // else if args.tag {
     //     let explain_filepath = "canonical_timestamp/canonical_explain.txt";
     //     compute_tag(&identifier, &canonical_tree_filename, &explain_filepath);
     // }
-    // else if args.generate_timestamp {
-    //     build_doc_and_tag_from_saved_tree(&canonical_tree_filename, &date, &time, locktime, &identifier);
-    // }
-    else if args.build_tree {
-        build_timestamp(&corpus_path, &generated_tree_filename, &date, &time, locktime, &identifier);
-    }
     else {
         panic!("Need to provide a command line argument");
     }
