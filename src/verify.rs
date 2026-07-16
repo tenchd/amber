@@ -1,8 +1,6 @@
 use crate::{merkle::MerkleTree, tag};
-use bitcoin::block;
 use hex_fmt::HexFmt;
-use std::{fs::File, str::from_utf8};
-use std::io::Write;
+use std::str::from_utf8;
 use reqwest::blocking::get;
 use bitcoin::{
     Transaction,
@@ -12,7 +10,7 @@ use bitcoin::{
     }, 
     consensus::encode::deserialize
 };
-use serde_json::{Value, Number};
+use serde_json::Value;
 use chrono::{DateTime, NaiveDateTime, Utc};
 
 fn compute_tag(identifier: &str, tree_filename: &str, explain_filepath: &str) -> Vec<u8> {
@@ -28,41 +26,6 @@ fn compute_tag(identifier: &str, tree_filename: &str, explain_filepath: &str) ->
     //let opcodes = "6a4c4c"; //hex of opcodes used to write to bitcoin blockchain via OP_RETURN
     //println!("Blockchain message should be\n{}", HexFmt(&tag));
     tag
-}
-
-fn lookup_chain() {
-    let url = "https://blockchain.info/rawtx/b82b914e29fb08e65e49156231b68c38c3bcb246f6a7d8ec22477478a9f1b832?format=hex";
-    let filepath = "testing/tx.txt";
-    let response = get(url).unwrap();
-    let content = response.bytes().unwrap();
-
-    let mut downloaded_file = File::create(filepath).unwrap();
-    downloaded_file.write_all(&content).unwrap();
-}
-
-fn parse_tx_dump() {
-    let tx_hex = "02000000000101af4c4c2b0c12159abb3fa3b9f8ac12992f8ac4ccd55805f4b195e903c46d64a40100000000fdffffff0200000000000000004f6a4c4c50474d45524b4c4500012d39e56bf7ee52b351da728a072dd6146450616de1e310d9243cf8428d777081dde1deb4859fb5f483d0251cbe9ebe9908e0591a53511311ee07b134354eac324e22e67f0000000000001600144915dd96aaa0b81fd15d52650bab120bcbd1c51102473044022016097070064785b67fed69af0a198131e14a69c72ccf9e7dd21f034e7732d22602201cf4e403a5783ca9302228cec23b251845c0953bca5be7dfa8046e23cd3a15e6012102047ced3d35c63f8a7c436ae48350711787628eb463bf80492d31888e2fcadb7981940e00";
-
-    let bytes = hex::decode(tx_hex).unwrap();
-    let tx: Transaction = deserialize(&bytes).unwrap();
-
-    for (_vout, output) in tx.output.iter().enumerate() {
-        let mut instructions = output.script_pubkey.instructions();
-        match instructions.next() {
-            Some(Ok(Instruction::Op(op))) if op == OP_RETURN => {
-                for instruction in instructions {
-                    match instruction {
-                        Ok(Instruction::PushBytes(data)) => {
-                            println!("Payload: {}", HexFmt(data.as_bytes()));
-                        }
-                        Ok(Instruction::Op(_op)) => {}
-                        Err(_) => unimplemented!()
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
 }
 
 // need to get later: tx hash. right now i'm cheating and hard coding it.
@@ -108,6 +71,7 @@ pub fn verify_timestamp(identifier: &str, tree_filename: &str, explain_filepath:
                             if data.as_bytes() == expected_tag {
                                 println!("Success! The transaction was found in block {} and contains the tag in its OP_RETURN data payload.", block_height);
                                 println!("You have verified that the provided timestamp was written to the Bitcoin blockchain at date/time {}", datetime);
+                                println!("This block height and date/time should roughly match those in explain.txt.");
                                 return true;
                             }
                         }
