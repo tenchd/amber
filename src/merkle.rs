@@ -475,18 +475,47 @@ impl MerkleTree {
     }
 
     // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
-    pub fn fossilize_tree(&self, tree_filename: &str, date: &str) {
+    pub fn fossilize_tree(&self, tree_filename: &str, date: &str, identifier: &str) {
         let mut file = File::create(tree_filename).expect("failed to create file");
         let header_line = format!("# Merkle tree. Created on {} from Project Gutenberg corpus of plain text files.\n", date);
         let num_leaves_line = format!("# Number of leaves: {}\n", self.num_leaves);
+        let chain_line = format!("# Root hash written to Bitcoin blockchain along with identifier {}\n", identifier);
+        let block_height_line = "# Block height: <>\n";
+        let tx_hash_line = "# Tx hash: <>\n";
         let explain_line = "# Each line below is the hash (in base64) of a merkle node. Tree is binary. Each parent hash is the double SHA256 hash of the concatenation of its two child hashes. If the parent has only one child, its hash is the double SHA256 hash of the child hash concatenated with itself. Final line of file is root hash.\n";
         file.write_all(header_line.as_bytes()).unwrap();
         file.write_all(num_leaves_line.as_bytes()).unwrap();
+        file.write_all(chain_line.as_bytes()).unwrap();
+        file.write_all(block_height_line.as_bytes()).unwrap();
+        file.write_all(tx_hash_line.as_bytes()).unwrap();
         file.write_all(explain_line.as_bytes()).unwrap();
 
         for i in 1..self.nodes.len() {
             let line = format!("{}\n", BASE64_STANDARD.encode(self.nodes[i].hash));
             file.write_all(line.as_bytes()).unwrap();
         }
+    }
+}
+
+pub struct TimestampedMerkleTree {
+    pub tree: MerkleTree,
+    pub identifier: String,
+    pub block_height: usize,
+    pub tx_hash: [u8; 32],
+    verified_timestamp: bool,
+}
+
+impl TimestampedMerkleTree {
+    // read a merkle tree from a file. 
+    pub fn new(tree: MerkleTree, identifier: &str, block_height: usize, tx_hash: [u8; 32]) -> TimestampedMerkleTree {
+        TimestampedMerkleTree { tree, identifier: identifier.to_string(), block_height, tx_hash, verified_timestamp: false }
+    }
+
+    pub fn is_verified(&self) {
+        self.verified_timestamp;
+    }
+
+    pub fn verify_timestamp(&self, explain_filepath: &str) {
+        todo!()
     }
 }

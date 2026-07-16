@@ -138,7 +138,8 @@ mod tests {
         let merkle_tree = build_merkle_tree_from_directory(path);
         let test_filename = "testing/custom_pg_test.txt";
         let date = "Christmas";
-        merkle_tree.fossilize_tree(test_filename, date);
+        let identifier = "HOHOHOHO";
+        merkle_tree.fossilize_tree(test_filename, date, identifier);
         let unfossilized_tree = MerkleTree::new_from_fossilized_tree(test_filename);
         assert!(merkle_tree.get_root_hash() == unfossilized_tree.get_root_hash());
         fs::remove_file(test_filename).unwrap();

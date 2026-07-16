@@ -6,6 +6,7 @@ mod verify;
 use hex_fmt::HexFmt;
 use std::fs::File;
 use std::io::{Write};
+use std::process::id;
 use config::Config;
 use clap::Parser;
 use walkdir::WalkDir;
@@ -55,7 +56,7 @@ fn get_filenames_from_directory(path: &str) -> Vec<String> {
 
 fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
     let filepaths = get_filenames_from_directory(path);
-    println!("{}", filepaths.first().unwrap());
+    //println!("{}", filepaths.first().unwrap());
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
 }
 fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str, time: &str, locktime: usize, identifier: &str){
@@ -79,7 +80,7 @@ fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str, time: &str
 fn build_timestamp(corpus_path: &str, tree_filename: &str, date: &str, time: &str, locktime: usize, identifier: &str) {
     let tree = build_merkle_tree_from_directory(corpus_path);
     println!("Merkle tree built. Root hash is {}", HexFmt(tree.get_root_hash()));
-    tree.fossilize_tree(tree_filename, date);
+    tree.fossilize_tree(tree_filename, date, identifier);
     println!("wrote tree to file {}", tree_filename);
 
     build_doc_and_tag_from_saved_tree(tree_filename, date, time, locktime, identifier);
