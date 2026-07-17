@@ -6,13 +6,12 @@ mod verify;
 use hex_fmt::HexFmt;
 use std::fs::File;
 use std::io::{Write};
-use std::process::id;
 use config::Config;
 use clap::Parser;
 use walkdir::WalkDir;
+use crate::merkle::double_hash_from_file;
 use crate::{
-    merkle::{MerkleProof, MerkleTree, TimestampedMerkleTree},
-    verify::verify_timestamp,
+    merkle::{MerkleProof, MerkleTree, TimestampedMerkleTree}
 };
 
 // command line parsing
@@ -68,7 +67,8 @@ fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str, time: &str
 
     let document_filename = "generated_timestamp/explain.txt";
     crate::tag::write_document(document_filename, date, time, locktime, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash());
-    let tag = crate::tag::create_chain_tag(identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), document_filename);
+    let document_hash = double_hash_from_file(document_filename);
+    let tag = crate::tag::create_chain_tag(identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), document_hash);
     println!("Wrote explainer document to file {}", document_filename);
     let tag_filename = "generated_timestamp/tag.txt";
     let tag_string = format!("{}", HexFmt(&tag));
@@ -81,7 +81,7 @@ fn build_timestamp(corpus_path: &str, tree_filename: &str, date: &str, time: &st
     let tree = build_merkle_tree_from_directory(corpus_path);
     let tree_filename_unfinished = format!("{}_unfinished.txt",tree_filename);
     println!("Merkle tree built. Root hash is {}", HexFmt(tree.get_root_hash()));
-    tree.write_unfinished_tree_to_file(&tree_filename_unfinished, date, identifier);
+    tree.write_unfinished_tree_to_file(&tree_filename_unfinished, date);
     println!("wrote tree to file {}", tree_filename_unfinished);
 
     build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, date, time, locktime, identifier);
@@ -92,10 +92,16 @@ fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename:
     let unfinished_tree = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_file);
     let mut timestamped_tree = TimestampedMerkleTree::new(unfinished_tree, &identifier, block_height, tx_hash);
     println!("verifying tree file at {}", unfinished_tree_file);
-    let autoaccept = false;
+    let autoaccept = true;
     let result = timestamped_tree.verify_timestamp(generated_explain_filename, autoaccept);
     if result {
         timestamped_tree.fossilize_tree(generated_tree_filename, &date);
+
+        println!("Timestamp verified! Wrote the updated merkle tree file at {}. Deleting temporary untimestamped merkle tree file at {}", generated_tree_filename, unfinished_tree_file);
+        std::fs::remove_file(unfinished_tree_file).unwrap();
+    }
+    if autoaccept{
+        println!("WARNING: you set the autoaccept flag to true so we did not actually verify w.r.t. the blockchain. This was for testing purposes only.");
     }
 }
 
@@ -117,9 +123,9 @@ fn verify_file(tree_filename: &str, filepath: &str){
 
 fn verify_proof(filepath: &str, proof_file: &str) {
     let proof = MerkleProof::new_from_file(proof_file);
-    let result = proof.verify_proof_for_file(filepath);
+    let result = proof.verify_proof_for_file(filepath, false);
     if result {
-        println!("File {} was verified by proof file {} for root hash {}. If you locate this root hash on the blockchain, you have proven that the file existed at the time of the blockchain transaction that contains it.", filepath, proof_file, HexFmt(proof.root_hash));
+        println!("File {} was verified by proof file {} for root hash {}.", filepath, proof_file, HexFmt(proof.root_hash));
     }
     else {
         println!("File {} failed to verify for proof file {}. It does NOT certify any timestamp for the file.", filepath, proof_file);
@@ -184,10 +190,6 @@ fn main() {
             verify_file(&provided_tree_filename, &filepath);
         }
     }
-    // else if args.tag {
-    //     let explain_filepath = "canonical_timestamp/canonical_explain.txt";
-    //     compute_tag(&identifier, &canonical_tree_filename, &explain_filepath);
-    // }
     else {
         panic!("Need to provide a command line argument");
     }

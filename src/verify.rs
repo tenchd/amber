@@ -1,4 +1,7 @@
-use crate::{merkle::MerkleTree, tag};
+use crate::{
+    merkle::{MerkleTree, MerkleProof},
+    tag
+};
 use hex_fmt::HexFmt;
 use std::str::from_utf8;
 use reqwest::blocking::get;
@@ -13,37 +16,14 @@ use bitcoin::{
 use serde_json::Value;
 use chrono::{DateTime, NaiveDateTime, Utc};
 
-// fn compute_tag(identifier: &str, tree_filename: &str, explain_filepath: &str) -> Vec<u8> {
-//     println!("reading merkle tree from file.");
-//     let unfossilized: MerkleTree = MerkleTree::new_from_unfinished_tree_file(tree_filename);
-//     println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
-//     unfossilized.verify_tree();
-//     println!("Merkle tree is valid.");
+fn compute_tag(identifier: &str, num_leaves: u32, root_hash: [u8; 32], explain_hash: [u8; 32]) -> Vec<u8> {
 
-//     let num_leaves = unfossilized.num_leaves.try_into().unwrap();
-//     let root_hash = unfossilized.get_root_hash();
-//     let tag = tag::create_chain_tag(identifier, num_leaves, root_hash, explain_filepath);
-//     //let opcodes = "6a4c4c"; //hex of opcodes used to write to bitcoin blockchain via OP_RETURN
-//     //println!("Blockchain message should be\n{}", HexFmt(&tag));
-//     tag
-// }
+    let tag = tag::create_chain_tag(identifier, num_leaves, root_hash, explain_hash);
 
-fn compute_tag(identifier: &str, tree: &MerkleTree, explain_filepath: &str) -> Vec<u8> {
-    let num_leaves = tree.num_leaves.try_into().unwrap();
-    let root_hash = tree.get_root_hash();
-    let tag = tag::create_chain_tag(identifier, num_leaves, root_hash, explain_filepath);
-    //let opcodes = "6a4c4c"; //hex of opcodes used to write to bitcoin blockchain via OP_RETURN
-    //println!("Blockchain message should be\n{}", HexFmt(&tag));
     tag
 }
 
-// need to get later: tx hash. right now i'm cheating and hard coding it.
-// also need to read off date and time and block height from tx.
-pub fn verify_timestamp(identifier: &str, tree: &MerkleTree, explain_filepath: &str, tx_hash: [u8; 32]) -> bool {
-    println!("Computing tag based on provided identifier, merkle tree, and explain file.");
-    let expected_tag = compute_tag(identifier, tree, explain_filepath);
-    println!("The tag should be {}", HexFmt(&expected_tag));
-    //let cheat_tx_hash = "b82b914e29fb08e65e49156231b68c38c3bcb246f6a7d8ec22477478a9f1b832";
+fn verify_tag(expected_tag: Vec<u8>, tx_hash: [u8; 32]) -> bool {
     let tx_hash_string = format!("{}", HexFmt(tx_hash));
 
     println!("Looking up transaction with hash {} on Bitcoin blockchain. It should have an OP_RETURN output with the tag in the data payload.", tx_hash_string);
@@ -95,4 +75,22 @@ pub fn verify_timestamp(identifier: &str, tree: &MerkleTree, explain_filepath: &
     }
 
     false
+} 
+
+pub fn verify_tree_timestamp(identifier: &str, tree: &MerkleTree, explain_hash: [u8; 32], tx_hash: [u8; 32]) -> bool {
+    println!("Computing tag based on provided identifier, merkle tree, and explain file.");
+    let num_leaves: u32 = tree.num_leaves.try_into().unwrap();
+    let root_hash = tree.get_root_hash();
+    let expected_tag = compute_tag(identifier, num_leaves, root_hash, explain_hash);
+    println!("The tag should be {}", HexFmt(&expected_tag));
+
+    verify_tag(expected_tag, tx_hash)
+}
+
+pub fn verify_proof_timestamp(proof: &MerkleProof) -> bool {
+    println!("Computing tag based on provided identifier, merkle tree, and explain file.");
+    let expected_tag = compute_tag(&proof.identifier, proof.num_leaves.try_into().unwrap(), proof.root_hash, proof.explain_hash);
+    println!("The tag should be {}", HexFmt(&expected_tag));
+
+    verify_tag(expected_tag, proof.tx_hash)
 }

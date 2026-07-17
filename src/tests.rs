@@ -1,11 +1,14 @@
 #[cfg(test)]
 mod tests {
-    use core::time;
-use std::fs;
-    use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, TimestampedMerkleTree}};
+    use std::fs;
+    use crate::{MerkleTree, build_merkle_tree_from_directory, 
+        merkle::{MerkleProof, TimestampedMerkleTree, double_hash_from_file}
+    };
     use hex_literal::hex;
     use hex_fmt::HexFmt;
     use config::Config;
+    extern crate rand;
+    use rand::Rng;
 
 
     #[test]
@@ -58,11 +61,21 @@ use std::fs;
         ];
         let merkle_tree = MerkleTree::new_from_data(data.clone());
         merkle_tree.verify_tree();
+        let dummy_identifier = "TESTMRKL";
+        let dummy_block_height = 10;
+        let dummy_tx_hash_string = "b82b914e29fb08e65e49156231b68c38c3bcb246f6a7d8ec22477478a9f1b832";
+        let tx_hash = hex::decode(dummy_tx_hash_string).unwrap();
+        let mut hash_bytes = vec![0u8; 32];
+        hash_bytes.copy_from_slice(&tx_hash);
+        let dummy_tx_hash: [u8; 32] = hash_bytes.try_into().expect("Hash length must be 32 bytes");
+        let dummy_explain_hash = [0_u8; 32];
+        let timestamped_tree = TimestampedMerkleTree::new(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash);
+        let autoaccept = true;
 
         for (i, d) in data.iter().enumerate() {
             println!("testing proof for leaf index {} (data: {:?})", i + 1, String::from_utf8_lossy(d));
-            let proof = merkle_tree.produce_proof(i + 1);
-            assert!(proof.verify_proof_for_data(d), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
+            let proof = timestamped_tree.produce_proof(i + 1, dummy_explain_hash);
+            assert!(proof.verify_proof_for_data(d, autoaccept), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
         }
     }
 
@@ -89,10 +102,17 @@ use std::fs;
                 assert!(merkle_tree.verify(data_str.as_bytes()), "Data {} should be valid", i);
             }
 
+            let dummy_identifier = "TESTMRKL";
+            let dummy_block_height = 10;
+            let dummy_tx_hash = [0_u8; 32];
+            let dummy_explain_hash = [0_u8; 32];
+            let timestamped_tree = TimestampedMerkleTree::new(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash);
+            let autoaccept = true;
+
             for (i, d) in data_refs.iter().enumerate() {
                 //println!("testing proof for leaf index {} (data: {:?})", i + 1, String::from_utf8_lossy(d));
-                let proof = merkle_tree.produce_proof(i + 1);
-                assert!(proof.verify_proof_for_data(d), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
+                let proof = timestamped_tree.produce_proof(i + 1, dummy_explain_hash);
+                assert!(proof.verify_proof_for_data(d, autoaccept), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
             }
         }
     }
@@ -110,9 +130,17 @@ use std::fs;
         assert!(merkle_tree.verify_from_file("testing/small_corpus/pg1.txt"), "tree should say yes to pg1.txt");
         assert!(merkle_tree.verify_from_file("testing/small_corpus/amber.jpg"), "tree should say yes to amber.jpg");
         assert!(merkle_tree.verify_from_file("testing/small_corpus/another_subdirectory/example_doc.docx"), "tree should say yes to amber.jpg");
-        let proof = merkle_tree.produce_proof(1);
+
+        let dummy_identifier = "TESTMRKL";
+        let dummy_block_height = 10;
+        let dummy_tx_hash = [0_u8; 32];
+        let dummy_explain_hash = [0_u8; 32];
+        let timestamped_tree = TimestampedMerkleTree::new(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash);
+        let autoaccept = true;
+
+        let proof = timestamped_tree.produce_proof(1, dummy_explain_hash);
         //below is brittle; relies on a specific ordering of the files in the merkle tree which my code doesn't explicitly enforce. fix this later when i rethink indices
-        assert!(proof.verify_proof_for_file("testing/small_corpus/pg6.txt"), "proof should be valid for pg6.txt");
+        assert!(proof.verify_proof_for_file("testing/small_corpus/pg6.txt", autoaccept), "proof should be valid for pg6.txt");
         println!("Proof for pg6.txt: {}", proof);
     }
 
@@ -139,8 +167,7 @@ use std::fs;
         let merkle_tree = build_merkle_tree_from_directory(path);
         let test_filename = "testing/custom_pg_test.txt";
         let date = "Christmas";
-        let identifier = "HOHOHOHO";
-        merkle_tree.write_unfinished_tree_to_file(test_filename, date, identifier);
+        merkle_tree.write_unfinished_tree_to_file(test_filename, date);
         let unfossilized_tree = MerkleTree::new_from_unfinished_tree_file(test_filename);
         assert!(merkle_tree.get_root_hash() == unfossilized_tree.get_root_hash());
         fs::remove_file(test_filename).unwrap();
@@ -151,8 +178,15 @@ use std::fs;
         let path = "testing/small_corpus";
         let merkle_tree = build_merkle_tree_from_directory(path);
         let temp_proof_filename = "testing/temp_proof.txt";
-        for i in 0..merkle_tree.num_leaves {
-            let proof = merkle_tree.produce_proof(i+1);
+
+        let dummy_identifier = "TESTMRKL";
+        let dummy_block_height = 10;
+        let dummy_tx_hash = [0_u8; 32];
+        let dummy_explain_hash = [0_u8; 32];
+        let timestamped_tree = TimestampedMerkleTree::new(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash);
+
+        for i in 0..timestamped_tree.tree.num_leaves {
+            let proof = timestamped_tree.produce_proof(i+1, dummy_explain_hash);
             proof.fossilize_proof(temp_proof_filename);
             let unfossilized = MerkleProof::new_from_file(temp_proof_filename);
             assert_eq!(proof.root_hash, unfossilized.root_hash);
@@ -175,7 +209,8 @@ use std::fs;
         println!("{}", HexFmt(merkle_root_hash));
         let num_leaves: u32 = merkle_tree.num_leaves.try_into().expect("Too many leaves to write as u32");
         let explainer_file_path = "testing/dummy_explain.txt";
-        let tag = crate::tag::create_chain_tag(identifier, num_leaves, merkle_root_hash, explainer_file_path); 
+        let explainer_hash = double_hash_from_file(explainer_file_path);
+        let tag = crate::tag::create_chain_tag(identifier, num_leaves, merkle_root_hash, explainer_hash); 
         let expected_tag = hex!("58 4d 50 4c 4d 52 4b 4c 00 00 00 0e ba 20 ce ff 80 d2 c9 fd ac f2 31 58 40 ec 11 a5 08 1c b6 3d a1 76 f4 9a b3 f5 81 a0 7e c3 91 8e a0 e5 8f 0d df 84 5d c1 ce 07 79 33 7c 91 89 c3 0b 91 6e 7d 62 94 96 ac 85 18 ac 6b c7 50 9e 61");
         println!("{}", HexFmt(&tag));
         assert_eq!(tag, expected_tag);
@@ -209,17 +244,36 @@ use std::fs;
     }
 
     #[test]
-    fn blockchain_verification() {
+    fn blockchain_tree_and_proof_verification() {
         let tree_filename = "testing/reference_timestamp/pgmerkle.txt";
         let explain_filename = "testing/reference_timestamp/canonical_pg_explain.txt";
         let incorrect_explain_filename = "testing/reference_timestamp/incorrect_explain.txt";
         let mut timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(tree_filename);
+        let autoaccept = false;
         println!("create correct tag and verify that it exists on the blockchain at the correct block height and tx hash.");
-        let result = timestamped_tree.verify_timestamp(explain_filename, false);
+        let result = timestamped_tree.verify_timestamp(explain_filename, autoaccept);
         assert!(result);
         println!("------------");
         println!("now create incorrect tag and make sure it fails to verify on the blockchain.");
-        let badresult = timestamped_tree.verify_timestamp(incorrect_explain_filename, false);
+        let badresult = timestamped_tree.verify_timestamp(incorrect_explain_filename, autoaccept);
         assert!(!badresult);
+        println!("------------");
+        println!("now create a few proof files, and verify them on the chain as well.");
+        let explain_hash = double_hash_from_file(explain_filename);
+        
+        //let index = rand::thread_rng().gen_range(0..timestamped_tree.tree.num_leaves);
+        for i in 1..4 {
+            let index = i;
+            let starting_hash = timestamped_tree.tree.nodes[index].hash;
+            let proof = timestamped_tree.produce_proof(index, explain_hash);
+            let result = proof.verify_proof(starting_hash);
+            assert!(result);
+        }
+
+        let text_to_verify = "testing/pg996.txt";
+        let proof = timestamped_tree.produce_proof_from_file(text_to_verify, explain_hash);
+        let result = proof.verify_proof_for_file(text_to_verify, autoaccept);
+        proof.fossilize_proof("testing/pg996_proof.txt");
+        assert!(result);
     }
 }

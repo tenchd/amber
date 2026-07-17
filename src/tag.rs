@@ -3,7 +3,6 @@ use std::io::{Write};
 use std::process::Command;
 use hex_fmt::HexFmt;
 use config::Config;
-use crate::merkle::double_hash_from_file;
 use text_template::Template;
 use std::collections::HashMap;
 
@@ -18,10 +17,10 @@ pub fn create_chain_tag_prefix(identifier: &str, num_merkle_leaves: u32, merkle_
 }
 
 // Creates the 76-byte tag that will be written to the blockchain.
-pub fn create_chain_tag(identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32], explainer_file_path: &str) -> Vec<u8> {
+pub fn create_chain_tag(identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32], explainer_hash: [u8; 32]) -> Vec<u8> {
     let prefix = create_chain_tag_prefix(identifier, num_merkle_leaves, merkle_root_hash);
 
-    let explainer_hash = double_hash_from_file(explainer_file_path);
+    //let explainer_hash = double_hash_from_file(explainer_file_path);
 
     let result = [prefix, explainer_hash.to_vec()].concat();
     assert!(result.len() == 76, "Result should have 76 bytes. You had {}", result.len());
