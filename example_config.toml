@@ -7,3 +7,5 @@ date ="fill_in_date"
 time="fill_in_time"
 locktime=0
 identifier="PGMERKLE" 
+block_height=0
+tx_hash="0000000000000000000000000000000000000000000000000000000000000000"

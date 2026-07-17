@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::MerkleProof};
+    use core::time;
+use std::fs;
+    use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, TimestampedMerkleTree}};
     use hex_literal::hex;
     use hex_fmt::HexFmt;
     use config::Config;
@@ -139,8 +140,8 @@ mod tests {
         let test_filename = "testing/custom_pg_test.txt";
         let date = "Christmas";
         let identifier = "HOHOHOHO";
-        merkle_tree.fossilize_tree(test_filename, date, identifier);
-        let unfossilized_tree = MerkleTree::new_from_fossilized_tree(test_filename);
+        merkle_tree.write_unfinished_tree_to_file(test_filename, date, identifier);
+        let unfossilized_tree = MerkleTree::new_from_unfinished_tree_file(test_filename);
         assert!(merkle_tree.get_root_hash() == unfossilized_tree.get_root_hash());
         fs::remove_file(test_filename).unwrap();
     }
@@ -195,7 +196,7 @@ mod tests {
     #[ignore]
     fn authenticate_entire_corpus(){
         let test_filename = "generated_timestamp/merkle.txt";
-        let merkle_tree = MerkleTree::new_from_fossilized_tree(test_filename);
+        let merkle_tree = MerkleTree::new_from_unfinished_tree_file(test_filename);
         let settings = Config::builder()
                     .add_source(config::File::with_name("config"))
                     .build()
@@ -205,5 +206,20 @@ mod tests {
         for filepath in filepaths{
             assert!(merkle_tree.verify_from_file(&filepath), "file at path {} did not authenticate", filepath);
         }
+    }
+
+    #[test]
+    fn blockchain_verification() {
+        let tree_filename = "testing/reference_timestamp/pgmerkle.txt";
+        let explain_filename = "testing/reference_timestamp/canonical_pg_explain.txt";
+        let incorrect_explain_filename = "testing/reference_timestamp/incorrect_explain.txt";
+        let mut timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(tree_filename);
+        println!("create correct tag and verify that it exists on the blockchain at the correct block height and tx hash.");
+        let result = timestamped_tree.verify_timestamp(explain_filename, false);
+        assert!(result);
+        println!("------------");
+        println!("now create incorrect tag and make sure it fails to verify on the blockchain.");
+        let badresult = timestamped_tree.verify_timestamp(incorrect_explain_filename, false);
+        assert!(!badresult);
     }
 }

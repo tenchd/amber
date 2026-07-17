@@ -13,15 +13,24 @@ use bitcoin::{
 use serde_json::Value;
 use chrono::{DateTime, NaiveDateTime, Utc};
 
-fn compute_tag(identifier: &str, tree_filename: &str, explain_filepath: &str) -> Vec<u8> {
-    println!("reading merkle tree from file.");
-    let unfossilized: MerkleTree = MerkleTree::new_from_fossilized_tree(tree_filename);
-    println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
-    unfossilized.verify_tree();
-    println!("Merkle tree is valid.");
+// fn compute_tag(identifier: &str, tree_filename: &str, explain_filepath: &str) -> Vec<u8> {
+//     println!("reading merkle tree from file.");
+//     let unfossilized: MerkleTree = MerkleTree::new_from_unfinished_tree_file(tree_filename);
+//     println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
+//     unfossilized.verify_tree();
+//     println!("Merkle tree is valid.");
 
-    let num_leaves = unfossilized.num_leaves.try_into().unwrap();
-    let root_hash = unfossilized.get_root_hash();
+//     let num_leaves = unfossilized.num_leaves.try_into().unwrap();
+//     let root_hash = unfossilized.get_root_hash();
+//     let tag = tag::create_chain_tag(identifier, num_leaves, root_hash, explain_filepath);
+//     //let opcodes = "6a4c4c"; //hex of opcodes used to write to bitcoin blockchain via OP_RETURN
+//     //println!("Blockchain message should be\n{}", HexFmt(&tag));
+//     tag
+// }
+
+fn compute_tag(identifier: &str, tree: &MerkleTree, explain_filepath: &str) -> Vec<u8> {
+    let num_leaves = tree.num_leaves.try_into().unwrap();
+    let root_hash = tree.get_root_hash();
     let tag = tag::create_chain_tag(identifier, num_leaves, root_hash, explain_filepath);
     //let opcodes = "6a4c4c"; //hex of opcodes used to write to bitcoin blockchain via OP_RETURN
     //println!("Blockchain message should be\n{}", HexFmt(&tag));
@@ -30,15 +39,16 @@ fn compute_tag(identifier: &str, tree_filename: &str, explain_filepath: &str) ->
 
 // need to get later: tx hash. right now i'm cheating and hard coding it.
 // also need to read off date and time and block height from tx.
-pub fn verify_timestamp(identifier: &str, tree_filename: &str, explain_filepath: &str) -> bool {
+pub fn verify_timestamp(identifier: &str, tree: &MerkleTree, explain_filepath: &str, tx_hash: [u8; 32]) -> bool {
     println!("Computing tag based on provided identifier, merkle tree, and explain file.");
-    let expected_tag = compute_tag(identifier, tree_filename, explain_filepath);
+    let expected_tag = compute_tag(identifier, tree, explain_filepath);
     println!("The tag should be {}", HexFmt(&expected_tag));
-    let cheat_tx_hash = "b82b914e29fb08e65e49156231b68c38c3bcb246f6a7d8ec22477478a9f1b832";
+    //let cheat_tx_hash = "b82b914e29fb08e65e49156231b68c38c3bcb246f6a7d8ec22477478a9f1b832";
+    let tx_hash_string = format!("{}", HexFmt(tx_hash));
 
-    println!("Looking up transaction with hash {} on Bitcoin blockchain. It should have an OP_RETURN output with the tag in the data payload.", cheat_tx_hash);
+    println!("Looking up transaction with hash {} on Bitcoin blockchain. It should have an OP_RETURN output with the tag in the data payload.", tx_hash_string);
 
-    let json_url = format!("https://blockchain.info/rawtx/{}", cheat_tx_hash);
+    let json_url = format!("https://blockchain.info/rawtx/{}", tx_hash_string);
     let json_response = get(json_url).unwrap();
     let json_string = json_response.text().unwrap();
     let v: Value = serde_json::from_str(&json_string).unwrap();
@@ -53,7 +63,7 @@ pub fn verify_timestamp(identifier: &str, tree_filename: &str, explain_filepath:
 
     let datetime: DateTime<Utc> = DateTime::from_utc(NaiveDateTime::from_timestamp(time, 0), Utc);
 
-    let hex_url = format!("https://blockchain.info/rawtx/{}?format=hex", cheat_tx_hash);
+    let hex_url = format!("https://blockchain.info/rawtx/{}?format=hex", tx_hash_string);
     let response = get(hex_url).unwrap();
     let content = response.bytes().unwrap();
     let string_content: String = from_utf8(&content).unwrap().to_string();

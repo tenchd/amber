@@ -1,5 +1,6 @@
 use hex_fmt::HexFmt;
 use sha2::{Sha256, Digest};
+use core::num;
 use std::{fmt};
 use std::fs::File;
 use std::io::{Read,Write,BufReader, prelude::*,};
@@ -234,23 +235,8 @@ impl MerkleTree {
         MerkleTree { root_index, num_leaves, nodes, hash_lookup }
     }
 
-    // rebuild tree that has been written to a file in my "fossilized" format. 
-    pub fn new_from_fossilized_tree(tree_filename: &str) -> Self {
-        let file = File::open(tree_filename).expect("couldn't open fossil tree file");
-        let mut reader = BufReader::new(file);
+    fn new_from_tree_file_suffix(reader: BufReader<File>, num_leaves: usize) -> MerkleTree {
         let mut fossil_hashes: Vec<[u8; 32]> = vec![];
-
-        // need to read first few header lines!
-        let mut header_lines: Vec<String> = vec!["".to_string(); 3];
-        for i in 0..3 {
-            reader.read_line(&mut header_lines[i]).expect("Failed to read line");
-        }
-
-        // TODO:check that header lines match format
-
-        let words  = header_lines[1].split_whitespace().collect::<Vec<&str>>();
-        let num_leaves: NodeHandle = words[4].parse().expect("Unable to parse num_leaves from line 2 of file");
-
         // read the fossilized sequence of merkle tree node hashes.
         for line in reader.lines() {
             let clean_line = line.expect("could not read line");
@@ -288,6 +274,80 @@ impl MerkleTree {
         }
         tree
     }
+
+    // rebuild tree that has been written to a file in my "fossilized" format. 
+    pub fn new_from_unfinished_tree_file(tree_filename: &str) -> Self {
+        let file = File::open(tree_filename).expect("couldn't open fossil tree file");
+        let mut reader = BufReader::new(file);
+
+        // need to read first few header lines!
+        let mut header_lines: Vec<String> = vec!["".to_string(); 3];
+        for i in 0..3 {
+            reader.read_line(&mut header_lines[i]).expect("Failed to read line");
+        }
+
+        // TODO:check that header lines match format
+
+        let words  = header_lines[1].split_whitespace().collect::<Vec<&str>>();
+        let num_leaves: NodeHandle = words[4].parse().expect("Unable to parse num_leaves from line 2 of file");
+
+        Self::new_from_tree_file_suffix(reader, num_leaves)
+    }
+
+    // // rebuild tree that has been written to a file in my "fossilized" format which includes block height and transaction hash information. 
+    // pub fn new_from_fossilized_tree(tree_filename: &str) -> Self {
+    //     let file = File::open(tree_filename).expect("couldn't open fossil tree file");
+    //     let mut reader = BufReader::new(file);
+    //     let mut fossil_hashes: Vec<[u8; 32]> = vec![];
+
+    //     // need to read first few header lines!
+    //     let mut header_lines: Vec<String> = vec!["".to_string(); 3];
+    //     for i in 0..3 {
+    //         reader.read_line(&mut header_lines[i]).expect("Failed to read line");
+    //     }
+
+    //     // TODO:check that header lines match format
+
+    //     let words  = header_lines[1].split_whitespace().collect::<Vec<&str>>();
+    //     let num_leaves: NodeHandle = words[4].parse().expect("Unable to parse num_leaves from line 2 of file");
+
+    //     // read the fossilized sequence of merkle tree node hashes.
+    //     for line in reader.lines() {
+    //         let clean_line = line.expect("could not read line");
+    //         let fossil_hash = BASE64_STANDARD.decode(clean_line).expect("Could not decode line");
+    //         assert!(fossil_hash.len() == 32, "fossil hash is incorrect length");
+    //         fossil_hashes.push(fossil_hash.try_into().expect("Could not convert to bytes"));
+    //     }
+
+    //     let mut nodes: Vec<MerkleNode> = vec![];
+
+    //     // populate the nodes vec with the leaf nodes from the fossil hashes.
+    //     nodes.push(MerkleNode { hash: [0u8; 32], index: 0, left: 0, right: 0, parent: 0 }); // dummy node at index 0
+    //     for (index, hash) in fossil_hashes.iter().enumerate() {
+    //         if index == num_leaves {
+    //             break;
+    //         }
+    //         nodes.push(MerkleNode::new_leaf(*hash, index + 1));
+    //     }
+    //     let root_index = MerkleTree::build_tree(&mut nodes, num_leaves, false);
+    //     let hash_lookup = MerkleTree::build_hashmap(&nodes, num_leaves);
+        
+    //     // build the rest of the tree from the leaves
+    //     let tree = MerkleTree { root_index, num_leaves, nodes, hash_lookup };
+    //     tree.verify_tree();
+
+    //     // make sure all hashes match fossil
+    //     assert!(&tree.get_root_hash() == fossil_hashes.last().unwrap());
+    //     for i in 0..fossil_hashes.len() {
+    //         let fossil_hash = fossil_hashes[i];
+    //         let tree_hash = tree.nodes[i+1].hash;
+    //         if fossil_hash != tree_hash {
+    //             println!("Warning: tree is valid but the hashes don't match those in the fossil file at position {}. That's very weird.", i);
+    //             break;
+    //         }
+    //     }
+    //     tree
+    // }
 
     pub fn display_state(nodes: &Vec<MerkleNode>) {
         println!("---Merkle Tree State:----");
@@ -475,19 +535,14 @@ impl MerkleTree {
     }
 
     // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
-    pub fn fossilize_tree(&self, tree_filename: &str, date: &str, identifier: &str) {
+    pub fn write_unfinished_tree_to_file(&self, tree_filename: &str, date: &str, identifier: &str) {
+
         let mut file = File::create(tree_filename).expect("failed to create file");
         let header_line = format!("# Merkle tree. Created on {} from Project Gutenberg corpus of plain text files.\n", date);
         let num_leaves_line = format!("# Number of leaves: {}\n", self.num_leaves);
-        let chain_line = format!("# Root hash written to Bitcoin blockchain along with identifier {}\n", identifier);
-        let block_height_line = "# Block height: <>\n";
-        let tx_hash_line = "# Tx hash: <>\n";
         let explain_line = "# Each line below is the hash (in base64) of a merkle node. Tree is binary. Each parent hash is the double SHA256 hash of the concatenation of its two child hashes. If the parent has only one child, its hash is the double SHA256 hash of the child hash concatenated with itself. Final line of file is root hash.\n";
         file.write_all(header_line.as_bytes()).unwrap();
         file.write_all(num_leaves_line.as_bytes()).unwrap();
-        file.write_all(chain_line.as_bytes()).unwrap();
-        file.write_all(block_height_line.as_bytes()).unwrap();
-        file.write_all(tx_hash_line.as_bytes()).unwrap();
         file.write_all(explain_line.as_bytes()).unwrap();
 
         for i in 1..self.nodes.len() {
@@ -495,6 +550,7 @@ impl MerkleTree {
             file.write_all(line.as_bytes()).unwrap();
         }
     }
+
 }
 
 pub struct TimestampedMerkleTree {
@@ -511,11 +567,74 @@ impl TimestampedMerkleTree {
         TimestampedMerkleTree { tree, identifier: identifier.to_string(), block_height, tx_hash, verified_timestamp: false }
     }
 
+    pub fn new_from_fossilized_tree(fossil_filepath: &str) -> TimestampedMerkleTree {
+        let file = File::open(fossil_filepath).expect("couldn't open fossil tree file");
+        let mut reader = BufReader::new(file);
+
+        // need to read first few header lines!
+        let mut header_lines: Vec<String> = vec!["".to_string(); 6];
+        for i in 0..6 {
+            reader.read_line(&mut header_lines[i]).expect("Failed to read line");
+        }
+
+        let words  = header_lines[1].split_whitespace().collect::<Vec<&str>>();
+        let num_leaves: NodeHandle = words[4].parse().expect("Unable to parse num_leaves from line 2 of file");
+        let words = header_lines[2].split_whitespace().collect::<Vec<&str>>();
+        let identifier = words[10];
+        let words = header_lines[3].split_whitespace().collect::<Vec<&str>>();
+        let block_height: usize = words[3].parse().expect("Unable to parse num_leaves from line 2 of file");
+        let words = header_lines[4].split_whitespace().collect::<Vec<&str>>();
+        let tx_hash_string = words[3];
+        let tx_hash = hex::decode(tx_hash_string).unwrap();
+        let mut hash_bytes = vec![0u8; 32];
+        hash_bytes.copy_from_slice(&tx_hash);
+        let hash_bytes_length: [u8; 32] = hash_bytes.try_into().expect("Hash length must be 32 bytes");
+
+        let tree = MerkleTree::new_from_tree_file_suffix(reader, num_leaves);
+        Self::new(tree, identifier, block_height, hash_bytes_length)
+    }
+
     pub fn is_verified(&self) {
         self.verified_timestamp;
     }
 
-    pub fn verify_timestamp(&self, explain_filepath: &str) {
-        todo!()
+    pub fn verify_timestamp(&mut self, explain_filepath: &str, autoaccept: bool) -> bool {
+        if autoaccept {
+            println!("Autoaccepting the blockchain verification process for testing purposes. DO NOT TRUST THIS RESULT.");
+            return true;
+        }
+        
+        let result = crate::verify::verify_timestamp(&self.identifier, &self.tree, explain_filepath, self.tx_hash);
+        if !result{
+            // println!("Failed to verify the timestamp on the blockchain. Deleting timestamped merkle tree file. {}", tree_filename);
+            // std::fs::remove_file(tag_tree_filename).unwrap();
+            println!("Failed to verify the timestamp on the blockchain.");
+        }
+        else {
+            self.verified_timestamp = true;
+        }
+        result
+    }
+
+    // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
+    pub fn fossilize_tree(&self, tree_filename: &str, date: &str) {
+        let mut file = File::create(tree_filename).expect("failed to create file");
+        let header_line = format!("# Merkle tree. Created on {} from Project Gutenberg corpus of plain text files.\n", date);
+        let num_leaves_line = format!("# Number of leaves: {}\n", self.tree.num_leaves);
+        let chain_line = format!("# Root hash written to Bitcoin blockchain along with identifier {}\n", self.identifier);
+        let block_height_line = format!("# Block height: {}\n", self.block_height);
+        let tx_hash_line = format!("# Tx hash: {}\n", HexFmt(self.tx_hash));
+        let explain_line = "# Each line below is the hash (in base64) of a merkle node. Tree is binary. Each parent hash is the double SHA256 hash of the concatenation of its two child hashes. If the parent has only one child, its hash is the double SHA256 hash of the child hash concatenated with itself. Final line of file is root hash.\n";
+        file.write_all(header_line.as_bytes()).unwrap();
+        file.write_all(num_leaves_line.as_bytes()).unwrap();
+        file.write_all(chain_line.as_bytes()).unwrap();
+        file.write_all(block_height_line.as_bytes()).unwrap();
+        file.write_all(tx_hash_line.as_bytes()).unwrap();
+        file.write_all(explain_line.as_bytes()).unwrap();
+
+        for i in 1..self.tree.nodes.len() {
+            let line = format!("{}\n", BASE64_STANDARD.encode(self.tree.nodes[i].hash));
+            file.write_all(line.as_bytes()).unwrap();
+        }
     }
 }
