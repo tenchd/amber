@@ -164,25 +164,30 @@ impl MerkleProof {
 
     // 
     pub fn fossilize_proof(&self, filename: &str) {
+        let proof_template_filepath = "src/proof_template.txt";
+        let template_string = read_to_string(proof_template_filepath).unwrap();
+        let template = Template::from(template_string.as_str());
+
+        // identifier: ${identifier}
+        // # num_leaves: ${num_leaves}
+        // # explain.txt hash: ${explain_hash}
+        // # block_height: ${block_height}
+        // # tx_hash: ${tx_hash}
+        let mut values: HashMap<&str, &str> = HashMap::new();
+        values.insert("identifier",&self.identifier);
+        let num_leaves_string = format!("{}", self.num_leaves);
+        values.insert("num_leaves", &num_leaves_string);
+        let explain_hash_string = format!("{}", HexFmt(self.explain_hash));
+        values.insert("explain_hash", &explain_hash_string);
+        let block_height_string = format!("{}", self.block_height);
+        values.insert("block_height", &block_height_string);
+        let tx_hash_string = format!("{}", HexFmt(self.tx_hash));
+        values.insert("tx_hash", &tx_hash_string);
+
+        let text = template.try_fill_in(&values).unwrap().to_string();
+
         let mut file = File::create(filename).expect("failed to create file");
-        let mut header_lines: Vec<String> = vec![];
-        header_lines.push(format!("# Merkle proof. The first uncommented line is the root hash. Each subsequent line is a hash in base64 followed by a boolean (separated by a comma).\n"));
-        header_lines.push(format!("# Each non-root line represents a step in the leaf-to-root Merkle proof path: the hash of the sibling node and the boolean indicates whether the sibling is the left (true) or right (false) sibling.\n"));
-        header_lines.push(format!("# To verify the proof, double SHA256 hash the file. Then for each line in the proof, concatenate the current hash with the sibling hash on the left (if true) or on the right (if false) and double SHA256 hash the concatenation. The end result should match the root hash.\n"));
-        header_lines.push(format!("# The following commented lines list information used to automatically verify the timestamp on the Bitcoin blockchain.\n"));
-        header_lines.push(format!("# identifier: {}\n", self.identifier));
-        header_lines.push(format!("# num_leaves: {}\n", self.num_leaves));
-        header_lines.push(format!("# explain.txt hash: {}\n", HexFmt(self.explain_hash)));
-        header_lines.push(format!("# block_height: {}\n", self.block_height));
-        header_lines.push(format!("# tx_hash: {}\n", HexFmt(self.tx_hash)));
-        
-        for header_line in header_lines {
-            file.write_all(header_line.as_bytes()).unwrap();
-        }
-        // file.write_all(header_line.as_bytes()).unwrap();
-        // file.write_all(header_line2.as_bytes()).unwrap();
-        // file.write_all(header_line3.as_bytes()).unwrap();
-        // file.write_all(header_line4.as_bytes()).unwrap();
+        file.write_all(&text.into_bytes()).expect("couldn't write file");
 
         let root_hash_line = format!("{}\n", BASE64_STANDARD.encode(self.root_hash));
         file.write_all(root_hash_line.as_bytes()).unwrap();
@@ -491,24 +496,18 @@ impl MerkleTree {
 
     // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
     pub fn write_unfinished_tree_to_file(&self, tree_filename: &str, date: &str,) {
-        // let unfinished_merkle_template_filepath = "src/unfinished_merkle_template.txt";
-        // let template_string = read_to_string(unfinished_merkle_template_filepath).unwrap();
-        // let template = Template::from(template_string.as_str());
+        let unfinished_merkle_template_filepath = "src/unfinished_merkle_template.txt";
+        let template_string = read_to_string(unfinished_merkle_template_filepath).unwrap();
+        let template = Template::from(template_string.as_str());
 
-        // let mut values: HashMap<&str, &str> = HashMap::new();
-        // values.insert("date",date);
-        // let num_leaves_string = format!("{}", self.num_leaves);
-        // values.insert("num_leaves", &num_leaves_string);
-        // let text = template.try_fill_in(&values).unwrap().to_string();
+        let mut values: HashMap<&str, &str> = HashMap::new();
+        values.insert("date",date);
+        let num_leaves_string = format!("{}", self.num_leaves);
+        values.insert("num_leaves", &num_leaves_string);
+        let text = template.try_fill_in(&values).unwrap().to_string();
 
         let mut file = File::create(tree_filename).expect("failed to create file");
-        let header_line = format!("# Merkle tree. Created on {} from Project Gutenberg corpus of plain text files.\n", date);
-        let num_leaves_line = format!("# Number of leaves: {}\n", self.num_leaves);
-        let explain_line = "# Each line below is the hash (in base64) of a merkle node. Tree is binary. Each parent hash is the double SHA256 hash of the concatenation of its two child hashes. If the parent has only one child, its hash is the double SHA256 hash of the child hash concatenated with itself. Final line of file is root hash.\n";
-        file.write_all(header_line.as_bytes()).unwrap();
-        file.write_all(num_leaves_line.as_bytes()).unwrap();
-        file.write_all(explain_line.as_bytes()).unwrap();
-        //file.write_all(&text.into_bytes()).expect("couldn't write file");
+        file.write_all(&text.into_bytes()).expect("couldn't write file");
 
         for i in 1..self.nodes.len() {
             let line = format!("{}\n", BASE64_STANDARD.encode(self.nodes[i].hash));
@@ -557,6 +556,7 @@ impl TimestampedMerkleTree {
         let hash_bytes_length: [u8; 32] = hash_bytes.try_into().expect("Hash length must be 32 bytes");
 
         let tree = MerkleTree::new_from_tree_file_suffix(reader, num_leaves);
+        tree.verify_tree();
         Self::new(tree, identifier, block_height, hash_bytes_length)
     }
 
@@ -586,18 +586,24 @@ impl TimestampedMerkleTree {
     // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
     pub fn fossilize_tree(&self, tree_filename: &str, date: &str) {
         let mut file = File::create(tree_filename).expect("failed to create file");
-        let header_line = format!("# Merkle tree. Created on {} from Project Gutenberg corpus of plain text files.\n", date);
-        let num_leaves_line = format!("# Number of leaves: {}\n", self.tree.num_leaves);
-        let chain_line = format!("# Root hash written to Bitcoin blockchain along with identifier {}\n", self.identifier);
-        let block_height_line = format!("# Block height: {}\n", self.block_height);
-        let tx_hash_line = format!("# Tx hash: {}\n", HexFmt(self.tx_hash));
-        let explain_line = "# Each line below is the hash (in base64) of a merkle node. Tree is binary. Each parent hash is the double SHA256 hash of the concatenation of its two child hashes. If the parent has only one child, its hash is the double SHA256 hash of the child hash concatenated with itself. Final line of file is root hash.\n";
-        file.write_all(header_line.as_bytes()).unwrap();
-        file.write_all(num_leaves_line.as_bytes()).unwrap();
-        file.write_all(chain_line.as_bytes()).unwrap();
-        file.write_all(block_height_line.as_bytes()).unwrap();
-        file.write_all(tx_hash_line.as_bytes()).unwrap();
-        file.write_all(explain_line.as_bytes()).unwrap();
+
+        let merkle_template_filepath = "src/merkle_template.txt";
+        let template_string = read_to_string(merkle_template_filepath).unwrap();
+        let template = Template::from(template_string.as_str());
+
+        let mut values: HashMap<&str, &str> = HashMap::new();
+        values.insert("date",date);
+        let num_leaves_string = format!("{}", self.tree.num_leaves);
+        values.insert("num_leaves", &num_leaves_string);
+        values.insert("identifier", &self.identifier);
+        let block_height_string = format!("{}", self.block_height);
+        values.insert("block_height", &block_height_string);
+        let tx_hash_string = format!("{}", HexFmt(self.tx_hash));
+        values.insert("tx_hash", &tx_hash_string);
+        let text = template.try_fill_in(&values).unwrap().to_string();
+
+        let mut file = File::create(tree_filename).expect("failed to create file");
+        file.write_all(&text.into_bytes()).expect("couldn't write file");
 
         for i in 1..self.tree.nodes.len() {
             let line = format!("{}\n", BASE64_STANDARD.encode(self.tree.nodes[i].hash));

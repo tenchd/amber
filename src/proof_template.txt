@@ -1,0 +1,9 @@
+# Merkle proof. The first uncommented line is the root hash. Each subsequent line is a hash in base64 followed by a boolean (separated by a comma).
+# Each non-root line represents a step in the leaf-to-root Merkle proof path: the hash of the sibling node and the boolean indicates whether the sibling is the left (true) or right (false) sibling.
+# To verify the proof, double SHA256 hash the file. Then for each line in the proof, concatenate the current hash with the sibling hash on the left (if true) or on the right (if false) and double SHA256 hash the concatenation. The end result should match the root hash.
+# The following commented lines list information used to automatically verify the timestamp on the Bitcoin blockchain.
+# identifier: ${identifier}
+# num_leaves: ${num_leaves}
+# explain.txt hash: ${explain_hash}
+# block_height: ${block_height}
+# tx_hash: ${tx_hash}

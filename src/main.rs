@@ -175,7 +175,6 @@ fn main() {
         let mut timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(&provided_tree_filename);
         let autoaccept = false;
         let result = timestamped_tree.verify_timestamp(&provided_explain_filename, autoaccept);
-        //let result = verify_timestamp(&identifier, &provided_tree_filename, &provided_explain_filename);
         if !result {
             println!("failed to verify");
         }

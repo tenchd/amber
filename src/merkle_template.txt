@@ -1,6 +1,6 @@
-# Merkle tree. Created on {date} from Project Gutenberg corpus of plain text files.
-# Number of leaves: {num_leaves}
-# Root hash written to Bitcoin blockchain along with identifier {identifier}
-# Block height: {block_height}
-# Tx hash: {tx_hash}
+# Merkle tree. Created on ${date} from Project Gutenberg corpus of plain text files.
+# Number of leaves: ${num_leaves}
+# Root hash written to Bitcoin blockchain along with identifier ${identifier}
+# Block height: ${block_height}
+# Tx hash: ${tx_hash}
 # Each line below is the hash (in base64) of a merkle node. Tree is binary. Each parent hash is the double SHA256 hash of the concatenation of its two child hashes. If the parent has only one child, its hash is the double SHA256 hash of the child hash concatenated with itself. Final line of file is root hash.
