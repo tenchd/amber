@@ -31,7 +31,7 @@ pub fn create_chain_tag(identifier: &str, num_merkle_leaves: u32, merkle_root_ha
 
 // Inserts relevant details about the merkle tree, target block, day & time, etc. into the explanatory document and writes the document as a txt file.
 pub fn write_document(output_filename: &str, date: &str, time: &str, locktime: usize, identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32]) {
-    let explain_template_filepath = "src/explain_template.txt";
+    let explain_template_filepath = "templates/explain_template.txt";
     let template_string = read_to_string(explain_template_filepath).unwrap();
     let template = Template::from(template_string.as_str());
 

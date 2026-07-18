@@ -230,7 +230,7 @@ mod tests {
     #[test]
     #[ignore]
     fn authenticate_entire_corpus(){
-        let test_filename = "generated_timestamp/merkle.txt";
+        let test_filename = "testing/reference_timestamp/pgmerkle.txt";
         let merkle_tree = MerkleTree::new_from_unfinished_tree_file(test_filename);
         let settings = Config::builder()
                     .add_source(config::File::with_name("config"))

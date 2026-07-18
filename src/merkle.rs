@@ -164,7 +164,7 @@ impl MerkleProof {
 
     // 
     pub fn fossilize_proof(&self, filename: &str) {
-        let proof_template_filepath = "src/proof_template.txt";
+        let proof_template_filepath = "templates/proof_template.txt";
         let template_string = read_to_string(proof_template_filepath).unwrap();
         let template = Template::from(template_string.as_str());
 
@@ -496,7 +496,7 @@ impl MerkleTree {
 
     // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
     pub fn write_unfinished_tree_to_file(&self, tree_filename: &str, date: &str,) {
-        let unfinished_merkle_template_filepath = "src/unfinished_merkle_template.txt";
+        let unfinished_merkle_template_filepath = "templates/unfinished_merkle_template.txt";
         let template_string = read_to_string(unfinished_merkle_template_filepath).unwrap();
         let template = Template::from(template_string.as_str());
 
@@ -585,9 +585,7 @@ impl TimestampedMerkleTree {
 
     // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
     pub fn fossilize_tree(&self, tree_filename: &str, date: &str) {
-        let mut file = File::create(tree_filename).expect("failed to create file");
-
-        let merkle_template_filepath = "src/merkle_template.txt";
+        let merkle_template_filepath = "templates/merkle_template.txt";
         let template_string = read_to_string(merkle_template_filepath).unwrap();
         let template = Template::from(template_string.as_str());
 
