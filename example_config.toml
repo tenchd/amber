@@ -1,5 +1,6 @@
 # building new merkle tree
 corpus_path="/path/to/corpus"
+corpus_name="your_corpus_name"
 private_key_path = "path/to/private/key"
 public_key_path = "path/to/public/key"
 # finalizing new timestamp

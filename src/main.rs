@@ -61,7 +61,7 @@ fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
     //println!("{}", filepaths.first().unwrap());
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
 }
-fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str, time: &str, locktime: usize, identifier: &str){
+fn build_doc_and_tag_from_saved_tree(tree_filename: &str, corpus_name: &str, date: &str, time: &str, locktime: usize, identifier: &str){
     println!("reading merkle tree from file.");
     let unfossilized: MerkleTree = MerkleTree::new_from_unfinished_tree_file(tree_filename);
     println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
@@ -69,7 +69,7 @@ fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str, time: &str
     println!("Merkle tree is valid.");
 
     let document_filename = "generated_timestamp/explain.txt";
-    crate::tag::write_document(document_filename, date, time, locktime, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash());
+    crate::tag::write_document(document_filename, corpus_name, date, time, locktime, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash());
     let document_hash = double_hash_from_file(document_filename);
     let tag = crate::tag::create_chain_tag(identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), document_hash);
     println!("Wrote explainer document to file {}", document_filename);
@@ -80,14 +80,14 @@ fn build_doc_and_tag_from_saved_tree(tree_filename: &str, date: &str, time: &str
     println!("Wrote tag to file {}", tag_filename);
 }
 
-fn build_timestamp(corpus_path: &str, tree_filename: &str, date: &str, time: &str, locktime: usize, identifier: &str) {
+fn build_timestamp(corpus_path: &str, tree_filename: &str, corpus_name: &str, date: &str, time: &str, locktime: usize, identifier: &str) {
     let tree = build_merkle_tree_from_directory(corpus_path);
     let tree_filename_unfinished = format!("{}_unfinished.txt",tree_filename);
     println!("Merkle tree built. Root hash is {}", HexFmt(tree.get_root_hash()));
     tree.write_unfinished_tree_to_file(&tree_filename_unfinished, date);
     println!("wrote tree to file {}", tree_filename_unfinished);
 
-    build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, date, time, locktime, identifier);
+    build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, corpus_name, date, time, locktime, identifier);
 }
 
 fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, identifier: &str, block_height: usize, tx_hash: [u8; 32], date: &str) {
@@ -157,7 +157,8 @@ fn main() {
         if args.file_to_verify != "".to_string() {
             println!("Ignoring verification request. Building tree+docs.")
         }
-        build_timestamp(&corpus_path, &generated_tree_filename, &date, &time, locktime, &identifier);
+        let corpus_name = settings.get_string("corpus_name").unwrap();
+        build_timestamp(&corpus_path, &generated_tree_filename, &corpus_name, &date, &time, locktime, &identifier);
 
     }
     else if args.generate_timestamp {
