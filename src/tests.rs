@@ -179,11 +179,12 @@ mod tests {
         let dummy_block_height = 10;
         let dummy_tx_hash = [0_u8; 32];
         let dummy_explain_hash = [0_u8; 32];
+        let dummy_corpus_name = "test_corpus";
         let timestamped_tree = TimestampedMerkleTree::new(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash, dummy_explain_hash);
 
         for i in 0..timestamped_tree.tree.num_leaves {
             let proof = timestamped_tree.produce_proof(i+1);
-            proof.fossilize_proof(temp_proof_filename);
+            proof.fossilize_proof(temp_proof_filename, dummy_corpus_name);
             let unfossilized = MerkleProof::new_from_file(temp_proof_filename);
             assert_eq!(proof.root_hash, unfossilized.root_hash);
             let proof_length = proof.proof_hashes.len();
@@ -244,6 +245,7 @@ mod tests {
         let tree_filename = "testing/reference_timestamp/pgmerkle.txt";
         let explain_filename = "testing/reference_timestamp/canonical_pg_explain.txt";
         let incorrect_explain_filename = "testing/reference_timestamp/incorrect_explain.txt";
+        let dummy_corpus_name = "Project Gutenberg";
         let mut timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(tree_filename);
         let autoaccept = false;
         println!("create correct tag and verify that it exists on the blockchain at the correct block height and tx hash.");
@@ -268,7 +270,7 @@ mod tests {
         let text_to_verify = "testing/pg996.txt";
         let proof = timestamped_tree.produce_proof_from_file(text_to_verify);
         let result = proof.verify_proof_for_file(text_to_verify, autoaccept);
-        proof.fossilize_proof("testing/pg996_proof.txt");
+        proof.fossilize_proof("testing/pg996_proof.txt", dummy_corpus_name);
         assert!(result);
     }
 }

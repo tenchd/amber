@@ -90,7 +90,7 @@ fn build_timestamp(corpus_path: &str, tree_filename: &str, corpus_name: &str, da
     build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, corpus_name, date, time, locktime, identifier);
 }
 
-fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, identifier: &str, block_height: usize, tx_hash: [u8; 32], date: &str) {
+fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, block_height: usize, tx_hash: [u8; 32], date: &str) {
     let unfinished_tree_file = format!("{}_unfinished.txt",generated_tree_filename);
     let unfinished_tree = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_file);
     let explain_hash = double_hash_from_file(generated_explain_filename);
@@ -99,7 +99,7 @@ fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename:
     let autoaccept = true;
     let result = timestamped_tree.verify_timestamp(generated_explain_filename, autoaccept);
     if result {
-        timestamped_tree.fossilize_tree(generated_tree_filename, &date);
+        timestamped_tree.fossilize_tree(generated_tree_filename, &date, &corpus_name);
 
         println!("Timestamp verified! Wrote the updated merkle tree file at {}. Deleting temporary untimestamped merkle tree file at {}", generated_tree_filename, unfinished_tree_file);
         std::fs::remove_file(unfinished_tree_file).unwrap();
@@ -150,6 +150,7 @@ fn main() {
     let time = settings.get_string("time").unwrap();
     let locktime: usize = settings.get_string("locktime").unwrap().parse().expect("couldn't parse block lockout");
     let identifier = settings.get_string("identifier").unwrap();
+    let corpus_name = settings.get_string("corpus_name").unwrap();
 
     let args = Args::parse();
 
@@ -157,7 +158,6 @@ fn main() {
         if args.file_to_verify != "".to_string() {
             println!("Ignoring verification request. Building tree+docs.")
         }
-        let corpus_name = settings.get_string("corpus_name").unwrap();
         build_timestamp(&corpus_path, &generated_tree_filename, &corpus_name, &date, &time, locktime, &identifier);
 
     }
@@ -169,7 +169,7 @@ fn main() {
         let tx_hash_string = settings.get_string("tx_hash").unwrap();
         let tx_hash = parse_hash_from_str(&tx_hash_string);
         // need to read in unfinished merkle file, build a timestamped merkle file from it, verify the timestamp on the chain, then write to the timestamped tree to file.
-        finalize_timestamp(generated_tree_filename, generated_explain_filename, &identifier, block_height, tx_hash, &date);
+        finalize_timestamp(generated_tree_filename, generated_explain_filename, &corpus_name, &identifier, block_height, tx_hash, &date);
 
     }
     else if args.verify_timestamp {

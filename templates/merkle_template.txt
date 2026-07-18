@@ -1,4 +1,4 @@
-# Merkle tree. Created on ${date} from Project Gutenberg corpus of plain text files.
+# Merkle tree. Created on ${date} from ${corpus_name} corpus.
 # Number of leaves: ${num_leaves}
 # Root hash written to Bitcoin blockchain along with identifier ${identifier}
 # Block height: ${block_height}
