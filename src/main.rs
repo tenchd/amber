@@ -9,10 +9,13 @@ use std::io::{Write};
 use config::Config;
 use clap::Parser;
 use walkdir::WalkDir;
-use crate::merkle::double_hash_from_file;
+use crate::merkle::{double_hash_from_file, parse_hash_from_str};
 use crate::{
     merkle::{MerkleProof, MerkleTree, TimestampedMerkleTree}
 };
+
+const AMBER_VERSION: usize = 1;
+const AMBER_VERSION_DATE: &str = "August 24, 2026";
 
 // command line parsing
 #[derive(Parser, Debug)]
@@ -163,12 +166,9 @@ fn main() {
         }
         let block_height: usize = settings.get_string("block_height").unwrap().parse().unwrap();
         let tx_hash_string = settings.get_string("tx_hash").unwrap();
-        let tx_hash = hex::decode(tx_hash_string).unwrap();
-        let mut hash_bytes = vec![0u8; 32];
-        hash_bytes.copy_from_slice(&tx_hash);
-        let hash_bytes_length: [u8; 32] = hash_bytes.try_into().expect("Hash length must be 32 bytes");
+        let tx_hash = parse_hash_from_str(&tx_hash_string);
         // need to read in unfinished merkle file, build a timestamped merkle file from it, verify the timestamp on the chain, then write to the timestamped tree to file.
-        finalize_timestamp(generated_tree_filename, generated_explain_filename, &identifier, block_height, hash_bytes_length, &date);
+        finalize_timestamp(generated_tree_filename, generated_explain_filename, &identifier, block_height, tx_hash, &date);
 
     }
     else if args.verify_timestamp {

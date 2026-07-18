@@ -1,8 +1,7 @@
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use crate::{MerkleTree, build_merkle_tree_from_directory, 
-        merkle::{MerkleProof, TimestampedMerkleTree, double_hash_from_file}
+    use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, TimestampedMerkleTree, double_hash_from_file, parse_hash_from_str}
     };
     use hex_literal::hex;
     use hex_fmt::HexFmt;
@@ -64,10 +63,7 @@ mod tests {
         let dummy_identifier = "TESTMRKL";
         let dummy_block_height = 10;
         let dummy_tx_hash_string = "b82b914e29fb08e65e49156231b68c38c3bcb246f6a7d8ec22477478a9f1b832";
-        let tx_hash = hex::decode(dummy_tx_hash_string).unwrap();
-        let mut hash_bytes = vec![0u8; 32];
-        hash_bytes.copy_from_slice(&tx_hash);
-        let dummy_tx_hash: [u8; 32] = hash_bytes.try_into().expect("Hash length must be 32 bytes");
+        let dummy_tx_hash = parse_hash_from_str(dummy_tx_hash_string);
         let dummy_explain_hash = [0_u8; 32];
         let timestamped_tree = TimestampedMerkleTree::new(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash, dummy_explain_hash);
         let autoaccept = true;

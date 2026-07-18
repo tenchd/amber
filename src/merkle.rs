@@ -43,6 +43,14 @@ pub fn double_hash_from_file(filepath: &str) -> [u8; 32] {
     hash_bytes_length
 }
 
+pub fn parse_hash_from_str(input_string: &str) -> [u8; 32] {
+    let raw_hash = hex::decode(input_string).expect("Couldn't parse string into hex bytes");
+    let mut hash_bytes = vec![0u8; 32];
+    hash_bytes.copy_from_slice(&raw_hash);
+    let hash: [u8; 32] = hash_bytes.try_into().expect("Hash length must be 32 bytes");
+    hash
+}
+
 // nodes are owned by the 'nodes' vector in the MerkleTree struct. a NodeHandle is a identifier/index for a merkle node in the vector. 1-indexed; 0 means none.
 type NodeHandle = usize;
 
@@ -127,19 +135,13 @@ impl MerkleProof {
         let num_leaves: NodeHandle = words[2].parse().expect(&format!("Couldn't parse {} into usize for number of leaves in Merkle tree", words[2]));
 
         let words  = header_lines[6].split_whitespace().collect::<Vec<&str>>();
-        let explain_hash_raw: Vec<u8> = hex::decode(words[3]).expect("couldn't parse explain hash into hex");
-        let mut hash_bytes = vec![0u8; 32];
-        hash_bytes.copy_from_slice(&explain_hash_raw);
-        let explain_hash: [u8; 32] = hash_bytes.try_into().expect("Explain hash length must be 32 bytes");
+        let explain_hash = parse_hash_from_str(words[3]);
 
         let words  = header_lines[7].split_whitespace().collect::<Vec<&str>>();
         let block_height: usize = words[2].parse().expect("Could not parse block height as usize");
 
         let words  = header_lines[8].split_whitespace().collect::<Vec<&str>>();
-        let tx_hash_raw: Vec<u8> = hex::decode(words[2]).expect("couldn't parse tx hash into hex");
-        let mut hash_bytes = vec![0u8; 32];
-        hash_bytes.copy_from_slice(&tx_hash_raw);
-        let tx_hash: [u8; 32] = hash_bytes.try_into().expect("Tx hash length must be 32 bytes");
+        let tx_hash = parse_hash_from_str(words[2]);
 
 
         let mut root_hash_line: String = "".to_string();
@@ -551,20 +553,14 @@ impl TimestampedMerkleTree {
         let block_height: usize = words[3].parse().expect("Unable to parse num_leaves from line 2 of file");
         let words = header_lines[4].split_whitespace().collect::<Vec<&str>>();
         let tx_hash_string = words[3];
-        let tx_hash = hex::decode(tx_hash_string).unwrap();
-        let mut hash_bytes = vec![0u8; 32];
-        hash_bytes.copy_from_slice(&tx_hash);
-        let hash_bytes_length: [u8; 32] = hash_bytes.try_into().expect("Hash length must be 32 bytes");
+        let tx_hash = parse_hash_from_str(tx_hash_string);
         let words = header_lines[5].split_whitespace().collect::<Vec<&str>>();
         let explain_hash_string = words[3];
-        let explain_hash_raw = hex::decode(explain_hash_string).unwrap();
-        let mut explain_hash_bytes = vec![0u8; 32];
-        explain_hash_bytes.copy_from_slice(&explain_hash_raw);
-        let explain_hash: [u8; 32] = explain_hash_bytes.try_into().expect("Hash length must be 32 bytes");
+        let explain_hash = parse_hash_from_str(explain_hash_string);
 
         let tree = MerkleTree::new_from_tree_file_suffix(reader, num_leaves);
         tree.verify_tree();
-        Self::new(tree, identifier, block_height, hash_bytes_length, explain_hash)
+        Self::new(tree, identifier, block_height, tx_hash, explain_hash)
     }
 
     pub fn is_verified(&self) {
