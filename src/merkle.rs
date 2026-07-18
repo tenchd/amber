@@ -522,14 +522,15 @@ pub struct TimestampedMerkleTree {
     pub identifier: String,
     pub block_height: usize,
     pub tx_hash: [u8; 32],
+    pub explain_hash: [u8; 32],
     verified_timestamp: bool,
 }
 
 #[allow(dead_code)]
 impl TimestampedMerkleTree {
     // read a merkle tree from a file. 
-    pub fn new(tree: MerkleTree, identifier: &str, block_height: usize, tx_hash: [u8; 32]) -> TimestampedMerkleTree {
-        TimestampedMerkleTree { tree, identifier: identifier.to_string(), block_height, tx_hash, verified_timestamp: false }
+    pub fn new(tree: MerkleTree, identifier: &str, block_height: usize, tx_hash: [u8; 32], explain_hash: [u8; 32]) -> TimestampedMerkleTree {
+        TimestampedMerkleTree { tree, identifier: identifier.to_string(), block_height, tx_hash, explain_hash, verified_timestamp: false }
     }
 
     pub fn new_from_fossilized_tree(fossil_filepath: &str) -> TimestampedMerkleTree {
@@ -537,8 +538,8 @@ impl TimestampedMerkleTree {
         let mut reader = BufReader::new(file);
 
         // need to read first few header lines!
-        let mut header_lines: Vec<String> = vec!["".to_string(); 6];
-        for i in 0..6 {
+        let mut header_lines: Vec<String> = vec!["".to_string(); 7];
+        for i in 0..7 {
             reader.read_line(&mut header_lines[i]).expect("Failed to read line");
         }
 
@@ -554,10 +555,16 @@ impl TimestampedMerkleTree {
         let mut hash_bytes = vec![0u8; 32];
         hash_bytes.copy_from_slice(&tx_hash);
         let hash_bytes_length: [u8; 32] = hash_bytes.try_into().expect("Hash length must be 32 bytes");
+        let words = header_lines[5].split_whitespace().collect::<Vec<&str>>();
+        let explain_hash_string = words[3];
+        let explain_hash_raw = hex::decode(explain_hash_string).unwrap();
+        let mut explain_hash_bytes = vec![0u8; 32];
+        explain_hash_bytes.copy_from_slice(&explain_hash_raw);
+        let explain_hash: [u8; 32] = explain_hash_bytes.try_into().expect("Hash length must be 32 bytes");
 
         let tree = MerkleTree::new_from_tree_file_suffix(reader, num_leaves);
         tree.verify_tree();
-        Self::new(tree, identifier, block_height, hash_bytes_length)
+        Self::new(tree, identifier, block_height, hash_bytes_length, explain_hash)
     }
 
     pub fn is_verified(&self) {
@@ -570,8 +577,13 @@ impl TimestampedMerkleTree {
             return true;
         }
         
-        let explainer_hash = double_hash_from_file(explain_filepath);
-        let result = crate::verify::verify_tree_timestamp(&self.identifier, &self.tree, explainer_hash, self.tx_hash);
+        let observed_explain_hash = double_hash_from_file(explain_filepath);
+       if observed_explain_hash != self.explain_hash {
+            println!("Failed to verify: explain.txt does not match explain hash in merkle tree file");
+            return false;
+       }
+
+        let result = crate::verify::verify_tree_timestamp(&self.identifier, &self.tree, self.explain_hash, self.tx_hash);
         if !result{
             // println!("Failed to verify the timestamp on the blockchain. Deleting timestamped merkle tree file. {}", tree_filename);
             // std::fs::remove_file(tag_tree_filename).unwrap();
@@ -598,6 +610,8 @@ impl TimestampedMerkleTree {
         values.insert("block_height", &block_height_string);
         let tx_hash_string = format!("{}", HexFmt(self.tx_hash));
         values.insert("tx_hash", &tx_hash_string);
+        let explain_hash_string = format!("{}", HexFmt(self.explain_hash));
+        values.insert("explain_hash", &explain_hash_string);
         let text = template.try_fill_in(&values).unwrap().to_string();
 
         let mut file = File::create(tree_filename).expect("failed to create file");
@@ -610,7 +624,7 @@ impl TimestampedMerkleTree {
     }
 
     // builds a Merkle inclusion proof for some leaf of the tree, complete with the required info to verify the timestamp on the blockchain.
-    pub fn produce_proof(&self, index: NodeHandle, explain_hash: [u8; 32]) -> MerkleProof {
+    pub fn produce_proof(&self, index: NodeHandle) -> MerkleProof {
 
         assert!(index != 0);
         let mut proof_hashes = Vec::new();
@@ -634,18 +648,18 @@ impl TimestampedMerkleTree {
         }
 
         let root_hash = self.tree.get_root_hash();
-        MerkleProof { root_hash, proof_hashes, proof_directions, identifier: self.identifier.clone(), num_leaves: self.tree.num_leaves, explain_hash: explain_hash, block_height: self.block_height, tx_hash: self.tx_hash}
+        MerkleProof { root_hash, proof_hashes, proof_directions, identifier: self.identifier.clone(), num_leaves: self.tree.num_leaves, explain_hash: self.explain_hash, block_height: self.block_height, tx_hash: self.tx_hash}
     }
 
-    pub fn produce_proof_from_file(&self, filepath: &str, explain_hash: [u8; 32]) -> MerkleProof {
+    pub fn produce_proof_from_file(&self, filepath: &str) -> MerkleProof {
         let starting_hash = double_hash_from_file(filepath);
         let index: NodeHandle = *self.tree.hash_lookup.get(&starting_hash).expect("File hash not found in Merkle tree.");
-        self.produce_proof(index, explain_hash)
+        self.produce_proof(index)
     }
 
-    pub fn produce_proof_from_data(&self, data: &[u8], explain_hash: [u8; 32]) -> MerkleProof {
+    pub fn produce_proof_from_data(&self, data: &[u8]) -> MerkleProof {
         let starting_hash = double_hash(data);
         let index: NodeHandle = *self.tree.hash_lookup.get(&starting_hash).expect("File hash not found in Merkle tree.");
-        self.produce_proof(index, explain_hash)
+        self.produce_proof(index)
     }
 }

@@ -90,7 +90,8 @@ fn build_timestamp(corpus_path: &str, tree_filename: &str, date: &str, time: &st
 fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, identifier: &str, block_height: usize, tx_hash: [u8; 32], date: &str) {
     let unfinished_tree_file = format!("{}_unfinished.txt",generated_tree_filename);
     let unfinished_tree = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_file);
-    let mut timestamped_tree = TimestampedMerkleTree::new(unfinished_tree, &identifier, block_height, tx_hash);
+    let explain_hash = double_hash_from_file(generated_explain_filename);
+    let mut timestamped_tree = TimestampedMerkleTree::new(unfinished_tree, &identifier, block_height, tx_hash, explain_hash);
     println!("verifying tree file at {}", unfinished_tree_file);
     let autoaccept = true;
     let result = timestamped_tree.verify_timestamp(generated_explain_filename, autoaccept);
@@ -171,7 +172,7 @@ fn main() {
 
     }
     else if args.verify_timestamp {
-        println!("{}", provided_tree_filename);
+        println!("Verifying timestamp in {}", provided_tree_filename);
         let mut timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(&provided_tree_filename);
         let autoaccept = false;
         let result = timestamped_tree.verify_timestamp(&provided_explain_filename, autoaccept);

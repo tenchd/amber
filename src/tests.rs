@@ -69,12 +69,12 @@ mod tests {
         hash_bytes.copy_from_slice(&tx_hash);
         let dummy_tx_hash: [u8; 32] = hash_bytes.try_into().expect("Hash length must be 32 bytes");
         let dummy_explain_hash = [0_u8; 32];
-        let timestamped_tree = TimestampedMerkleTree::new(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash);
+        let timestamped_tree = TimestampedMerkleTree::new(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash, dummy_explain_hash);
         let autoaccept = true;
 
         for (i, d) in data.iter().enumerate() {
             println!("testing proof for leaf index {} (data: {:?})", i + 1, String::from_utf8_lossy(d));
-            let proof = timestamped_tree.produce_proof(i + 1, dummy_explain_hash);
+            let proof = timestamped_tree.produce_proof(i + 1);
             assert!(proof.verify_proof_for_data(d, autoaccept), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
         }
     }
@@ -106,12 +106,12 @@ mod tests {
             let dummy_block_height = 10;
             let dummy_tx_hash = [0_u8; 32];
             let dummy_explain_hash = [0_u8; 32];
-            let timestamped_tree = TimestampedMerkleTree::new(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash);
+            let timestamped_tree = TimestampedMerkleTree::new(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash, dummy_explain_hash);
             let autoaccept = true;
 
             for (i, d) in data_refs.iter().enumerate() {
                 //println!("testing proof for leaf index {} (data: {:?})", i + 1, String::from_utf8_lossy(d));
-                let proof = timestamped_tree.produce_proof(i + 1, dummy_explain_hash);
+                let proof = timestamped_tree.produce_proof(i + 1);
                 assert!(proof.verify_proof_for_data(d, autoaccept), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
             }
         }
@@ -135,10 +135,10 @@ mod tests {
         let dummy_block_height = 10;
         let dummy_tx_hash = [0_u8; 32];
         let dummy_explain_hash = [0_u8; 32];
-        let timestamped_tree = TimestampedMerkleTree::new(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash);
+        let timestamped_tree = TimestampedMerkleTree::new(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash, dummy_explain_hash);
         let autoaccept = true;
 
-        let proof = timestamped_tree.produce_proof(1, dummy_explain_hash);
+        let proof = timestamped_tree.produce_proof(1);
         //below is brittle; relies on a specific ordering of the files in the merkle tree which my code doesn't explicitly enforce. fix this later when i rethink indices
         assert!(proof.verify_proof_for_file("testing/small_corpus/pg6.txt", autoaccept), "proof should be valid for pg6.txt");
         println!("Proof for pg6.txt: {}", proof);
@@ -183,10 +183,10 @@ mod tests {
         let dummy_block_height = 10;
         let dummy_tx_hash = [0_u8; 32];
         let dummy_explain_hash = [0_u8; 32];
-        let timestamped_tree = TimestampedMerkleTree::new(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash);
+        let timestamped_tree = TimestampedMerkleTree::new(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash, dummy_explain_hash);
 
         for i in 0..timestamped_tree.tree.num_leaves {
-            let proof = timestamped_tree.produce_proof(i+1, dummy_explain_hash);
+            let proof = timestamped_tree.produce_proof(i+1);
             proof.fossilize_proof(temp_proof_filename);
             let unfossilized = MerkleProof::new_from_file(temp_proof_filename);
             assert_eq!(proof.root_hash, unfossilized.root_hash);
@@ -254,7 +254,6 @@ mod tests {
         let result = timestamped_tree.verify_timestamp(explain_filename, autoaccept);
         assert!(result);
         println!("------------");
-        println!("now create incorrect tag and make sure it fails to verify on the blockchain.");
         let badresult = timestamped_tree.verify_timestamp(incorrect_explain_filename, autoaccept);
         assert!(!badresult);
         println!("------------");
@@ -265,13 +264,13 @@ mod tests {
         for i in 1..4 {
             let index = i;
             let starting_hash = timestamped_tree.tree.nodes[index].hash;
-            let proof = timestamped_tree.produce_proof(index, explain_hash);
+            let proof = timestamped_tree.produce_proof(index);
             let result = proof.verify_proof(starting_hash);
             assert!(result);
         }
 
         let text_to_verify = "testing/pg996.txt";
-        let proof = timestamped_tree.produce_proof_from_file(text_to_verify, explain_hash);
+        let proof = timestamped_tree.produce_proof_from_file(text_to_verify);
         let result = proof.verify_proof_for_file(text_to_verify, autoaccept);
         proof.fossilize_proof("testing/pg996_proof.txt");
         assert!(result);
