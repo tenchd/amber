@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use base64::prelude::*;
 use text_template::Template;
 
+use crate::AMBER_VERSION;
+
 // apply SHA256 hash twice to input bytes.
 pub fn double_hash(input: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
@@ -610,6 +612,8 @@ impl TimestampedMerkleTree {
         let explain_hash_string = format!("{}", HexFmt(self.explain_hash));
         values.insert("explain_hash", &explain_hash_string);
         values.insert("corpus_name", corpus_name);
+        let version_string = &AMBER_VERSION.to_string();
+        values.insert("version", version_string);
 
         let text = template.try_fill_in(&values).unwrap().to_string();
 

@@ -7,7 +7,7 @@ mod tests {
     use hex_fmt::HexFmt;
     use config::Config;
     extern crate rand;
-    use rand::Rng;
+    use rand::{Rng, RngExt};
 
 
     #[test]
@@ -256,11 +256,10 @@ mod tests {
         assert!(!badresult);
         println!("------------");
         println!("now create a few proof files, and verify them on the chain as well.");
-        let explain_hash = double_hash_from_file(explain_filename);
         
         //let index = rand::thread_rng().gen_range(0..timestamped_tree.tree.num_leaves);
         for i in 1..4 {
-            let index = i;
+            let index = rand::rng().random_range(0..timestamped_tree.tree.num_leaves);
             let starting_hash = timestamped_tree.tree.nodes[index].hash;
             let proof = timestamped_tree.produce_proof(index);
             let result = proof.verify_proof(starting_hash);

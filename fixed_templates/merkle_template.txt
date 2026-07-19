@@ -1,7 +1,8 @@
-# Merkle tree. Created on ${date} from ${corpus_name} corpus.
+# Merkle tree. Created on ${date} from ${corpus_name} corpus using the Amber open-source timestamping utility.
 # Number of leaves: ${num_leaves}
 # Root hash written to Bitcoin blockchain along with identifier ${identifier}
 # Block height: ${block_height}
 # Tx hash: ${tx_hash}
 # Explain.txt hash: ${explain_hash}
+# Amber version: ${version}
 # Each line below is the hash (in base64) of a merkle node. Tree is binary. Each parent hash is the double SHA256 hash of the concatenation of its two child hashes. If the parent has only one child, its hash is the double SHA256 hash of the child hash concatenated with itself. Final line of file is root hash.
