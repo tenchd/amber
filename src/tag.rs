@@ -33,7 +33,7 @@ pub fn create_chain_tag(identifier: &str, num_merkle_leaves: u32, merkle_root_ha
 
 // Inserts relevant details about the merkle tree, target block, day & time, etc. into the explanatory document and writes the document as a txt file.
 pub fn write_document(output_filename: &str, corpus_name: &str, date: &str, time: &str, locktime: usize, identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32]) {
-    let explain_template_filepath = "templates/explain_template.txt";
+    let explain_template_filepath = "fixed_templates/explain_template.txt";
     let template_string = read_to_string(explain_template_filepath).unwrap();
     let template = Template::from(template_string.as_str());
 
@@ -54,14 +54,14 @@ pub fn write_document(output_filename: &str, corpus_name: &str, date: &str, time
     values.insert("merkle_root_hash", root_hash_hex_string.as_str());
 
     values.insert("corpus_name", corpus_name);
-    let corpus_description = read_to_string("templates/corpus_description.txt").unwrap();
+    let corpus_description = read_to_string("editable_templates/corpus_description.txt").unwrap();
     values.insert("corpus_description", &corpus_description);
-    let corpus_motivation = read_to_string("templates/corpus_motivation.txt").unwrap();
+    let corpus_motivation = read_to_string("editable_templates/corpus_motivation.txt").unwrap();
     values.insert("corpus_motivation", &corpus_motivation);
     let version_string = &AMBER_VERSION.to_string();
     values.insert("version", version_string);
     values.insert("version_date", AMBER_VERSION_DATE);
-    let user_description = read_to_string("templates/user_description.txt").unwrap();
+    let user_description = read_to_string("editable_templates/user_description.txt").unwrap();
     values.insert("user_description", &user_description);
 
     let tag_prefix = create_chain_tag_prefix(identifier, num_merkle_leaves, merkle_root_hash);
@@ -73,23 +73,23 @@ pub fn write_document(output_filename: &str, corpus_name: &str, date: &str, time
     let mut file = File::create(output_filename).expect("failed to create file");
     file.write_all(&text.into_bytes()).expect("couldn't write file");
 
-    let settings = Config::builder()
-                    .add_source(config::File::with_name("config"))
-                    .build()
-                    .unwrap();
+    // let settings = Config::builder()
+    //                 .add_source(config::File::with_name("config"))
+    //                 .build()
+    //                 .unwrap();
 
-    let private_key_path = settings.get_string("private_key_path").unwrap();
-    let public_key_path = settings.get_string("public_key_path").unwrap();
-    let merkle_root_hash_string = format!("{}", HexFmt(merkle_root_hash));
+    // let private_key_path = settings.get_string("private_key_path").unwrap();
+    // let public_key_path = settings.get_string("public_key_path").unwrap();
+    // let merkle_root_hash_string = format!("{}", HexFmt(merkle_root_hash));
 
-    let sh_output = Command::new("sh")
-                                .arg("sign.sh")
-                                .arg(private_key_path)
-                                .arg(public_key_path)
-                                .arg(merkle_root_hash_string)
-                                .arg(date)
-                                .arg(output_filename)
-                                .output()
-                                .expect("failed to execute process");
-    println!("Outcome of signing with private key: {}", String::from_utf8(sh_output.stdout).unwrap());
+    // let sh_output = Command::new("sh")
+    //                             .arg("sign.sh")
+    //                             .arg(private_key_path)
+    //                             .arg(public_key_path)
+    //                             .arg(merkle_root_hash_string)
+    //                             .arg(date)
+    //                             .arg(output_filename)
+    //                             .output()
+    //                             .expect("failed to execute process");
+    // println!("Outcome of signing with private key: {}", String::from_utf8(sh_output.stdout).unwrap());
 }

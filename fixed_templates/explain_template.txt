@@ -88,7 +88,7 @@ So the message written out is
 ${tag_prefix} 
 followed by the 32 byte double SHA256 hash of this document.
 
-The transaction submitting this message to the blockchain set a locktime of block ${locktime} and provided a high transaction fee. Hopefully this will result in the transaction being mined in block ${locktime}, but if not it should appear in one of the next few blocks mined. It's not possible to be sure a priori which block it will end up in due to the way Bitcoin mining works, but the Merkle tree file (whose header lines were updated after the transaction was successfully written to the chain) should contain the exact block, which should be shortly after ${locktime}.
+The transaction submitting this message to the blockchain set a locktime of block ${locktime} and provided a high transaction fee. Hopefully this resulted in the transaction being mined in block ${locktime}, but if not it should have appeared in one of the next few blocks mined. It's not possible to be sure a priori which block a transaction will end up in due to the way Bitcoin mining works, but the Merkle tree file (whose header lines were updated after the transaction was successfully written to the chain) should contain the exact block, which should be shortly after ${locktime}.
 
 8. Verification
 Let's say you have this document, a file containing the Merkle tree, and some text files. You would like to make sure that the text files were part of the ${corpus_name} corpus on ${date}.
