@@ -7,6 +7,7 @@
 # explain.txt hash: deb4859fb5f483d0251cbe9ebe9908e0591a53511311ee07b134354eac324e22
 # block_height: 955522
 # tx_hash: b82b914e29fb08e65e49156231b68c38c3bcb246f6a7d8ec22477478a9f1b832
+# produced with Amber version: 1
 5Wv37lKzUdpyigct1hRkUGFt4eMQ2SQ8+EKNd3CB3eE=
 IZFexHddzSb7RZ2fa6xQgyaJW5jVBRutivzwaYktuxU=,true
 N8v88yYLkWlTsQhqG+qLPjNRAhb70XqDfzoKAY94ef0=,true

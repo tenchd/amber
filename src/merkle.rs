@@ -1,4 +1,5 @@
 use hex_fmt::HexFmt;
+use reqwest::header;
 use sha2::{Sha256, Digest};
 use std::{fmt};
 use std::fs::{File,read_to_string};
@@ -125,8 +126,8 @@ impl MerkleProof {
         let file = File::open(proof_filepath).expect("couldn't open proof file");
         let mut reader = BufReader::new(file);
 
-        let mut header_lines: Vec<String> = vec!["".to_string(); 9];
-        for i in 0..9 {
+        let mut header_lines: Vec<String> = vec!["".to_string(); 10];
+        for i in 0..10 {
             reader.read_line(&mut header_lines[i]).expect("Failed to read line");
         }
 
@@ -144,6 +145,9 @@ impl MerkleProof {
 
         let words  = header_lines[8].split_whitespace().collect::<Vec<&str>>();
         let tx_hash = parse_hash_from_str(words[2]);
+
+        let words = header_lines[9].split_whitespace().collect::<Vec<&str>>();
+        let _version: usize = words[5].parse().unwrap();
 
 
         let mut root_hash_line: String = "".to_string();
@@ -188,6 +192,8 @@ impl MerkleProof {
         let tx_hash_string = format!("{}", HexFmt(self.tx_hash));
         values.insert("tx_hash", &tx_hash_string);
         values.insert("corpus_name", corpus_name);
+        let version_string = &AMBER_VERSION.to_string();
+        values.insert("version", version_string);
 
         let text = template.try_fill_in(&values).unwrap().to_string();
 
@@ -543,8 +549,8 @@ impl TimestampedMerkleTree {
         let mut reader = BufReader::new(file);
 
         // need to read first few header lines!
-        let mut header_lines: Vec<String> = vec!["".to_string(); 7];
-        for i in 0..7 {
+        let mut header_lines: Vec<String> = vec!["".to_string(); 8];
+        for i in 0..8 {
             reader.read_line(&mut header_lines[i]).expect("Failed to read line");
         }
 
@@ -560,6 +566,8 @@ impl TimestampedMerkleTree {
         let words = header_lines[5].split_whitespace().collect::<Vec<&str>>();
         let explain_hash_string = words[3];
         let explain_hash = parse_hash_from_str(explain_hash_string);
+        let words = header_lines[6].split_whitespace().collect::<Vec<&str>>();
+        let _version: usize = words[3].parse().unwrap();
 
         let tree = MerkleTree::new_from_tree_file_suffix(reader, num_leaves);
         tree.verify_tree();

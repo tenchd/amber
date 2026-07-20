@@ -7,3 +7,4 @@
 # explain.txt hash: ${explain_hash}
 # block_height: ${block_height}
 # tx_hash: ${tx_hash}
+# produced with Amber version: ${version}
