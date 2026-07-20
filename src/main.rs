@@ -111,12 +111,12 @@ fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename:
 
 fn verify_file(tree_filename: &str, filepath: &str){
     println!("reading merkle tree from file.");
-    let unfossilized: MerkleTree = MerkleTree::new_from_unfinished_tree_file(tree_filename);
-    println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
-    unfossilized.verify_tree();
+    let unfossilized: TimestampedMerkleTree = TimestampedMerkleTree::new_from_fossilized_tree(tree_filename);
+    println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.tree.get_root_hash()[..4]), unfossilized.tree.num_leaves);
+    unfossilized.tree.verify_tree();
     println!("Merkle tree is valid.");
 
-    let contains = unfossilized.verify_from_file(filepath);
+    let contains = unfossilized.tree.verify_from_file(filepath);
     if contains {
         println!("{} is in the Merkle tree.", filepath);
     }
