@@ -174,9 +174,9 @@ fn main() {
     }
     else if args.verify_timestamp {
         println!("Verifying timestamp in {}", provided_tree_filename);
-        let mut timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(&generated_tree_filename);
+        let mut timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(&provided_tree_filename);
         let autoaccept = false;
-        let result = timestamped_tree.verify_timestamp(&generated_explain_filename, autoaccept);
+        let result = timestamped_tree.verify_timestamp(&provided_explain_filename, autoaccept);
         if !result {
             println!("failed to verify");
         }

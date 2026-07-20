@@ -1,8 +1,6 @@
 use std::fs::{File, read_to_string};
-use std::io::{Read, Write};
-use std::process::Command;
+use std::io::Write;
 use hex_fmt::HexFmt;
-use config::Config;
 use text_template::Template;
 use std::collections::HashMap;
 

@@ -1,5 +1,4 @@
 use hex_fmt::HexFmt;
-use reqwest::header;
 use sha2::{Sha256, Digest};
 use std::{fmt};
 use std::fs::{File,read_to_string};
@@ -585,10 +584,10 @@ impl TimestampedMerkleTree {
         }
         
         let observed_explain_hash = double_hash_from_file(explain_filepath);
-       if observed_explain_hash != self.explain_hash {
+        if observed_explain_hash != self.explain_hash {
             println!("Failed to verify: explain.txt does not match explain hash in merkle tree file");
             return false;
-       }
+        }
 
         let result = crate::verify::verify_tree_timestamp(&self.identifier, &self.tree, self.explain_hash, self.tx_hash);
         if !result{

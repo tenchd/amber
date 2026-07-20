@@ -7,7 +7,7 @@ mod tests {
     use hex_fmt::HexFmt;
     use config::Config;
     extern crate rand;
-    use rand::{Rng, RngExt};
+    use rand::{RngExt};
 
 
     #[test]
@@ -87,9 +87,6 @@ mod tests {
             println!("Merkle tree has root hash: {:x?}... and contains {} leaves", HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
             merkle_tree.verify_tree();
 
-            // assert!(merkle_tree.verify_with_index(b"Data 50", 51), "Data 50 should be valid");
-            // assert!(!merkle_tree.verify_with_index(b"Data 50", 52), "Data 50 should not be valid at index 52");
-            // assert!(!merkle_tree.verify_with_index(b"Invalid data", 51), "Invalid data should not be valid at index 51");
             assert!(merkle_tree.verify(b"Data 500"), "Data 500 should be valid without index");
             assert!(!merkle_tree.verify(b"Invalid data"), "Invalid data should not be valid without index");
 
@@ -119,10 +116,6 @@ mod tests {
         let merkle_tree = build_merkle_tree_from_directory(path);
         println!("Merkle tree built from directory {} has root hash: {}... and contains {} leaves", path, HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
         merkle_tree.verify_tree();
-        // index lookups commented out for now because i'm not sure i'm going to use them, and because in general we don't yet know if/how to sort the filenames.
-        // assert!(merkle_tree.verify_with_index_from_file("testing/small_corpus/pg1.txt", 1), "tree should say yes to pg1.txt at index 1");
-        // assert!(!merkle_tree.verify_with_index_from_file("testing/small_corpus/pg1.txt", 2), "tree should say no to pg1.txt at index 2");
-        // assert!(!merkle_tree.verify_with_index_from_file("testing/small_corpus/pg2.txt", 1), "tree should say no to pg2.txt at index 1");
         assert!(merkle_tree.verify_from_file("testing/small_corpus/pg1.txt"), "tree should say yes to pg1.txt");
         assert!(merkle_tree.verify_from_file("testing/small_corpus/amber.jpg"), "tree should say yes to amber.jpg");
         assert!(merkle_tree.verify_from_file("testing/small_corpus/another_subdirectory/example_doc.docx"), "tree should say yes to amber.jpg");
@@ -166,6 +159,22 @@ mod tests {
         merkle_tree.write_unfinished_tree_to_file(test_filename, date);
         let unfossilized_tree = MerkleTree::new_from_unfinished_tree_file(test_filename);
         assert!(merkle_tree.get_root_hash() == unfossilized_tree.get_root_hash());
+        fs::remove_file(test_filename).unwrap();
+
+        let dummy_identifier = "FAKEMRKL";
+        let block_height = 10;
+        let dummy_tx_hash = [0_u8; 32];
+        let dummy_explain_hash = [0_u8; 32];
+        let corpus_name = "test_corpus";
+
+        let timestamped_tree = TimestampedMerkleTree::new(merkle_tree, dummy_identifier, block_height, dummy_tx_hash, dummy_explain_hash);
+        timestamped_tree.fossilize_tree(test_filename, date, corpus_name);
+        let unfossilized_timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(test_filename);
+        assert!(unfossilized_timestamped_tree.tree.get_root_hash() == timestamped_tree.tree.get_root_hash());
+        assert!(unfossilized_timestamped_tree.block_height == timestamped_tree.block_height);
+        assert!(unfossilized_timestamped_tree.identifier == timestamped_tree.identifier);
+        assert!(unfossilized_timestamped_tree.tx_hash == timestamped_tree.tx_hash);
+        assert!(unfossilized_timestamped_tree.explain_hash == timestamped_tree.explain_hash);
         fs::remove_file(test_filename).unwrap();
     }
 
@@ -224,11 +233,12 @@ mod tests {
         assert!(!merkle_tree.verify_from_file(altered_text));
     }
 
+    //ignoring this test for now because it requires access to the entire PG corpus.
     #[test]
     #[ignore]
     fn authenticate_entire_corpus(){
         let test_filename = "testing/reference_timestamp/pgmerkle.txt";
-        let merkle_tree = MerkleTree::new_from_unfinished_tree_file(test_filename);
+        let timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(test_filename);
         let settings = Config::builder()
                     .add_source(config::File::with_name("config"))
                     .build()
@@ -236,7 +246,7 @@ mod tests {
         let path = settings.get_string("corpus_path").unwrap();
         let filepaths = crate::get_filenames_from_directory(&path);
         for filepath in filepaths{
-            assert!(merkle_tree.verify_from_file(&filepath), "file at path {} did not authenticate", filepath);
+            assert!(timestamped_tree.tree.verify_from_file(&filepath), "file at path {} did not authenticate", filepath);
         }
     }
 
@@ -252,13 +262,18 @@ mod tests {
         let result = timestamped_tree.verify_timestamp(explain_filename, autoaccept);
         assert!(result);
         println!("------------");
+        println!("use incorrect explain file. verification should fail immediately.");
         let badresult = timestamped_tree.verify_timestamp(incorrect_explain_filename, autoaccept);
+        assert!(!badresult);
+        println!("------------");
+        println!("now force a check with an incorrect tag. blockchain verification should fail.");
+        let bad_identifier = "WRONGLBL";
+        let badresult = crate::verify::verify_tree_timestamp(bad_identifier, &timestamped_tree.tree, timestamped_tree.explain_hash, timestamped_tree.tx_hash);
         assert!(!badresult);
         println!("------------");
         println!("now create a few proof files, and verify them on the chain as well.");
         
-        //let index = rand::thread_rng().gen_range(0..timestamped_tree.tree.num_leaves);
-        for i in 1..4 {
+        for _ in 1..4 {
             let index = rand::rng().random_range(0..timestamped_tree.tree.num_leaves);
             let starting_hash = timestamped_tree.tree.nodes[index].hash;
             let proof = timestamped_tree.produce_proof(index);
