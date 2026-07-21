@@ -1,12 +1,14 @@
-Amber is a Rust utility that makes it easy to create a cryptographically-secure timestamp of a corpus.
+Amber is a Rust utility that makes it easy to:
+- create a cryptographically-secure timestamp of a corpus, and
+- verify and use timestamps that others have created
 
 It is based on the [reference implementation](https://github.com/tenchd/secure_timestamp) associated with the [June 2026 secure timestamp](https://www.davidtench.com/timestamp) of the Project Gutenberg corpus.
 
-A secure timestamp is a digital artifact that can be used to prove with a high degree of certainty that texts from a corpus existed at a particular date (and therefore were not created after that date). This may be valuable in the future if new, hard-to-detect methods of altering or forging documents are invented, because the existence of such methods would cast doubt on the authenticity of genuine digital texts.
+A **secure timestamp** is a digital artifact that can be used to prove with a high degree of certainty that texts from a corpus existed at a particular date (and therefore were not created after that date). This may be valuable in the future if new, hard-to-detect methods of altering or forging documents are invented, because the existence of such methods would cast doubt on the authenticity of genuine digital texts. Proving that a document existed before the forgery methods were created would help to prove the document's authenticity.
 
-For more about the motivation to produce secure timestamps, see this article I wrote here.
+For more about the motivation to produce and use secure timestamps, see this article I wrote here.
 
-A secure timestamp comprises several components:
+A secure timestamp consists of several components:
 - A Merkle tree built from all of the files in the corpus
 - A text document that explains how to use it and the Merkle tree to verify the timestamp
 - A short message, derived from the Merkle tree and text document, written to the Bitcoin blockchain at a particular location
@@ -14,8 +16,10 @@ A secure timestamp comprises several components:
 
 Specifically, the blockchain message contains both the root hash of the Merkle tree and the double SHA256 hash of the explanatory text document. Since the blockchain message is tamper-proof and is inherently timestamped, it establishes the existence of each of the files in the corpus at the time the message was written to the blockchain.
 
+Merkle tree files may be large because they contain information about all files in the corpus. It is possible to create a Merkle proof file which only contains the information required to verify the timestamp for a single specific file in the corpus. This repo also supports the creation, verification and use of Merkle proofs.
+
 ## Quick Start: Verifying and Using an Existing Secure Timestamp.
-This repo comes with a secure timestamp of the Project Gutenberg corpus
+This repo includes a secure timestamp of the Project Gutenberg corpus as it existed on June 26, 2026. The Merkle tree file and explanatory document for this timestamp can be found in `testing/reference_timestamp/`. In addition, a single file from the corpus and its corresponding Merkle proof file can be found in `testing/`.
 
 1. Clone this repo and `cd` into the directory.
 2. `cp example_config.toml config.toml`
@@ -40,7 +44,7 @@ This means the code has verified via the Bitcoin blockchain that the secure time
 
 You should see the following output:
 ```
-reading merkle tree from file.
+Reading merkle tree from file testing/reference_timestamp/pgmerkle.txt.
 Merkle tree has root hash: e56bf7ee... and contains 77113 leaves
 Merkle tree is valid.
 testing/pg996.txt is in the Merkle tree.
@@ -49,7 +53,7 @@ testing/pg996.txt is in the Merkle tree.
 If you try another verifying another file which is not part of the PG corpus (I made an empty file called `unrelated_file.txt` for this example) you will see output like the following:
 
 ```
-reading merkle tree from file.
+Reading merkle tree from file testing/reference_timestamp/pgmerkle.txt.
 Merkle tree has root hash: e56bf7ee... and contains 77113 leaves
 Merkle tree is valid.
 unrelated_file.txt is NOT in the Merkle tree.
@@ -60,6 +64,13 @@ which informs you that the file is not in the Merkle tree, and therefore we have
 Incidentally, if you would like to download the entire June 26, 2026 Project Gutenberg corpus, you can get it [here](https://drive.proton.me/urls/TREXY65MA8#ku23FKKn2Nbm). Each file in this corpus can be verified using the above steps.
 
 Now that you see how this procedure works, you can use this method to verify any Amber v1 secure timestamp you encounter - simply change the `provided_tree_path` and `provided_explain_path` config variables to the locations of the merkle tree and explain files from the timestamp.
+
+### Verifying a Merkle Proof File
+You can use a Merkle proof file to verify a specific document in the corpus without requiring the whole Merkle tree file. Do so as follows:
+
+6. `cargo run --release -- -p testing/pg996_proof.txt -f testing/pg996.txt`
+
+You should see similar output (both for success and failure) as you did for the steps using the Merkle tree to verify files.
 
 ## Building a New Secure Timestamp
 You will need a Bitcoin wallet that has some amount of Bitcoin available. I provide instructions for using [Electrum](https://electrum.org/), but you may use any method that allows you to submit Bitcoin transactions that include OP_RETURN scripts in outputs.
@@ -97,18 +108,33 @@ With those warnings out of the way, here is how to produce the timestamp:
 Take *at least sixty seconds* to examine explain.txt, and to make sure that the Merkle tree has the number of leaves you expect (equal to the number of files in the corpus.
 
 ### Second Step: Writing to the Blockchain
+Submit a transaction to the Bitcoin blockchain with a 0-sat output whose script is a single OP_RETURN command which writes the exact 76-byte hash dump contained in `generated_timestamp/tag.txt`. If you are not familiar with how to do this, I recommend you follow [this guide](https://planb.academy/en/tutorials/wallet/desktop/electrum-opreturn-46cd3701-cb52-4dda-8251-9fd10e8f8542). I further recommend that you set a relatively high transaction fee to increase the odds that your transaction is mined quickly, ideally within one or two blocks (the guide indicates how to do this).
+
+Wait until the transaction is mined into a block, and then for five subsequent blocks to be mined. At this point the transaction has been confirmed by six blocks and can be considered secure and final. 
+
+Note the height of the block that the transaction was mined in, as well as the transaction hash.
 
 ### Third Step: Finalizing the Timestamp
 These last steps write the location of your message on the blockchain into merkle.txt, to allow for automatic verification of your timestamp (using the quickstart directions above).
-. Set the following variables in `config.toml`:
+1. Set the following variables in `config.toml`:
 `block_height`: the exact height of the block containing your accepted Bitcoin transaction.
 `tx_hash`: the hash of your accepted Bitcoin transaction
-. `cargo run --release -- -g`
+2. `cargo run --release -- -g`
 
-To make sure everything worked correctly, you can set 
+To make sure everything worked correctly, you can set the following variables in `config.toml`:
 ```
 provided_tree_path = "generated_timestamp/merkle.txt"
 provided_explain_path = "generated_timestamp/explain.txt"
 ```
 
-and run `cargo run --release -- -v`. If your timestamp is successfully verified, you know you have succeeded. Congratulations!
+and run `cargo run --release -- -v`. If your timestamp passes verification, you know you have succeeded. Congratulations!
+
+
+### Creating a Merkle Proof from an Existing Verified Timestamp
+You can create your own Merkle proof from an existing timestamp, given one of the files from the corresponding corpus, as follows:
+
+`cargo run --release -- -m <filepath>`
+
+where `<filepath>` is the path to the corpus file you wish to produce a proof for.
+
+Note that the code will attempt to verify the proof on the blockchain and will not write the proof to fail if verification fails.

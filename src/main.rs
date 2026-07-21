@@ -1,3 +1,4 @@
+#[allow(unused_parens)]
 mod merkle;
 mod tag;
 mod tests;
@@ -30,11 +31,14 @@ struct Args {
     #[arg(short, long, default_value_t = false)]
     verify_timestamp: bool,
 
-    #[arg(short, long, default_value_t = ("".to_string()))]
+    #[arg(short, long, default_value_t = String::from(""))]
     file_to_verify: String,
 
-    #[arg(short, long, default_value_t = ("".to_string()))]
+    #[arg(short, long, default_value_t = String::from(""))]
     proof_verify: String,
+
+    #[arg(short, long, default_value_t = String::from(""))]
+    make_proof: String,
 }
 
 // Scans corpus top-level directory recursively to gather the files that will be put in the merkle tree.
@@ -62,11 +66,10 @@ fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
 }
 fn build_doc_and_tag_from_saved_tree(tree_filename: &str, corpus_name: &str, date: &str, time: &str, locktime: usize, identifier: &str){
-    println!("reading merkle tree from file.");
+    println!("Reading merkle tree from file {}.", tree_filename);
     let unfossilized: MerkleTree = MerkleTree::new_from_unfinished_tree_file(tree_filename);
     println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
     unfossilized.verify_tree();
-    println!("Merkle tree is valid.");
 
     let document_filename = "generated_timestamp/explain.txt";
     crate::tag::write_document(document_filename, corpus_name, date, time, locktime, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash());
@@ -110,11 +113,10 @@ fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename:
 }
 
 fn verify_file(tree_filename: &str, filepath: &str){
-    println!("reading merkle tree from file.");
+    println!("Reading merkle tree from file {}.", tree_filename);
     let unfossilized: TimestampedMerkleTree = TimestampedMerkleTree::new_from_fossilized_tree(tree_filename);
     println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.tree.get_root_hash()[..4]), unfossilized.tree.num_leaves);
     unfossilized.tree.verify_tree();
-    println!("Merkle tree is valid.");
 
     let contains = unfossilized.tree.verify_from_file(filepath);
     if contains {
@@ -134,6 +136,16 @@ fn verify_proof(filepath: &str, proof_file: &str) {
     else {
         println!("File {} failed to verify for proof file {}. It does NOT certify any timestamp for the file.", filepath, proof_file);
     }
+}
+
+fn make_proof(input_filepath: &str, tree_filename: &str, corpus_name: &str) {
+    let output_filename = input_filepath.to_owned() + "_proof.txt";
+    println!("Reading merkle tree from file {}.", tree_filename);
+    let unfossilized: TimestampedMerkleTree = TimestampedMerkleTree::new_from_fossilized_tree(tree_filename);
+    let proof = unfossilized.produce_proof_from_file(input_filepath);
+    proof.fossilize_proof(&output_filename, corpus_name);
+    proof.verify_proof_for_file(input_filepath, false);
+    println!("{} Merkle proof written to file {}", input_filepath, output_filename);
 }
 
 fn main() {
@@ -190,6 +202,10 @@ fn main() {
         else {
             verify_file(&provided_tree_filename, &filepath);
         }
+    }
+    else if args.make_proof != "".to_string() {
+        let input_file = args.make_proof;
+        make_proof(&input_file, &provided_tree_filename, &corpus_name);
     }
     else {
         panic!("Need to provide a command line argument");

@@ -14,7 +14,7 @@ use bitcoin::{
     consensus::encode::deserialize
 };
 use serde_json::Value;
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 
 fn compute_tag(identifier: &str, num_leaves: u32, root_hash: [u8; 32], explain_hash: [u8; 32]) -> Vec<u8> {
 
@@ -41,7 +41,8 @@ fn verify_tag(expected_tag: Vec<u8>, tx_hash: [u8; 32]) -> bool {
     let block = &b["blocks"][0];
     let time = block["time"].as_i64().unwrap();
 
-    let datetime: DateTime<Utc> = DateTime::from_utc(NaiveDateTime::from_timestamp(time, 0), Utc);
+    //let datetime: DateTime<Utc> = DateTime::from_utc(NaiveDateTime::from_timestamp(time, 0), Utc);
+    let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(DateTime::from_timestamp(time, 0).unwrap().naive_utc(), Utc);
 
     let hex_url = format!("https://blockchain.info/rawtx/{}?format=hex", tx_hash_string);
     let response = get(hex_url).unwrap();
