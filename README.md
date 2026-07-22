@@ -139,4 +139,4 @@ You can create your own Merkle proof from an existing timestamp, given one of th
 
 where `<filepath>` is the path to the corpus file you wish to produce a proof for.
 
-Note that the code will attempt to verify the proof on the blockchain and will not write the proof to fail if verification fails.
+Note that the code will attempt to verify the proof on the blockchain and will not write the proof to file if verification fails.
