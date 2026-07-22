@@ -16,6 +16,8 @@ A secure timestamp consists of several components:
 
 Specifically, the blockchain message contains both the root hash of the Merkle tree and the double SHA256 hash of the explanatory text document. Since the blockchain message is tamper-proof and is inherently timestamped, it establishes the existence of each of the files in the corpus at the time the message was written to the blockchain.
 
+Secure timestamps grow more useful the older they are. A primary design goal of secure timestamps is *self-sufficiency*: a secure timestamp should be usable even after institutional knowledge about it has completely disappeared. Someone who encounters a secure timestamp and has no access to this repository, the creators of the timestamp, or any institutional knowledge about secure timestamps in general, should be able to reconstruct and use the Merkle tree. The only external requirements are that the blockchain message persists (so that it can establish the time at which the timestamp was created), and that the unaltered corpus files are available. The only requirements of this hypothetical future user are that they can understand English and can write code. 
+
 Merkle tree files may be large because they contain information about all files in the corpus. It is possible to create a Merkle proof file which only contains the information required to verify the timestamp for a single specific file in the corpus. This repo also supports the creation, verification and use of Merkle proofs.
 
 ## Quick Start: Verifying and Using an Existing Secure Timestamp.

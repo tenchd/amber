@@ -46,19 +46,22 @@ This timestamp was made assuming the following conditions continue to hold in th
 
 4. Trust in Provenance
 Technically speaking, this secure timestamp establishes the fact that each text in the corpus existed in ${date}, but nothing else. For example, if one of the texts in the corpus was a text file of the novel Don Quixote, this timestamp would prove that the text file was not created after ${date}. However, it would not conclusively prove that it was truly a novel published in the early seventeenth century by Miguel de Cervantes, or that it was a faithful and accurate translation into English from the original Spanish. It also would not rule out the possibility that a malicious actor modified the text shortly before it was timestamped.
-Despite these limitations, proof of existence by ${date} alone is likely to be useful for many authentication purposes. There are two primary reasons for this which we summarize now.
-1) Coherently altering a large corpus of historical documents is currently expensive, so proving that a corpus existed today means that it could only have been tampered with at great cost.
-For example, imagine that the government of Country A wishes to rewrite the historical record of its centuries-long series of wars with Country B. While Country A may not be able to destroy all existing genuine digital copies of historical texts concerning these wars, they could widely circulate altered versions of these digital texts to downplay A's misdeeds and exaggerate those of B. If successful, it might be difficult for future historians to distinguish between two conflicting stories, each supported by a large corpus of internally-consistent texts. However, at the time that the Amber team is writing this template, in late 2026, coherently altering a large corpus of texts in this manner is expensive. For instance, A may wish to claim (falsely) that ; it requires many hours of expert human labor to accomplish, and existing LLM technologies are unlikely to reduce the cost significantly due to PUT REASON HERE.
-2) If there is a technological arms race between AI-powered forgery techniques and methods to detect forgeries, proving that a corpus existed before the latest forgery techniques greatly simplifies the task of establishing authenticity.
-Make the point that if the detection methods can detect forgeries using techniques 5 years old or older, timestamped data is very valuable because it establishes the data existed only when detectable forgery methods were available; if no such methods are detected one can conclude the data was not forged.
+Despite these limitations, proof of existence by ${date} alone is likely to be useful for many authentication purposes. It can be used to reestablish trust in provenance: if a corpus is timestamped while it is in the possession of a trusted party, and then it passes into the possession of an untrusted party, the timestamp can be used to prove that the files in the corpus were not altered.
+Moreover, a timestamp rules out methods for altering documents that were developed after the timestamp was created. It also rules out motivations for altering documents that only make sense after the timestamp was created.
 
 5. Quick Start: Validating and Using the Timestamp via Amber version ${version}
-TODO
+On ${version_date}, Amber version ${version} is available at https://github.com/tenchd/amber/. Amber can be used to automatically read this document and the accompanying Merkle tree file, verify the timestamp on the blockchain, and use the Merkle tree to verify files from the ${corpus_name} corpus.
+
+After enough time, the linked repository may not be available or trustworthy - Github may delete the repository, someone else may steal the account and make arbitrary changes to the code, etc. To establish authenticity of the code, all official Amber releases will be signed  with the SLH-DSA (SPHINCS+) private key associated with the following public key:
+-----BEGIN PUBLIC KEY-----
+MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEkKd9MtgRWeRMPINgkltgeYMt4gNx0FkV
+L5wrmANlUTWSLJORZs/0hZrsTrhA7r17cPNv4WGWBEAehX70EPnzdw==
+-----END PUBLIC KEY-----
 
 6. Merkle Tree Construction and Serialization
 The Merkle tree is constructed in the same way a Bitcoin miner computes the Merkle root hash of a block of transactions. That is to say, define an arbitrary ordering over the files in the corpus. First, compute the double SHA256 hash of each file. These comprise the leaves of the Merkle tree. Then for each adjacent pair of leaves in the ordering, double hash the concatenation of their hashes to produce the hash of their parent node. The process is repeated at each level until the root is reached. If there is an odd number of nodes at some level, the last node's hash is concatenated with itself and then double SHA256 hashed to get the parent hash.
 
-The Merkle tree is written to file according to the following specification, which is designed to be human-readable, relatively compact, simple, self-explanatory, and also to be machine-readable by Amber version ${version}. First there are seven header lines that read:
+The Merkle tree is written to file according to the following specification, which is designed to be human-readable, relatively compact, simple, self-explanatory, and also to be machine-readable by Amber version ${version}. First there are eight header lines that read:
 "# Merkle tree. Created on <date> from Project Gutenberg corpus of plain text files."
 "# Number of leaves: <num_leaves>"
 "# Root hash written to Bitcoin blockchain along with identifier <identifier>"
@@ -77,6 +80,8 @@ In these header lines,
 This is followed by the list of hashes in the Merkle tree. First the leaf hashes are listed in order. Next the hashes of the nodes in the next level are listed in increasing order of left child. This is repeated for every level until the root, which is the last hash written to the file.
 
 Amber version ${version} reads this file format automatically and can build and verify the Merkle tree, construct the expected blockchain message, and confirm that this message exists in the specified block and transaction on the blockchain, confirming the timestamp. 
+
+Amber version ${version} is also capable of producing files which contain Merkle proofs for single files from the corpus. These proof files are formatted similarly to the Merkle tree file format described above. Amber can also automatically read and verify proof files.
 
 7. Blockchain Message
 The message was written to the blockchain using the OP_RETURN script command. The resulting Bitcoin transaction therefore does nothing interesting except write the following 76 bytes of data into the block:
@@ -101,12 +106,6 @@ To verify that a text file was part of the PG corpus in 2026, simply double SHA2
 This doc and the original corpus files should be kept together and preserved exactly, because any slight alteration of them changes their hash signature and therefore makes it impossible to verify their timestamp using the blockchain message and Merkle tree. The hash of the Merkle tree file is not included in the blockchain message because some of the metadata stored in its headers can only be written after the blockchain message is created and written to the Bitcoin chain. This means that you can technically make certain small alterations to this file and still verify successfully, provided you do not tamper with the leaf hashes or the metadata stored in the header lines. However, we strongly discourage you from altering this file unless you have an extremely good reason to do so.
 
 10. Establishing Timestamp Author Identities
-On ${version_date}, Amber version ${version} is available at https://github.com/tenchd/amber/. After enough time, this link may not be trustworthy - Github may delete the repository, someone else may steal the account and make arbitrary changes to the code, etc. To establish authenticity of the code, all official Amber releases will be signed  with the SLH-DSA (SPHINCS+) private key associated with the following public key:
------BEGIN PUBLIC KEY-----
-MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEkKd9MtgRWeRMPINgkltgeYMt4gNx0FkV
-L5wrmANlUTWSLJORZs/0hZrsTrhA7r17cPNv4WGWBEAehX70EPnzdw==
------END PUBLIC KEY-----
-
 The following self-decription was supplied by the users who used Amber to produce this timestamp.
 
 ${user_description}
