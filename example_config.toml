@@ -1,7 +1,15 @@
+# building new merkle tree
 corpus_path="/path/to/corpus"
+corpus_name="your_corpus_name"
 private_key_path = "path/to/private/key"
 public_key_path = "path/to/public/key"
+# finalizing new timestamp
 date ="fill_in_date"
 time="fill_in_time"
 locktime=0
 identifier="PGMERKLE" 
+block_height=0
+tx_hash="0000000000000000000000000000000000000000000000000000000000000000"
+# verifying existing timestamp
+provided_tree_path = "path/to/provided/tree"
+provided_explain_path = "path/to/provided/explainfile"

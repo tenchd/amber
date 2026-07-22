@@ -1,0 +1,28 @@
+# Merkle proof of a file from the Project Gutenberg corpus. The first uncommented line is the root hash. Each subsequent line is a hash in base64 followed by a boolean (separated by a comma).
+# Each non-root line represents a step in the leaf-to-root Merkle proof path: the hash of the sibling node and the boolean indicates whether the sibling is the left (true) or right (false) sibling.
+# To verify the proof, double SHA256 hash the file. Then for each line in the proof, concatenate the current hash with the sibling hash on the left (if true) or on the right (if false) and double SHA256 hash the concatenation. The end result should match the root hash.
+# The following commented lines list information used to automatically verify the timestamp on the Bitcoin blockchain.
+# identifier: PGMERKLE
+# num_leaves: 77113
+# explain.txt hash: deb4859fb5f483d0251cbe9ebe9908e0591a53511311ee07b134354eac324e22
+# block_height: 955522
+# tx_hash: b82b914e29fb08e65e49156231b68c38c3bcb246f6a7d8ec22477478a9f1b832
+# produced with Amber version: 1
+5Wv37lKzUdpyigct1hRkUGFt4eMQ2SQ8+EKNd3CB3eE=
+IZFexHddzSb7RZ2fa6xQgyaJW5jVBRutivzwaYktuxU=,true
+N8v88yYLkWlTsQhqG+qLPjNRAhb70XqDfzoKAY94ef0=,true
+TQUEF9Vwd/G8HZrBWA8dA9hgVhzayZf7FcPZ3wYlT/Y=,false
+49Y4icj4FYrTeKQG1koYs+naLgtiCzUBaxW/3bw1gi4=,false
+mb9+V8bRtKi8bSNKaYTnc3JXTY/CvKh+pnhvelR/rPA=,false
+9OoiW1BNaIZEcFbVJyVAEr/b+8fp2ojESjlM3XzVRHc=,false
+ZoWCxN+oYcN/2zpQUNA7ttNf9jKdcH0os5MmJVXOvYc=,true
+OddS5TkzJ64UX+09O6SYIk0AerHNTudIxo0u+3rFcls=,false
+v/JCVN1V3VcQ19c17qRu0dhCIVfoTZPefdEp7Gp/+Bc=,false
+MR8nlLhh7L4qSTJp8MgOJ3LKeKXbv92sECmTLTIEKhg=,false
+XongG+h2OxDE9eoXtmS7xKOhU9rB/cVAb9/MP2cRj4U=,true
+NyJ6zvdEMKQ8C0O+60KIgdj4UUezbbWctHc+WSL9geo=,true
+5D7P3KyQWoA909xV/3j1gUuZ15Qkha5VgqlAQ8x5Af0=,true
+H9Tc8aI+xhM+FO3ItzoD8vatP7rde7TlCI8wEL+c3cA=,true
+ChnZ5KXx2gQzbiIruT0xAwgPyi34fzHnR+OSXjlzXgg=,true
+lzVgLNfso0bkHQ4AJSnXGDGE0q9lKFeV9y0Xy2ayZpM=,true
+w009joxOp+SPX9SdcLRAth/CCcA1bXz5QpA2qfe55gw=,true

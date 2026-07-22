@@ -1,0 +1,111 @@
+This document was produced with Amber version ${version} released on ${version_date}.
+
+You are reading the canonical explanatory document for a secure timestamp of the ${corpus_name} corpus. This secure timestamp is a digital artifact that can be used to prove with a high degree of certainty that texts from the ${corpus_name} corpus existed on ${date} at roughly ${time}. This may be valuable in the future if new, hard-to-detect methods of altering or forging documents are invented, because the existence of such methods would cast doubt on the authenticity of genuine digital texts. For that reason, please preserve this document and the other components of the secure timestamp, as well as the corpus itself, without altering their contents! The creators of this timestamp wish for it to survive for as long as possible, to ensure that future generations have access to provably unaltered records of the past.
+
+This document will explain to you how you can use the secure timestamp to prove that texts from the ${corpus_name} corpus existed on ${date}. 
+
+The secure timestamp has three components: this document, a Merkle tree written to a text file in a special format, and a message written on the Bitcoin blockchain at a certain location. This secure timestamp was made using version ${version} of the Amber software tool created by the Amber organization in ${version_date}. If you have access to Amber version ${version} or later, you can use it to easily validate and utilize this secure timestamp (see Section 5). If you do not have access to Amber version ${version} or later, this document contains the information you need to validate and use the timestamp yourself. It assumes some familiarity with computer science and cryptography, so to follow these directions you either need to be a competent coder or have access to automated software development tools such as a coding LLM. The Amber designers found that consumer-grade coding LLMs available in mid-late 2026 were capable of validating and using Amber version ${version} secure timestamps when given this document and the corresponding Merkle tree file.
+
+This document was produced from a template defined by Amber version ${version}. There are several sections which, if present, have been written by the users who used Amber to produce this particular timestamp, and these sections will be noted explicitly.
+
+Warning: this timestamp establishes that certain data existed on ${date}, but does not inherently establish any other facts about the authenticity or truthfulness of the data. See Section 4 for more discussion on this important point.
+
+Table of Contents
+1. Description of Timestamped Corpus
+2. Motivation for Timestamping Corpuses
+3. Scope
+4. Trust in Provenance
+5. Quick Start: Validating and Using the Timestamp via Amber version ${version}
+6. Merkle Tree Construction and Serialization
+7. Blockchain Message
+8. Verification
+9. Preservation and Dissemination
+10. Establishing Timestamp Author Identities
+
+1. Description of Timestamped Corpus
+This section was supplied by the users who used Amber to produce this timestamp.
+${corpus_description}
+
+2. Motivation for Timestamping this Corpus
+This section was supplied by the users who used Amber to produce this timestamp.
+${corpus_motivation}
+
+3. Scope
+This timestamp has three components: this document, the Merkle tree, and the blockchain message. Taken together, they comprise a secure timestamp of the ${corpus_name} corpus.
+The function of this secure timestamp is:
+- To provide cryptographic-strength, censorship- and tamper-resistant proof that each text in ${corpus_name} existed on ${date}. This can be used to re-establish trust in provenance (see Section 4).
+
+This secure timestamp is NOT intended to:
+- independently prove that any text in the timestamped corpus is authentic (not a forgery, correctly translated, complete, etc.).
+
+This timestamp was made assuming the following conditions continue to hold in the future:
+- Finding a SHA256 hash collision remains computationally infeasible.
+- Genuine, unaltered versions of the texts that comprise the corpus survive (and ideally are stored alongside this timestamp).
+- This document, and the accompanying Merkle tree, survive.
+- The message written on the Bitcoin blockchain containing the Merkle root hash and the hash of this document remains readable and provably unaltered (i.e., the blockchain is not edited in some kind of 51% attack).
+
+4. Trust in Provenance
+Technically speaking, this secure timestamp establishes the fact that each text in the corpus existed in ${date}, but nothing else. For example, if one of the texts in the corpus was a text file of the novel Don Quixote, this timestamp would prove that the text file was not created after ${date}. However, it would not conclusively prove that it was truly a novel published in the early seventeenth century by Miguel de Cervantes, or that it was a faithful and accurate translation into English from the original Spanish. It also would not rule out the possibility that a malicious actor modified the text shortly before it was timestamped.
+Despite these limitations, proof of existence by ${date} alone is likely to be useful for many authentication purposes. It can be used to reestablish trust in provenance: if a corpus is timestamped while it is in the possession of a trusted party, and then it passes into the possession of an untrusted party, the timestamp can be used to prove that the files in the corpus were not altered.
+Moreover, a timestamp rules out methods for altering documents that were developed after the timestamp was created. It also rules out motivations for altering documents that only make sense after the timestamp was created.
+
+5. Quick Start: Validating and Using the Timestamp via Amber version ${version}
+On ${version_date}, Amber version ${version} is available at https://github.com/tenchd/amber/. Amber can be used to automatically read this document and the accompanying Merkle tree file, verify the timestamp on the blockchain, and use the Merkle tree to verify files from the ${corpus_name} corpus.
+
+After enough time, the linked repository may not be available or trustworthy - Github may delete the repository, someone else may steal the account and make arbitrary changes to the code, etc. To establish authenticity of the code, all official Amber releases will be signed  with the SLH-DSA (SPHINCS+) private key associated with the following public key:
+-----BEGIN PUBLIC KEY-----
+MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEkKd9MtgRWeRMPINgkltgeYMt4gNx0FkV
+L5wrmANlUTWSLJORZs/0hZrsTrhA7r17cPNv4WGWBEAehX70EPnzdw==
+-----END PUBLIC KEY-----
+
+6. Merkle Tree Construction and Serialization
+The Merkle tree is constructed in the same way a Bitcoin miner computes the Merkle root hash of a block of transactions. That is to say, define an arbitrary ordering over the files in the corpus. First, compute the double SHA256 hash of each file. These comprise the leaves of the Merkle tree. Then for each adjacent pair of leaves in the ordering, double hash the concatenation of their hashes to produce the hash of their parent node. The process is repeated at each level until the root is reached. If there is an odd number of nodes at some level, the last node's hash is concatenated with itself and then double SHA256 hashed to get the parent hash.
+
+The Merkle tree is written to file according to the following specification, which is designed to be human-readable, relatively compact, simple, self-explanatory, and also to be machine-readable by Amber version ${version}. First there are eight header lines that read:
+"# Merkle tree. Created on <date> from Project Gutenberg corpus of plain text files."
+"# Number of leaves: <num_leaves>"
+"# Root hash written to Bitcoin blockchain along with identifier <identifier>"
+"# Block height: <block_height>"
+"# Tx hash: <tx_hash>"
+"# Explain.txt hash: <explain_hash>"
+"# Amber version: <version>"
+"# Each line below is the hash (in base64) of a merkle node. Tree is binary. Each parent hash is the double SHA256 hash of the concatenation of its two child hashes. If the parent has only one child, its hash is the double SHA256 hash of the child hash concatenated with itself. Final line of file is root hash."
+In these header lines,
+- num_leaves indicates the number of leaves in the Merkle tree.
+- identifier indicates the 8-character ASCII string that begins the blockchain message.
+- block height refers to the actual block in the Bitcoin blockchain where the message is written. This can be used to location the blockchain message that timestamps the corpus.
+- tx hash refers to the unique hash of the transaction that wrote the message to the blockchain; this can be used to identify the transaction. 
+- Finally, explain hash refers to the double SHA256 hash of this document that you are reading now. 
+
+This is followed by the list of hashes in the Merkle tree. First the leaf hashes are listed in order. Next the hashes of the nodes in the next level are listed in increasing order of left child. This is repeated for every level until the root, which is the last hash written to the file.
+
+Amber version ${version} reads this file format automatically and can build and verify the Merkle tree, construct the expected blockchain message, and confirm that this message exists in the specified block and transaction on the blockchain, confirming the timestamp. 
+
+Amber version ${version} is also capable of producing files which contain Merkle proofs for single files from the corpus. These proof files are formatted similarly to the Merkle tree file format described above. Amber can also automatically read and verify proof files.
+
+7. Blockchain Message
+The message was written to the blockchain using the OP_RETURN script command. The resulting Bitcoin transaction therefore does nothing interesting except write the following 76 bytes of data into the block:
+- ${identifier} in ascii (8 bytes): ${identifier_hex}
+- 4 bytes representing the number of leaves in the Merkle tree (${num_merkle_leaves}) as an unsigned integer: ${num_merkle_leaves_hex}
+- the Merkle tree root hash (32 bytes) ${merkle_root_hash}
+- the SHA256 double hash of this document 
+
+So the message written out is 
+${tag_prefix} 
+followed by the 32 byte double SHA256 hash of this document.
+
+The transaction submitting this message to the blockchain set a locktime of block ${locktime} and provided a high transaction fee. Hopefully this resulted in the transaction being mined in block ${locktime}, but if not it should have appeared in one of the next few blocks mined. It's not possible to be sure a priori which block a transaction will end up in due to the way Bitcoin mining works, but the Merkle tree file (whose header lines were updated after the transaction was successfully written to the chain) should contain the exact block, which should be shortly after ${locktime}.
+
+8. Verification
+Let's say you have this document, a file containing the Merkle tree, and some text files. You would like to make sure that the text files were part of the ${corpus_name} corpus on ${date}.
+First, you must verify that this document and the Merkle tree are valid. To do this, first verify that there is a transaction on the Bitcoin blockchain in block ${locktime} or shortly thereafter containing the message described above. It should exactly match the block height listed in the Merkle tree file header. The Merkle tree root hash in the blockchain message should exactly match the root hash written in this file, and the SHA256 double hash of this document should match exactly as well. Further, the Merkle tree should be valid (meaning the hash relationships between nodes are correct) and the root hash should match the one written in this file. The Merkle tree should have ${num_merkle_leaves} leaves.
+If the above conditions hold, you can be sure the Merkle tree is valid, and can use it to verify corpus texts safely.
+To verify that a text file was part of the PG corpus in 2026, simply double SHA256 hash the file. If there is a leaf node in the Merkle tree whose hash matches exactly, you have verified that the text file is part of the corpus. Otherwise, the text file cannot be verified, and you can conclude that it does not exactly match any of the original files included in the Merkle tree.
+
+9. Preservation and Dissemination
+This doc and the original corpus files should be kept together and preserved exactly, because any slight alteration of them changes their hash signature and therefore makes it impossible to verify their timestamp using the blockchain message and Merkle tree. The hash of the Merkle tree file is not included in the blockchain message because some of the metadata stored in its headers can only be written after the blockchain message is created and written to the Bitcoin chain. This means that you can technically make certain small alterations to this file and still verify successfully, provided you do not tamper with the leaf hashes or the metadata stored in the header lines. However, we strongly discourage you from altering this file unless you have an extremely good reason to do so.
+
+10. Establishing Timestamp Author Identities
+The following self-decription was supplied by the users who used Amber to produce this timestamp.
+
+${user_description}
