@@ -2,6 +2,8 @@ Amber is a Rust utility that makes it easy to:
 - create a cryptographically-secure timestamp of a corpus, and
 - verify and use timestamps that others have created
 
+NOTE: this repo is in active development and is not ready for general use.
+
 It is based on the [reference implementation](https://github.com/tenchd/secure_timestamp) associated with the [June 2026 secure timestamp](https://www.davidtench.com/timestamp) of the Project Gutenberg corpus.
 
 A **secure timestamp** is a digital artifact that can be used to prove with a high degree of certainty that texts from a corpus existed at a particular date (and therefore were not created after that date). This may be valuable in the future if new, hard-to-detect methods of altering or forging documents are invented, because the existence of such methods would cast doubt on the authenticity of genuine digital texts. Proving that a document existed before the forgery methods were created would help to prove the document's authenticity.
