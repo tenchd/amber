@@ -68,25 +68,25 @@ fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
     //println!("{}", filepaths.first().unwrap());
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
 }
-fn build_doc_and_tag_from_saved_tree(tree_filename: &str, corpus_name: &str, date: &str, time: &str, locktime: usize, identifier: &str){
+fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, date: &str, time: &str, locktime: usize, identifier: &str){
     println!("Reading merkle tree from file {}.", tree_filename);
     let unfossilized: MerkleTree = MerkleTree::new_from_unfinished_tree_file(tree_filename);
     println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
     unfossilized.verify_tree();
 
-    let document_filename = "generated_timestamp/explain.txt";
+    let document_filename = explain_filename;
     crate::tag::write_document(document_filename, corpus_name, date, time, locktime, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash());
     let document_hash = double_hash_from_file(document_filename);
     let tag = crate::tag::create_chain_tag(identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), document_hash);
     println!("Wrote explainer document to file {}", document_filename);
-    let tag_filename = "generated_timestamp/tag.txt";
+    //let tag_filename = "generated_timestamp/tag.txt";
     let tag_string = format!("{}", HexFmt(&tag));
     let mut file = File::create(tag_filename).expect("failed to create file");
     file.write_all(&tag_string.into_bytes()).expect("failed to write tag");
     println!("Wrote tag to file {}", tag_filename);
 }
 
-fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, corpus_name: &str, date: &str, time: &str, locktime: usize, identifier: &str) {
+fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, date: &str, time: &str, locktime: usize, identifier: &str) {
     let mut _tree = MerkleTree::new_empty();
     if hashes_source {
         println!("Building merkle tree from leaf hashes in {}", hashes_path);
@@ -94,13 +94,14 @@ fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool, tr
     }
     else {
         _tree = build_merkle_tree_from_directory(corpus_path);
+        _tree.write_leaf_hashes_to_file(hashes_path);
     }
     let tree_filename_unfinished = format!("{}_unfinished.txt",tree_filename);
     println!("Merkle tree built. Root hash is {}", HexFmt(_tree.get_root_hash()));
     _tree.write_unfinished_tree_to_file(&tree_filename_unfinished, date);
     println!("wrote tree to file {}", tree_filename_unfinished);
 
-    build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, corpus_name, date, time, locktime, identifier);
+    build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, explain_filename, tag_filename, corpus_name, date, time, locktime, identifier);
 }
 
 fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, block_height: usize, tx_hash: [u8; 32], date: &str) {
@@ -167,6 +168,7 @@ fn main() {
     let hashes_path = settings.get_string("hashes_path").unwrap();
     let generated_tree_filename = "generated_timestamp/merkle.txt";
     let generated_explain_filename = "generated_timestamp/explain.txt";
+    let generated_tag_filename = "generated_timestamp/tag.txt";
     let provided_tree_filename = settings.get_string("provided_tree_path").unwrap();
     let provided_explain_filename = settings.get_string("provided_explain_path").unwrap();
     let date = settings.get_string("date").unwrap();
@@ -182,7 +184,7 @@ fn main() {
             println!("Ignoring verification request. Building tree+docs.")
         }
 
-        build_timestamp(&corpus_path, &hashes_path, args.hash_source, &generated_tree_filename, &corpus_name, &date, &time, locktime, &identifier);
+        build_timestamp(&corpus_path, &hashes_path, args.hash_source, &generated_tree_filename, &generated_explain_filename, &generated_tag_filename, &corpus_name, &date, &time, locktime, &identifier);
 
     }
     else if args.generate_timestamp {

@@ -354,7 +354,7 @@ impl MerkleTree {
 
     // rebuild tree that has been written to a file in my "fossilized" format. 
     pub fn new_from_unfinished_tree_file(tree_filename: &str) -> Self {
-        let file = File::open(tree_filename).expect("couldn't open fossil tree file");
+        let file = File::open(tree_filename).expect(&format!("couldn't open fossil tree file {}", tree_filename));
         let mut reader = BufReader::new(file);
 
         // need to read first few header lines!
@@ -521,6 +521,17 @@ impl MerkleTree {
                     Concatenating it with itself and double SHA256 hashing gives {}, but parent node {}'s hash is {}.",
                     node.index, left_index, HexFmt(left_hash), HexFmt(computed_hash), node.index, HexFmt(node.hash));
             }
+        }
+    }
+
+    pub fn write_leaf_hashes_to_file(&self, leaf_hash_filename: &str) {
+        let mut file = File::create(leaf_hash_filename).expect("failed to create file");
+        let num_leaves_line = format!("{}\n", self.num_leaves);
+        file.write_all(&num_leaves_line.into_bytes()).unwrap();
+
+        for i in 1..self.num_leaves + 1 {
+            let line = format!("{}\n", BASE64_STANDARD.encode(self.nodes[i].hash));
+            file.write_all(line.as_bytes()).unwrap();
         }
     }
 

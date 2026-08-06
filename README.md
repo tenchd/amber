@@ -97,6 +97,7 @@ With those warnings out of the way, here is how to produce the timestamp:
 4. Determine the current height of the Bitcoin blockchain in blocks. (You can do this by visiting https://findtheblock.com/tools/latest-blocks and noting the current chain height.)
 5. Set the following variables in config.toml:
 `corpus_path`: set to the top-level directory containing the corpus you wish to timestamp. Note that the code will search the directory recursively and include every non-directory file in the Merkle tree.
+`hashes_path`: for now, leave this at its default value: "generated_timestamp/leaf_hashes.txt".
 `corpus_name`: a short name for the corpus.
 `date`: the current date.
 `time`: the current time.
@@ -106,8 +107,24 @@ With those warnings out of the way, here is how to produce the timestamp:
 - `merkle.txt_unfinished.txt`: an "unfinished" version of the merkle tree file that does not yet have the blockchain location information added.
 - `explain.txt`: the canonical explain.txt file for your timestamp. Do not alter it!
 - `tag.txt`: The hex dump of the message you will write to the blockchain in the next step.
+- `leaf_hashes.txt`: This file just lists the hashes of the leaf nodes of the Merkle tree. If you want to rebuild the tree, you can use this file to do it faster (see next subsection for details).
 
 Take *at least sixty seconds* to examine explain.txt, and to make sure that the Merkle tree has the number of leaves you expect (equal to the number of files in the corpus.
+
+#### Optional: Generate Merkle Tree from Leaf Hashes
+You can generate the Merkle tree from a file containing the pre-hashed leaf files rather than scanning the corpus directory as described above. This might be desirable for several reasons. 
+
+First, writing the leaf hashes to file saves you the time and computation required to re-scan the corpus and re-hash every file if you realize you made a mistake during the tree generation process. If you are timestamping a large corpus, rebuilding from the leaf hashes is MUCH faster than starting over from scratch. 
+
+Second, this functionality allows someone with access to the corpus data to hash the corpus texts and send ONLY the hashes to someone running this code; essentially allowing for "blind" timestamping of a corpus this code never actually sees. This may be desirable for timestamping datasets that are proprietary.
+
+In any case, the process for building from a pre-hashed leaf file is as follows.
+
+First, the file must be in the following format: The first line of the file is the number of leaves in the file as an integer, and each subsequent line is the base64 encoding of a leaf hash. The total number of lines should be the number of leaves + 1. 
+
+If you followed the directions above, when you generated the Merkle tree and explain.txt, you also generated a file containing the leaf hashes. You can use that file to rebuild the Merkle tree and explain.txt more quickly by running `cargo run --release -- -b -h`.
+
+If you want to build a Merkle tree from some other leaf hash file, simply set `hashes_path` in `config.toml` to the location of the leaf hash file and then run `cargo run --release -- -b -h`.
 
 ### Second Step: Writing to the Blockchain
 Submit a transaction to the Bitcoin blockchain with a 0-sat output whose script is a single OP_RETURN command which writes the exact 76-byte hash dump contained in `generated_timestamp/tag.txt`. If you are not familiar with how to do this, I recommend you follow [this guide](https://planb.academy/en/tutorials/wallet/desktop/electrum-opreturn-46cd3701-cb52-4dda-8251-9fd10e8f8542). I further recommend that you set a relatively high transaction fee to increase the odds that your transaction is mined quickly, ideally within one or two blocks (the guide indicates how to do this).
@@ -131,7 +148,6 @@ provided_explain_path = "generated_timestamp/explain.txt"
 
 and run `cargo run --release -- -v`. If your timestamp passes verification, you know you have succeeded. Congratulations!
 
-
 ### Creating a Merkle Proof from an Existing Verified Timestamp
 You can create your own Merkle proof from an existing timestamp, given one of the files from the corresponding corpus, as follows:
 
@@ -140,3 +156,4 @@ You can create your own Merkle proof from an existing timestamp, given one of th
 where `<filepath>` is the path to the corpus file you wish to produce a proof for.
 
 Note that the code will attempt to verify the proof on the blockchain and will not write the proof to file if verification fails.
+

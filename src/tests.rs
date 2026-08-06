@@ -320,4 +320,46 @@ mod tests {
             println!("Building tree with {} leaves took {} ms.", length, elapsed_time.as_millis());
         }
     }
+
+    // ensures that building a merkle tree from a corpus and building it from the leaf hashes derived from that corpus give the same tree.
+    #[test]
+    fn leaf_hash_build_equivalence() {
+        let test_timestamp_dir = "testing/test_timestamp/";
+        std::fs::create_dir(test_timestamp_dir).unwrap();
+
+        let corpus_path = "testing/small_corpus";
+        let hashes_path = "testing/test_timestamp/leaf_hashes.txt";
+        let hash_source = false;
+        let generated_tree_filename = "testing/test_timestamp/tree.txt";
+        let generated_explain_filename = "testing/test_timestamp/explain.txt";
+        let generated_tag_filename = "testing/test_timestamp/tag.txt";
+        let corpus_name = "test_corpus";
+        let date = "June 26, 2026";
+        let time = "12:00";
+        let locktime = 0;
+        let identifier = "XMPLMRKL";
+
+        crate::build_timestamp(&corpus_path, &hashes_path, hash_source, &generated_tree_filename, generated_explain_filename, generated_tag_filename, &corpus_name, &date, &time, locktime, &identifier);
+
+        println!("hi");
+
+        let unfinished_tree_filename = format!("{}_unfinished.txt",generated_tree_filename);
+        let corpus_tree = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_filename);
+
+        println!("bye");
+        
+        let hash_source = true;
+
+        crate::build_timestamp(&corpus_path, &hashes_path, hash_source, &generated_tree_filename, generated_explain_filename, generated_tag_filename, &corpus_name, &date, &time, locktime, &identifier);
+
+        let leaf_hashes_tree = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_filename);
+
+        std::fs::remove_file(hashes_path).unwrap();
+        std::fs::remove_file(unfinished_tree_filename).unwrap();
+        std::fs::remove_file(generated_explain_filename).unwrap();
+        std::fs::remove_file(generated_tag_filename).unwrap();
+        std::fs::remove_dir(test_timestamp_dir).unwrap();
+
+        assert!(corpus_tree.get_root_hash() == leaf_hashes_tree.get_root_hash());
+    }
 }
