@@ -287,4 +287,13 @@ mod tests {
         proof.fossilize_proof("testing/pg996_proof.txt", dummy_corpus_name);
         assert!(result);
     }
+
+    #[test]
+    fn build_tree_from_hashes_file() {
+        let hashes_filename = "testing/hashes.txt";
+        let tree_from_hashes: MerkleTree = MerkleTree::new_from_hashes(hashes_filename);
+        let tree_from_files = build_merkle_tree_from_directory("testing/small_corpus");
+        assert!(tree_from_files.get_root_hash() == tree_from_hashes.get_root_hash());
+        assert!(tree_from_files.num_leaves == tree_from_hashes.num_leaves);
+    }
 }

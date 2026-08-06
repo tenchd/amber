@@ -310,7 +310,7 @@ impl MerkleTree {
         MerkleTree { root_index, num_leaves, nodes, hash_lookup }
     }
 
-    fn new_from_tree_file_suffix(reader: BufReader<File>, num_leaves: usize) -> MerkleTree {
+    fn new_from_tree_file_suffix(reader: BufReader<File>, num_leaves: usize, full: bool) -> MerkleTree {
         let mut fossil_hashes: Vec<[u8; 32]> = vec![];
         // read the fossilized sequence of merkle tree node hashes.
         for line in reader.lines() {
@@ -337,14 +337,16 @@ impl MerkleTree {
         let tree = MerkleTree { root_index, num_leaves, nodes, hash_lookup };
         tree.verify_tree();
 
-        // make sure all hashes match fossil
-        assert!(&tree.get_root_hash() == fossil_hashes.last().unwrap());
-        for i in 0..fossil_hashes.len() {
-            let fossil_hash = fossil_hashes[i];
-            let tree_hash = tree.nodes[i+1].hash;
-            if fossil_hash != tree_hash {
-                println!("Warning: tree is valid but the hashes don't match those in the fossil file at position {}. That's very weird.", i);
-                break;
+        if full {
+            // make sure all hashes match fossil
+            assert!(&tree.get_root_hash() == fossil_hashes.last().unwrap());
+            for i in 0..fossil_hashes.len() {
+                let fossil_hash = fossil_hashes[i];
+                let tree_hash = tree.nodes[i+1].hash;
+                if fossil_hash != tree_hash {
+                    println!("Warning: tree is valid but the hashes don't match those in the fossil file at position {}. That's very weird.", i);
+                    break;
+                }
             }
         }
         tree
@@ -366,7 +368,20 @@ impl MerkleTree {
         let words  = header_lines[1].split_whitespace().collect::<Vec<&str>>();
         let num_leaves: NodeHandle = words[4].parse().expect("Unable to parse num_leaves from line 2 of file");
 
-        Self::new_from_tree_file_suffix(reader, num_leaves)
+        Self::new_from_tree_file_suffix(reader, num_leaves, true)
+    }
+
+    // builds tree from a file that simply lists the leaf hashes. Used for "blind" tree construction when user does not want to reveal the files that were hashed.
+    pub fn new_from_hashes(hashes_filepath: &str) -> Self {
+        let file = File::open(hashes_filepath).expect("couldn't open hashes file");
+        let mut reader = BufReader::new(file);
+
+        let mut first_line = "".to_string();
+        reader.read_line(&mut first_line).expect("Failed to read first line");
+        first_line.pop();
+        let num_leaves: usize = first_line.parse().expect("Failed to parse number of leaves");
+
+        Self::new_from_tree_file_suffix(reader, num_leaves, false)
     }
 
     pub fn display_state(nodes: &Vec<MerkleNode>) {
@@ -568,7 +583,7 @@ impl TimestampedMerkleTree {
         let words = header_lines[6].split_whitespace().collect::<Vec<&str>>();
         let _version: usize = words[3].parse().unwrap();
 
-        let tree = MerkleTree::new_from_tree_file_suffix(reader, num_leaves);
+        let tree = MerkleTree::new_from_tree_file_suffix(reader, num_leaves, true);
         tree.verify_tree();
         Self::new(tree, identifier, block_height, tx_hash, explain_hash)
     }
