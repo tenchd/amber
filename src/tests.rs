@@ -1,13 +1,15 @@
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, TimestampedMerkleTree, double_hash_from_file, parse_hash_from_str}
+    use std::{fs, io::Write};
+    use std::fs::File;
+    use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, TimestampedMerkleTree, double_hash, double_hash_from_file, parse_hash_from_str}
     };
     use hex_literal::hex;
     use hex_fmt::HexFmt;
     use config::Config;
     extern crate rand;
     use rand::{RngExt};
+    use base64::prelude::*;
 
 
     #[test]
@@ -295,5 +297,27 @@ mod tests {
         let tree_from_files = build_merkle_tree_from_directory("testing/small_corpus");
         assert!(tree_from_files.get_root_hash() == tree_from_hashes.get_root_hash());
         assert!(tree_from_files.num_leaves == tree_from_hashes.num_leaves);
+    }
+
+    #[test]
+    #[ignore]
+    fn time_hash_build() {
+        let lengths: Vec<usize> = vec![10,100,1000, 10000, 100000, 1000000];
+        for length in lengths {
+            let filename = format!("testing/hashes/{}_hashes.txt", length);
+
+            let mut file = File::create(&filename).expect("failed to create file");
+            file.write_all(format!("{}\n", length).as_bytes()).unwrap();
+            for i in 0..length {
+                let i_hash = double_hash(&i.to_be_bytes());
+                let line = format!("{}\n", BASE64_STANDARD.encode(i_hash));
+                file.write_all(line.as_bytes()).expect("Could not write line");
+            }
+
+            let now = std::time::Instant::now();
+            let _tree = MerkleTree::new_from_hashes(&filename);
+            let elapsed_time = now.elapsed();
+            println!("Building tree with {} leaves took {} ms.", length, elapsed_time.as_millis());
+        }
     }
 }
