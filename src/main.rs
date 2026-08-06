@@ -26,6 +26,9 @@ struct Args {
     build_tree_and_doc: bool,
 
     #[arg(short, long, default_value_t = false)]
+    hash_source: bool,
+
+    #[arg(short, long, default_value_t = false)]
     generate_timestamp: bool,
 
     #[arg(short, long, default_value_t = false)]
@@ -83,11 +86,18 @@ fn build_doc_and_tag_from_saved_tree(tree_filename: &str, corpus_name: &str, dat
     println!("Wrote tag to file {}", tag_filename);
 }
 
-fn build_timestamp(corpus_path: &str, tree_filename: &str, corpus_name: &str, date: &str, time: &str, locktime: usize, identifier: &str) {
-    let tree = build_merkle_tree_from_directory(corpus_path);
+fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, corpus_name: &str, date: &str, time: &str, locktime: usize, identifier: &str) {
+    let mut _tree = MerkleTree::new_empty();
+    if hashes_source {
+        println!("Building merkle tree from leaf hashes in {}", hashes_path);
+        _tree = MerkleTree::new_from_hashes(hashes_path);
+    }
+    else {
+        _tree = build_merkle_tree_from_directory(corpus_path);
+    }
     let tree_filename_unfinished = format!("{}_unfinished.txt",tree_filename);
-    println!("Merkle tree built. Root hash is {}", HexFmt(tree.get_root_hash()));
-    tree.write_unfinished_tree_to_file(&tree_filename_unfinished, date);
+    println!("Merkle tree built. Root hash is {}", HexFmt(_tree.get_root_hash()));
+    _tree.write_unfinished_tree_to_file(&tree_filename_unfinished, date);
     println!("wrote tree to file {}", tree_filename_unfinished);
 
     build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, corpus_name, date, time, locktime, identifier);
@@ -154,6 +164,7 @@ fn main() {
                     .build()
                     .unwrap();
     let corpus_path = settings.get_string("corpus_path").unwrap();
+    let hashes_path = settings.get_string("hashes_path").unwrap();
     let generated_tree_filename = "generated_timestamp/merkle.txt";
     let generated_explain_filename = "generated_timestamp/explain.txt";
     let provided_tree_filename = settings.get_string("provided_tree_path").unwrap();
@@ -170,7 +181,8 @@ fn main() {
         if args.file_to_verify != "".to_string() {
             println!("Ignoring verification request. Building tree+docs.")
         }
-        build_timestamp(&corpus_path, &generated_tree_filename, &corpus_name, &date, &time, locktime, &identifier);
+
+        build_timestamp(&corpus_path, &hashes_path, args.hash_source, &generated_tree_filename, &corpus_name, &date, &time, locktime, &identifier);
 
     }
     else if args.generate_timestamp {

@@ -384,6 +384,11 @@ impl MerkleTree {
         Self::new_from_tree_file_suffix(reader, num_leaves, false)
     }
 
+    pub fn new_empty() -> Self {
+        let hash_lookup = std::collections::HashMap::<[u8;32],usize>::new();
+        MerkleTree{root_index: 0, num_leaves: 1, nodes: vec![], hash_lookup: hash_lookup}
+    }
+
     pub fn display_state(nodes: &Vec<MerkleNode>) {
         println!("---Merkle Tree State:----");
         for node in nodes {
