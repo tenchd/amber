@@ -14,6 +14,7 @@ use crate::merkle::{double_hash_from_file, parse_hash_from_str};
 use crate::{
     merkle::{MerkleProof, MerkleTree, TimestampedMerkleTree}
 };
+use chrono::{DurationRound, TimeDelta, prelude::*};
 
 const AMBER_VERSION: usize = 1;
 const AMBER_VERSION_DATE: &str = "August 24, 2026";
@@ -68,14 +69,19 @@ fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
     //println!("{}", filepaths.first().unwrap());
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
 }
-fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, date: &str, time: &str, locktime: usize, identifier: &str){
+fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, utc_raw: DateTime<Utc>, locktime: usize, identifier: &str){
     println!("Reading merkle tree from file {}.", tree_filename);
     let unfossilized: MerkleTree = MerkleTree::new_from_unfinished_tree_file(tree_filename);
     println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
     unfossilized.verify_tree();
 
+
+    let utc = utc_raw.duration_round(TimeDelta::try_minutes(15).unwrap()).unwrap();
+    let date = format!("{}", utc.format("%B%e, %Y").to_string());
+    let time = format!("{}", utc.format("%H:%M").to_string());
+
     let document_filename = explain_filename;
-    crate::tag::write_document(document_filename, corpus_name, date, time, locktime, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash());
+    crate::tag::write_document(document_filename, corpus_name, utc_raw, &date, &time, locktime, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash());
     let document_hash = double_hash_from_file(document_filename);
     let tag = crate::tag::create_chain_tag(identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), document_hash);
     println!("Wrote explainer document to file {}", document_filename);
@@ -86,7 +92,7 @@ fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: &str
     println!("Wrote tag to file {}", tag_filename);
 }
 
-fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, date: &str, time: &str, locktime: usize, identifier: &str) {
+fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, locktime: usize, identifier: &str) {
     let mut _tree = MerkleTree::new_empty();
     if hashes_source {
         println!("Building merkle tree from leaf hashes in {}", hashes_path);
@@ -98,28 +104,57 @@ fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool, tr
     }
     let tree_filename_unfinished = format!("{}_unfinished.txt",tree_filename);
     println!("Merkle tree built. Root hash is {}", HexFmt(_tree.get_root_hash()));
-    _tree.write_unfinished_tree_to_file(&tree_filename_unfinished, date);
+
+    let utc_raw = Utc::now();
+    let utc = utc_raw.duration_round(TimeDelta::try_minutes(15).unwrap()).unwrap();
+    let date = format!("{}", utc.format("%B%e, %Y").to_string());
+    _tree.write_unfinished_tree_to_file(&tree_filename_unfinished, &date);
     println!("wrote tree to file {}", tree_filename_unfinished);
 
-    build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, explain_filename, tag_filename, corpus_name, date, time, locktime, identifier);
+    build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, explain_filename, tag_filename, corpus_name, utc_raw, locktime, identifier);
 }
 
-fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, block_height: usize, tx_hash: [u8; 32], date: &str) {
+fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, block_height: usize, tx_hash: [u8; 32]) {
     let unfinished_tree_file = format!("{}_unfinished.txt",generated_tree_filename);
     let unfinished_tree = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_file);
     let explain_hash = double_hash_from_file(generated_explain_filename);
-    let mut timestamped_tree = TimestampedMerkleTree::new(unfinished_tree, &identifier, block_height, tx_hash, explain_hash);
+    let mut timestamped_tree = TimestampedMerkleTree::new_without_time(unfinished_tree, &identifier, block_height, tx_hash, explain_hash);
     println!("verifying tree file at {}", unfinished_tree_file);
     let autoaccept = true;
     let result = timestamped_tree.verify_timestamp(generated_explain_filename, autoaccept);
     if result {
-        timestamped_tree.fossilize_tree(generated_tree_filename, &date, &corpus_name);
+        timestamped_tree.fossilize_tree(generated_tree_filename, &corpus_name);
 
         println!("Timestamp verified! Wrote the updated merkle tree file at {}. Deleting temporary untimestamped merkle tree file at {}", generated_tree_filename, unfinished_tree_file);
         std::fs::remove_file(unfinished_tree_file).unwrap();
     }
     if autoaccept{
         println!("WARNING: you set the autoaccept flag to true so we did not actually verify w.r.t. the blockchain. This was for testing purposes only.");
+    }
+}
+
+fn verify_tree(provided_tree_filename: &str, provided_explain_filename: &str) {
+    println!("Verifying timestamp in {}", provided_tree_filename);
+    let mut timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(&provided_tree_filename);
+    let autoaccept = false;
+    let result = timestamped_tree.verify_timestamp(&provided_explain_filename, autoaccept);
+    if !result {
+        println!("failed to verify");
+    }
+    else {
+        let chain_utc_timestamp = timestamped_tree.utc_timestamp;
+        let mut _explain_utc_timestamp = 0;
+        // special case: If we're verifying the PG timestamp, we will hardcode a utc timestamp because that explain file did not include one. Since any other timestamp was made with Amber version >0.1, we can rely on its explain.txt file to have a utc timestamp on the second line of the file.
+        let explain_hash = format!("{}", HexFmt(double_hash_from_file(&provided_explain_filename)));
+        let pg_explain_hash = "deb4859fb5f483d0251cbe9ebe9908e0591a53511311ee07b134354eac324e22";
+        if explain_hash == pg_explain_hash {
+            _explain_utc_timestamp = 1782492300;
+        }
+        else {
+            _explain_utc_timestamp = verify::get_explain_utc_timestamp(&provided_explain_filename);
+        }
+        let difference = chain_utc_timestamp - _explain_utc_timestamp;
+        println!("The estimated time listed in explain.txt and the exact timestamp recorded on the blockchain differ by {} seconds.", difference);
     }
 }
 
@@ -171,8 +206,6 @@ fn main() {
     let generated_tag_filename = "generated_timestamp/tag.txt";
     let provided_tree_filename = settings.get_string("provided_tree_path").unwrap();
     let provided_explain_filename = settings.get_string("provided_explain_path").unwrap();
-    let date = settings.get_string("date").unwrap();
-    let time = settings.get_string("time").unwrap();
     let locktime: usize = settings.get_string("locktime").unwrap().parse().expect("couldn't parse block lockout");
     let identifier = settings.get_string("identifier").unwrap();
     let corpus_name = settings.get_string("corpus_name").unwrap();
@@ -184,7 +217,7 @@ fn main() {
             println!("Ignoring verification request. Building tree+docs.")
         }
 
-        build_timestamp(&corpus_path, &hashes_path, args.hash_source, &generated_tree_filename, &generated_explain_filename, &generated_tag_filename, &corpus_name, &date, &time, locktime, &identifier);
+        build_timestamp(&corpus_path, &hashes_path, args.hash_source, &generated_tree_filename, &generated_explain_filename, &generated_tag_filename, &corpus_name, locktime, &identifier);
 
     }
     else if args.generate_timestamp {
@@ -195,17 +228,12 @@ fn main() {
         let tx_hash_string = settings.get_string("tx_hash").unwrap();
         let tx_hash = parse_hash_from_str(&tx_hash_string);
         // need to read in unfinished merkle file, build a timestamped merkle file from it, verify the timestamp on the chain, then write to the timestamped tree to file.
-        finalize_timestamp(generated_tree_filename, generated_explain_filename, &corpus_name, &identifier, block_height, tx_hash, &date);
+        
+        finalize_timestamp(generated_tree_filename, generated_explain_filename, &corpus_name, &identifier, block_height, tx_hash);
 
     }
     else if args.verify_timestamp {
-        println!("Verifying timestamp in {}", provided_tree_filename);
-        let mut timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(&provided_tree_filename);
-        let autoaccept = false;
-        let result = timestamped_tree.verify_timestamp(&provided_explain_filename, autoaccept);
-        if !result {
-            println!("failed to verify");
-        }
+        verify_tree(&provided_tree_filename, &provided_explain_filename);
     }
     else if args.file_to_verify != "".to_string() {
         let filepath = args.file_to_verify;

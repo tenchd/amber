@@ -3,6 +3,7 @@
 # Root hash written to Bitcoin blockchain along with identifier PGMERKLE
 # Block height: 955522
 # Tx hash: b82b914e29fb08e65e49156231b68c38c3bcb246f6a7d8ec22477478a9f1b832
+# Transaction timestamp(UTC): 1782492263
 # Explain.txt hash: deb4859fb5f483d0251cbe9ebe9908e0591a53511311ee07b134354eac324e22
 # Amber version: 0
 # Each line below is the hash (in base64) of a merkle node. Tree is binary. Each parent hash is the double SHA256 hash of the concatenation of its two child hashes. If the parent has only one child, its hash is the double SHA256 hash of the child hash concatenated with itself. Final line of file is root hash.

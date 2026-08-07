@@ -1,4 +1,5 @@
-This document was produced with Amber version ${version} released on ${version_date}.
+This document was produced with Amber version ${version} released on ${version_date}. The following line is the time when this document was generated, in seconds since UTC epoch:
+${utc_timestamp}
 
 You are reading the canonical explanatory document for a secure timestamp of the ${corpus_name} corpus. This secure timestamp is a digital artifact that can be used to prove with a high degree of certainty that texts from the ${corpus_name} corpus existed on ${date} at roughly ${time}. This may be valuable in the future if new, hard-to-detect methods of altering or forging documents are invented, because the existence of such methods would cast doubt on the authenticity of genuine digital texts. For that reason, please preserve this document and the other components of the secure timestamp, as well as the corpus itself, without altering their contents! The creators of this timestamp wish for it to survive for as long as possible, to ensure that future generations have access to provably unaltered records of the past.
 

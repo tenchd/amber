@@ -564,14 +564,20 @@ pub struct TimestampedMerkleTree {
     pub block_height: usize,
     pub tx_hash: [u8; 32],
     pub explain_hash: [u8; 32],
+    pub utc_timestamp: i64,
     verified_timestamp: bool,
 }
 
 #[allow(dead_code)]
 impl TimestampedMerkleTree {
     // read a merkle tree from a file. 
-    pub fn new(tree: MerkleTree, identifier: &str, block_height: usize, tx_hash: [u8; 32], explain_hash: [u8; 32]) -> TimestampedMerkleTree {
-        TimestampedMerkleTree { tree, identifier: identifier.to_string(), block_height, tx_hash, explain_hash, verified_timestamp: false }
+    pub fn new(tree: MerkleTree, identifier: &str, utc_raw: i64, block_height: usize, tx_hash: [u8; 32], explain_hash: [u8; 32]) -> TimestampedMerkleTree {
+        TimestampedMerkleTree { tree, identifier: identifier.to_string(), block_height, tx_hash, explain_hash, utc_timestamp: utc_raw, verified_timestamp: false }
+    }
+
+    pub fn new_without_time(tree: MerkleTree, identifier: &str, block_height: usize, tx_hash: [u8; 32], explain_hash: [u8; 32]) -> TimestampedMerkleTree {
+        let utc_raw = chrono::Utc::now();
+        TimestampedMerkleTree::new(tree, identifier, utc_raw.timestamp(), block_height, tx_hash, explain_hash)
     }
 
     pub fn new_from_fossilized_tree(fossil_filepath: &str) -> TimestampedMerkleTree {
@@ -579,8 +585,8 @@ impl TimestampedMerkleTree {
         let mut reader = BufReader::new(file);
 
         // need to read first few header lines!
-        let mut header_lines: Vec<String> = vec!["".to_string(); 8];
-        for i in 0..8 {
+        let mut header_lines: Vec<String> = vec!["".to_string(); 9];
+        for i in 0..9 {
             reader.read_line(&mut header_lines[i]).expect("Failed to read line");
         }
 
@@ -594,18 +600,20 @@ impl TimestampedMerkleTree {
         let tx_hash_string = words[3];
         let tx_hash = parse_hash_from_str(tx_hash_string);
         let words = header_lines[5].split_whitespace().collect::<Vec<&str>>();
+        let utc_timestamp: i64 = words[3].parse().expect("Unable to parse utc timestamp from line 5 of file");
+        let words = header_lines[6].split_whitespace().collect::<Vec<&str>>();
         let explain_hash_string = words[3];
         let explain_hash = parse_hash_from_str(explain_hash_string);
-        let words = header_lines[6].split_whitespace().collect::<Vec<&str>>();
+        let words = header_lines[7].split_whitespace().collect::<Vec<&str>>();
         let _version: usize = words[3].parse().unwrap();
 
         let tree = MerkleTree::new_from_tree_file_suffix(reader, num_leaves, true);
         tree.verify_tree();
-        Self::new(tree, identifier, block_height, tx_hash, explain_hash)
+        Self::new(tree, identifier, utc_timestamp, block_height, tx_hash, explain_hash) //note for tomorrow: read utctimestamp from fossil file and then add it to this call
     }
 
-    pub fn is_verified(&self) {
-        self.verified_timestamp;
+    pub fn is_verified(&self) -> bool {
+        self.verified_timestamp
     }
 
     pub fn verify_timestamp(&mut self, explain_filepath: &str, autoaccept: bool) -> bool {
@@ -621,25 +629,43 @@ impl TimestampedMerkleTree {
         }
 
         let result = crate::verify::verify_tree_timestamp(&self.identifier, &self.tree, self.explain_hash, self.tx_hash);
-        if !result{
-            // println!("Failed to verify the timestamp on the blockchain. Deleting timestamped merkle tree file. {}", tree_filename);
-            // std::fs::remove_file(tag_tree_filename).unwrap();
-            println!("Failed to verify the timestamp on the blockchain.");
+        match result {
+            Some(timestamp_details) => {
+                if self.block_height != timestamp_details.block_height {
+                    println!("WARNING: the block height in the fossil file does not match the true block height of the transaction containing the timestamp. The fossil file says the block height is {}, but the true block height is {}", self.block_height, timestamp_details.block_height);
+                }
+                self.utc_timestamp = timestamp_details.timestamp;
+                //println!("Observed block height {} and timestamp {}", self.block_height, self.utc_timestamp);
+                self.verified_timestamp = true;
+                return true;
+            }
+            _ => {
+                println!("Failed to verify the timestamp on the blockchain.");
+                return false;
+            }
         }
-        else {
-            self.verified_timestamp = true;
-        }
-        result
+        
     }
 
     // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
-    pub fn fossilize_tree(&self, tree_filename: &str, date: &str, corpus_name: &str) {
+    pub fn fossilize_tree(&self, tree_filename: &str, corpus_name: &str) {
+        if !(self.is_verified()) {
+            println!("!!!!!!!!!!");
+            println!("WARNING: You are fossilizing an unverified timestamped merkle tree. You should only be doing this as a test. There is no guarantee that the resulting fossil file will verify on the blockchain.");
+            println!("!!!!!!!!!!");
+        }
         let merkle_template_filepath = "fixed_templates/merkle_template.txt";
         let template_string = read_to_string(merkle_template_filepath).unwrap();
         let template = Template::from(template_string.as_str());
 
+        let utc = chrono::DateTime::from_timestamp(self.utc_timestamp, 0).unwrap();
+        let date = format!("{}", utc.format("%B%e, %Y").to_string());
+
+        let utc_string = self.utc_timestamp.to_string();
+
         let mut values: HashMap<&str, &str> = HashMap::new();
-        values.insert("date",date);
+        values.insert("chain_utc_timestamp", &utc_string);
+        values.insert("date",&date);
         let num_leaves_string = format!("{}", self.tree.num_leaves);
         values.insert("num_leaves", &num_leaves_string);
         values.insert("identifier", &self.identifier);
