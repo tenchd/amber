@@ -7,4 +7,5 @@
 # explain.txt hash: ${explain_hash}
 # block_height: ${block_height}
 # tx_hash: ${tx_hash}
+# utc_timestamp: ${chain_utc_timestamp}
 # produced with Amber version: ${version}

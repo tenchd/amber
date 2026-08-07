@@ -101,7 +101,22 @@ pub fn verify_proof_timestamp(proof: &MerkleProof) -> bool {
 
     let result = verify_tag(expected_tag, proof.tx_hash);
     match result {
-        Some(_t) => return true,
+        Some(details) => {
+            let chain_timestamp = details.timestamp;
+            let expected_timestamp = proof.utc_timestamp;
+            if chain_timestamp == expected_timestamp {
+                let chain_block_height = details.block_height;
+                let expected_block_height = proof.block_height;
+                if chain_block_height != expected_block_height {
+                    println!("WARNING: block height {} listed in proof file doesn't match the actual block height {} on the blockchain.", expected_block_height, chain_block_height);
+                }
+                return true;
+            }   
+            else {
+                println!("Timestamp in proof file {} does not match true (blockchain) timestamp {}.", expected_timestamp, chain_timestamp);
+                return false;
+            }
+        }
         _ => return false,
     }
 }

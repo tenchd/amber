@@ -2,7 +2,7 @@
 mod tests {
     use std::{fs, io::Write};
     use std::fs::File;
-    use crate::verify;
+use crate::verify;
 use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, TimestampedMerkleTree, double_hash, double_hash_from_file, parse_hash_from_str}
     };
     use hex_literal::hex;
@@ -277,14 +277,18 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
         println!("------------");
         println!("now create a few proof files, and verify them on the chain as well.");
         
-        for _ in 1..4 {
+        for _i in 1..4 {
             let index = rand::rng().random_range(0..timestamped_tree.tree.num_leaves);
+            println!("Testing proof for leaf with index {}", index);
             let starting_hash = timestamped_tree.tree.nodes[index].hash;
             let proof = timestamped_tree.produce_proof(index);
             let result = proof.verify_proof(starting_hash);
             assert!(result);
+            let chain_result = verify::verify_proof_timestamp(&proof);
+            assert!(chain_result);
         }
 
+        println!("Testing proof generated from corpus file");
         let text_to_verify = "testing/pg996.txt";
         let proof = timestamped_tree.produce_proof_from_file(text_to_verify);
         let result = proof.verify_proof_for_file(text_to_verify, autoaccept);

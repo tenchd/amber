@@ -113,6 +113,7 @@ pub struct MerkleProof {
     pub num_leaves: NodeHandle,
     pub explain_hash: [u8; 32],
     pub block_height: usize,
+    pub utc_timestamp: i64,
     pub tx_hash: [u8; 32],
 }
 
@@ -125,8 +126,8 @@ impl MerkleProof {
         let file = File::open(proof_filepath).expect("couldn't open proof file");
         let mut reader = BufReader::new(file);
 
-        let mut header_lines: Vec<String> = vec!["".to_string(); 10];
-        for i in 0..10 {
+        let mut header_lines: Vec<String> = vec!["".to_string(); 11];
+        for i in 0..11 {
             reader.read_line(&mut header_lines[i]).expect("Failed to read line");
         }
 
@@ -145,7 +146,10 @@ impl MerkleProof {
         let words  = header_lines[8].split_whitespace().collect::<Vec<&str>>();
         let tx_hash = parse_hash_from_str(words[2]);
 
-        let words = header_lines[9].split_whitespace().collect::<Vec<&str>>();
+        let words  = header_lines[9].split_whitespace().collect::<Vec<&str>>();
+        let utc_timestamp: i64 = words[2].parse().expect("Could not parse block height as usize");
+
+        let words = header_lines[10].split_whitespace().collect::<Vec<&str>>();
         let _version: usize = words[5].parse().unwrap();
 
 
@@ -166,7 +170,7 @@ impl MerkleProof {
             proof_directions.push(direction);
         }
 
-        MerkleProof { root_hash: root_hash_bytes, proof_hashes, proof_directions, identifier: identifier.to_string(), num_leaves, explain_hash, block_height, tx_hash }
+        MerkleProof { root_hash: root_hash_bytes, proof_hashes, proof_directions, identifier: identifier.to_string(), num_leaves, explain_hash, block_height, utc_timestamp, tx_hash }
     }
 
     // 
@@ -193,6 +197,8 @@ impl MerkleProof {
         values.insert("corpus_name", corpus_name);
         let version_string = &AMBER_VERSION.to_string();
         values.insert("version", version_string);
+        let utc_timestamp_string = self.utc_timestamp.to_string();
+        values.insert("chain_utc_timestamp", &utc_timestamp_string);
 
         let text = template.try_fill_in(&values).unwrap().to_string();
 
@@ -715,7 +721,7 @@ impl TimestampedMerkleTree {
         }
 
         let root_hash = self.tree.get_root_hash();
-        MerkleProof { root_hash, proof_hashes, proof_directions, identifier: self.identifier.clone(), num_leaves: self.tree.num_leaves, explain_hash: self.explain_hash, block_height: self.block_height, tx_hash: self.tx_hash}
+        MerkleProof { root_hash, proof_hashes, proof_directions, identifier: self.identifier.clone(), num_leaves: self.tree.num_leaves, explain_hash: self.explain_hash, block_height: self.block_height, utc_timestamp: self. utc_timestamp, tx_hash: self.tx_hash}
     }
 
     pub fn produce_proof_from_file(&self, filepath: &str) -> MerkleProof {

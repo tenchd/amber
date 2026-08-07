@@ -177,7 +177,12 @@ fn verify_proof(filepath: &str, proof_file: &str) {
     let proof = MerkleProof::new_from_file(proof_file);
     let result = proof.verify_proof_for_file(filepath, false);
     if result {
-        println!("File {} was verified by proof file {} for root hash {}.", filepath, proof_file, HexFmt(proof.root_hash));
+        println!("File {} was verified by proof file {} via the Bitcoin blockchain.\nIts Merkle root hash {} appears in the Bitcoin transaction identified by tx hash {}.", filepath, proof_file, HexFmt(proof.root_hash), HexFmt(proof.tx_hash));
+
+        let utc = chrono::DateTime::from_timestamp(proof.utc_timestamp, 0).unwrap();
+        let date = format!("{}", utc.format("%B %e, %Y").to_string());
+        let time = format!("{}", utc.format("%H:%M").to_string());
+        println!("This proves that {} existed on {} at {}.", filepath, date, time);
     }
     else {
         println!("File {} failed to verify for proof file {}. It does NOT certify any timestamp for the file.", filepath, proof_file);
