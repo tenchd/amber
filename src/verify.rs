@@ -14,7 +14,6 @@ use bitcoin::{
     consensus::encode::deserialize
 };
 use serde_json::Value;
-use chrono::{DateTime, Utc};
 use std::io::BufRead;
 
 pub struct TimestampBlockchainDetails {
@@ -32,7 +31,7 @@ fn compute_tag(identifier: &str, num_leaves: u32, root_hash: [u8; 32], explain_h
 fn verify_tag(expected_tag: Vec<u8>, tx_hash: [u8; 32]) -> Option<TimestampBlockchainDetails> {
     let tx_hash_string = format!("{}", HexFmt(tx_hash));
 
-    println!("Looking up transaction with hash {} on Bitcoin blockchain. It should have an OP_RETURN output with the tag in the data payload.", tx_hash_string);
+    println!("Looking up transaction with hash {} on Bitcoin blockchain. It should have an OP_RETURN output with the timestamp's tag in the data payload.", tx_hash_string);
 
     let json_url = format!("https://blockchain.info/rawtx/{}", tx_hash_string);
     let json_response = get(json_url).unwrap();
@@ -47,8 +46,7 @@ fn verify_tag(expected_tag: Vec<u8>, tx_hash: [u8; 32]) -> Option<TimestampBlock
     let block = &b["blocks"][0];
     let time = block["time"].as_i64().unwrap();
 
-    //let datetime: DateTime<Utc> = DateTime::from_utc(NaiveDateTime::from_timestamp(time, 0), Utc);
-    let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(DateTime::from_timestamp(time, 0).unwrap().naive_utc(), Utc);
+    //let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(DateTime::from_timestamp(time, 0).unwrap().naive_utc(), Utc);
 
     let hex_url = format!("https://blockchain.info/rawtx/{}?format=hex", tx_hash_string);
     let response = get(hex_url).unwrap();
@@ -66,9 +64,9 @@ fn verify_tag(expected_tag: Vec<u8>, tx_hash: [u8; 32]) -> Option<TimestampBlock
                         Ok(Instruction::PushBytes(data)) => {
                             //println!("Payload: {}", HexFmt(data.?format=hexas_bytes()));
                             if data.as_bytes() == expected_tag {
-                                println!("Success! The transaction was found in block {} and contains the tag in its OP_RETURN data payload.", block_height);
-                                println!("You have verified that the provided timestamp was written to the Bitcoin blockchain at date/time {}", datetime);
-                                println!("This block height and date/time should roughly match those in explain.txt.");
+                                //println!("Success! The transaction was found in block {} and contains the tag in its OP_RETURN data payload.", block_height);
+                                //println!("You have verified that the provided timestamp was written to the Bitcoin blockchain at date/time {}", datetime);
+                                //println!("This block height and date/time should roughly match those in explain.txt.");
                                 return Some(TimestampBlockchainDetails{block_height: block_height, timestamp: time});
                             }
                         }
@@ -85,17 +83,17 @@ fn verify_tag(expected_tag: Vec<u8>, tx_hash: [u8; 32]) -> Option<TimestampBlock
 } 
 
 pub fn verify_tree_timestamp(identifier: &str, tree: &MerkleTree, explain_hash: [u8; 32], tx_hash: [u8; 32]) -> Option<TimestampBlockchainDetails> {
-    println!("Computing tag based on provided identifier, merkle tree, and explain file.");
+    //println!("Computing tag based on provided identifier, merkle tree, and explain file.");
     let num_leaves: u32 = tree.num_leaves.try_into().unwrap();
     let root_hash = tree.get_root_hash();
     let expected_tag = compute_tag(identifier, num_leaves, root_hash, explain_hash);
-    println!("The tag should be {}", HexFmt(&expected_tag));
+    //println!("The tag should be {}", HexFmt(&expected_tag));
 
     verify_tag(expected_tag, tx_hash)
 }
 
 pub fn verify_proof_timestamp(proof: &MerkleProof) -> bool {
-    println!("Computing tag based on provided identifier, merkle tree, and explain file.");
+    //println!("Computing tag based on provided identifier, merkle tree, and explain file.");
     let expected_tag = compute_tag(&proof.identifier, proof.num_leaves.try_into().unwrap(), proof.root_hash, proof.explain_hash);
     println!("The tag should be {}", HexFmt(&expected_tag));
 

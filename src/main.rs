@@ -16,7 +16,7 @@ use crate::{
 };
 use chrono::{DurationRound, TimeDelta, prelude::*};
 
-const AMBER_VERSION: usize = 1;
+const AMBER_VERSION: &str = "0.1.0";
 const AMBER_VERSION_DATE: &str = "August 24, 2026";
 
 // command line parsing
@@ -114,11 +114,11 @@ fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool, tr
     build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, explain_filename, tag_filename, corpus_name, utc_raw, locktime, identifier);
 }
 
-fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, block_height: usize, tx_hash: [u8; 32]) {
+fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) {
     let unfinished_tree_file = format!("{}_unfinished.txt",generated_tree_filename);
     let unfinished_tree = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_file);
     let explain_hash = double_hash_from_file(generated_explain_filename);
-    let mut timestamped_tree = TimestampedMerkleTree::new_without_time(unfinished_tree, &identifier, block_height, tx_hash, explain_hash);
+    let mut timestamped_tree = TimestampedMerkleTree::new_without_time(unfinished_tree, &identifier, tx_hash, explain_hash);
     println!("verifying tree file at {}", unfinished_tree_file);
     let autoaccept = true;
     let result = timestamped_tree.verify_timestamp(generated_explain_filename, autoaccept);
@@ -229,12 +229,11 @@ fn main() {
         if args.file_to_verify != "".to_string() {
             println!("Ignoring verification request. Building timestamp.");
         }
-        let block_height: usize = settings.get_string("block_height").unwrap().parse().unwrap();
         let tx_hash_string = settings.get_string("tx_hash").unwrap();
         let tx_hash = parse_hash_from_str(&tx_hash_string);
         // need to read in unfinished merkle file, build a timestamped merkle file from it, verify the timestamp on the chain, then write to the timestamped tree to file.
         
-        finalize_timestamp(generated_tree_filename, generated_explain_filename, &corpus_name, &identifier, block_height, tx_hash);
+        finalize_timestamp(generated_tree_filename, generated_explain_filename, &corpus_name, &identifier, tx_hash);
 
     }
     else if args.verify_timestamp {

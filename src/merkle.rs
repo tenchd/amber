@@ -150,7 +150,7 @@ impl MerkleProof {
         let utc_timestamp: i64 = words[2].parse().expect("Could not parse block height as usize");
 
         let words = header_lines[10].split_whitespace().collect::<Vec<&str>>();
-        let _version: usize = words[5].parse().unwrap();
+        let _version: &str = words[5];
 
 
         let mut root_hash_line: String = "".to_string();
@@ -581,8 +581,9 @@ impl TimestampedMerkleTree {
         TimestampedMerkleTree { tree, identifier: identifier.to_string(), block_height, tx_hash, explain_hash, utc_timestamp: utc_raw, verified_timestamp: false }
     }
 
-    pub fn new_without_time(tree: MerkleTree, identifier: &str, block_height: usize, tx_hash: [u8; 32], explain_hash: [u8; 32]) -> TimestampedMerkleTree {
+    pub fn new_without_time(tree: MerkleTree, identifier: &str, tx_hash: [u8; 32], explain_hash: [u8; 32]) -> TimestampedMerkleTree {
         let utc_raw = chrono::Utc::now();
+        let block_height = 0;
         TimestampedMerkleTree::new(tree, identifier, utc_raw.timestamp(), block_height, tx_hash, explain_hash)
     }
 
@@ -611,7 +612,7 @@ impl TimestampedMerkleTree {
         let explain_hash_string = words[3];
         let explain_hash = parse_hash_from_str(explain_hash_string);
         let words = header_lines[7].split_whitespace().collect::<Vec<&str>>();
-        let _version: usize = words[3].parse().unwrap();
+        let _version: &str = words[3];
 
         let tree = MerkleTree::new_from_tree_file_suffix(reader, num_leaves, true);
         tree.verify_tree();
@@ -637,12 +638,18 @@ impl TimestampedMerkleTree {
         let result = crate::verify::verify_tree_timestamp(&self.identifier, &self.tree, self.explain_hash, self.tx_hash);
         match result {
             Some(timestamp_details) => {
-                if self.block_height != timestamp_details.block_height {
+                if self.block_height == 0 {
+                    self.block_height = timestamp_details.block_height;
+                }
+                else if self.block_height != timestamp_details.block_height {
                     println!("WARNING: the block height in the fossil file does not match the true block height of the transaction containing the timestamp. The fossil file says the block height is {}, but the true block height is {}", self.block_height, timestamp_details.block_height);
                 }
                 self.utc_timestamp = timestamp_details.timestamp;
-                //println!("Observed block height {} and timestamp {}", self.block_height, self.utc_timestamp);
                 self.verified_timestamp = true;
+                let utc = chrono::DateTime::from_timestamp(timestamp_details.timestamp, 0).unwrap();
+                let date = format!("{}", utc.format("%B %e, %Y").to_string());
+                let time = format!("{}", utc.format("%H:%M").to_string());
+                println!("Timestamp has been verified on the blockchain. Transaction found in block {} on {} at {}", timestamp_details.block_height, date, time);
                 return true;
             }
             _ => {

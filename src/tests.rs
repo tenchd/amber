@@ -65,11 +65,10 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
         let merkle_tree = MerkleTree::new_from_data(data.clone());
         merkle_tree.verify_tree();
         let dummy_identifier = "TESTMRKL";
-        let dummy_block_height = 10;
         let dummy_tx_hash_string = "b82b914e29fb08e65e49156231b68c38c3bcb246f6a7d8ec22477478a9f1b832";
         let dummy_tx_hash = parse_hash_from_str(dummy_tx_hash_string);
         let dummy_explain_hash = [0_u8; 32];
-        let timestamped_tree = TimestampedMerkleTree::new_without_time(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash, dummy_explain_hash);
+        let timestamped_tree = TimestampedMerkleTree::new_without_time(merkle_tree, dummy_identifier, dummy_tx_hash, dummy_explain_hash);
         let autoaccept = true;
 
         for (i, d) in data.iter().enumerate() {
@@ -100,10 +99,9 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
             }
 
             let dummy_identifier = "TESTMRKL";
-            let dummy_block_height = 10;
             let dummy_tx_hash = [0_u8; 32];
             let dummy_explain_hash = [0_u8; 32];
-            let timestamped_tree = TimestampedMerkleTree::new_without_time(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash, dummy_explain_hash);
+            let timestamped_tree = TimestampedMerkleTree::new_without_time(merkle_tree, dummy_identifier, dummy_tx_hash, dummy_explain_hash);
             let autoaccept = true;
 
             for (i, d) in data_refs.iter().enumerate() {
@@ -125,10 +123,9 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
         assert!(merkle_tree.verify_from_file("testing/small_corpus/another_subdirectory/example_doc.docx"), "tree should say yes to amber.jpg");
 
         let dummy_identifier = "TESTMRKL";
-        let dummy_block_height = 10;
         let dummy_tx_hash = [0_u8; 32];
         let dummy_explain_hash = [0_u8; 32];
-        let timestamped_tree = TimestampedMerkleTree::new_without_time(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash, dummy_explain_hash);
+        let timestamped_tree = TimestampedMerkleTree::new_without_time(merkle_tree, dummy_identifier, dummy_tx_hash, dummy_explain_hash);
         let autoaccept = true;
 
         let proof = timestamped_tree.produce_proof(1);
@@ -166,12 +163,11 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
         fs::remove_file(test_filename).unwrap();
 
         let dummy_identifier = "FAKEMRKL";
-        let block_height = 10;
         let dummy_tx_hash = [0_u8; 32];
         let dummy_explain_hash = [0_u8; 32];
         let corpus_name = "test_corpus";
 
-        let timestamped_tree = TimestampedMerkleTree::new_without_time(merkle_tree, dummy_identifier, block_height, dummy_tx_hash, dummy_explain_hash);
+        let timestamped_tree = TimestampedMerkleTree::new_without_time(merkle_tree, dummy_identifier, dummy_tx_hash, dummy_explain_hash);
         timestamped_tree.fossilize_tree(test_filename, corpus_name);
         let unfossilized_timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(test_filename);
         assert!(unfossilized_timestamped_tree.tree.get_root_hash() == timestamped_tree.tree.get_root_hash());
@@ -189,11 +185,10 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
         let temp_proof_filename = "testing/temp_proof.txt";
 
         let dummy_identifier = "TESTMRKL";
-        let dummy_block_height = 10;
         let dummy_tx_hash = [0_u8; 32];
         let dummy_explain_hash = [0_u8; 32];
         let dummy_corpus_name = "test_corpus";
-        let timestamped_tree = TimestampedMerkleTree::new_without_time(merkle_tree, dummy_identifier, dummy_block_height, dummy_tx_hash, dummy_explain_hash);
+        let timestamped_tree = TimestampedMerkleTree::new_without_time(merkle_tree, dummy_identifier, dummy_tx_hash, dummy_explain_hash);
 
         for i in 0..timestamped_tree.tree.num_leaves {
             let proof = timestamped_tree.produce_proof(i+1);
