@@ -374,4 +374,12 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
         let time = format!("{}", utc.format("%H:%M").to_string());
         println!("{}", time);
     }
+
+    #[test]
+    #[ignore]
+    fn csv_builder(){
+        let input_filepath = "/media/devd/NVME11/kaggle_datasets/genius/song_lyrics.csv";
+        let output_filepath = "/media/devd/NVME11/kaggle_datasets/genius/leaf_hashes.txt";
+        crate::dataset::csv_to_leaf_hashes(input_filepath, output_filepath);
+    }
 }

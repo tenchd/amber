@@ -3,6 +3,7 @@ mod merkle;
 mod tag;
 mod tests;
 mod verify;
+mod dataset;
 
 use hex_fmt::HexFmt;
 use std::fs::File;
@@ -77,7 +78,7 @@ fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: &str
 
 
     let utc = utc_raw.duration_round(TimeDelta::try_minutes(15).unwrap()).unwrap();
-    let date = format!("{}", utc.format("%B%e, %Y").to_string());
+    let date = format!("{}", utc.format("%B %e, %Y").to_string());
     let time = format!("{}", utc.format("%H:%M").to_string());
 
     let document_filename = explain_filename;
