@@ -93,7 +93,9 @@ My recommendation is to follow these directions once without writing anything to
 With those warnings out of the way, here is how to produce the timestamp:
 
 ### First Step: Generating the Merkle Tree and Explain.txt
-1. Edit `editable_templates/corpus_description.txt` so that it contains a short description of the corpus you are timestamping. I recommend you address what files are included in the corpus and where they come from.
+1. Edit `editable_templates/corpus_description.txt` so that it contains a short description of the corpus you are timestamping. I recommend you address
+    i. the source(s) of the texts in the corpus
+    ii.  the structure of the corpus. Is each text represented as its own file? If so, what formats are those files in? If not, how are texts represented (e.g., a text is a line of a csv file)? 
 2. Edit `editable_templates/corpus_motivation.txt` so that it contains a short description of your motivation for timestamping the corpus. Why do you feel it might be valuable to preserve?
 3. Edit `editable_templates/user_description.txt` so that it contains a short description of you, the person or organization creating the timestamp.
 4. Determine the current height of the Bitcoin blockchain in blocks. (You can do this by visiting https://findtheblock.com/tools/latest-blocks and noting the current chain height.)

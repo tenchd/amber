@@ -378,8 +378,10 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
     #[test]
     #[ignore]
     fn csv_builder(){
-        let input_filepath = "/media/devd/NVME11/kaggle_datasets/genius/song_lyrics.csv";
-        let output_filepath = "/media/devd/NVME11/kaggle_datasets/genius/leaf_hashes.txt";
-        crate::dataset::csv_to_leaf_hashes(input_filepath, output_filepath);
+        let input_filepaths = vec!["/media/devd/NVME11/kaggle_datasets/prachathai/prachatai_test.csv", 
+                                    "/media/devd/NVME11/kaggle_datasets/prachathai/prachatai_train.csv",
+                                    "/media/devd/NVME11/kaggle_datasets/prachathai/prachatai_validation.csv"];
+        let output_filepath = "/media/devd/NVME11/kaggle_datasets/prachathai/leaf_hashes.txt";
+        crate::dataset::csv_to_leaf_hashes(input_filepaths, output_filepath);
     }
 }
