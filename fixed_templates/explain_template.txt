@@ -53,7 +53,7 @@ Moreover, a timestamp rules out methods for altering documents that were develop
 5. Quick Start: Validating and Using the Timestamp via Amber
 On ${version_date}, Amber version ${version} is available at https://github.com/tenchd/amber/. Amber can be used to automatically read this document and the accompanying Merkle tree file, verify the timestamp on the blockchain, and use the Merkle tree to verify files from the ${corpus_name} corpus. Later Amber versions should also be backwards-compatible with this timestamp.
 
-After enough time, the linked repository may not be available or trustworthy - Github may delete the repository, someone else may steal the account and make arbitrary changes to the code, etc. To establish authenticity of the code, all official Amber releases will be signed  with the SLH-DSA (SPHINCS+) private key associated with the following public key:
+After enough time, the linked repository may not be available or trustworthy - Github may delete the repository, someone else may steal the account and make arbitrary changes to the code, etc. To establish authenticity of the code, all official Amber releases will be signed with the SLH-DSA (SPHINCS+) private key associated with the following public key:
 -----BEGIN PUBLIC KEY-----
 MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEkKd9MtgRWeRMPINgkltgeYMt4gNx0FkV
 L5wrmANlUTWSLJORZs/0hZrsTrhA7r17cPNv4WGWBEAehX70EPnzdw==

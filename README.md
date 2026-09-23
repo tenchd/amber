@@ -93,11 +93,12 @@ My recommendation is to follow these directions once without writing anything to
 With those warnings out of the way, here is how to produce the timestamp:
 
 ### First Step: Generating the Merkle Tree and Explain.txt
+First, you must write some information about the corpus you're timestamping as well as your identity. This information will be automatically incorporated into explain.txt, the text document that explains what the timestamp is and how to use it.
 1. Edit `editable_templates/corpus_description.txt` so that it contains a short description of the corpus you are timestamping. I recommend you address
     i. the source(s) of the texts in the corpus
     ii.  the structure of the corpus. Is each text represented as its own file? If so, what formats are those files in? If not, how are texts represented (e.g., a text is a line of a csv file)? 
 2. Edit `editable_templates/corpus_motivation.txt` so that it contains a short description of your motivation for timestamping the corpus. Why do you feel it might be valuable to preserve?
-3. Edit `editable_templates/user_description.txt` so that it contains a short description of you, the person or organization creating the timestamp.
+3. Edit `editable_templates/user_description.txt` so that it contains a short description of you, the person or organization creating the timestamp. If you like, you can use this field to establish your identity cryptographically, for example by including your public key using it to sign a short message containing your name, the merkle tree root hash, the corpus name, and the date. If you do this, I recommend using a post-quantum signing algorithm such as SLH-DSA. Since SLH-DSA produces somewhat large (~17KB) signatures, consider providing the signed message in a separate file instead of inserting it here.
 4. Determine the current height of the Bitcoin blockchain in blocks. (You can do this by visiting https://findtheblock.com/tools/latest-blocks and noting the current chain height.)
 5. Set the following variables in config.toml:
 `corpus_path`: set to the top-level directory containing the corpus you wish to timestamp. Note that the code will search the directory recursively and include every non-directory file in the Merkle tree.
