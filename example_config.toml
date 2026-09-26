@@ -2,11 +2,7 @@
 corpus_path="/path/to/corpus"
 hashes_path="/path/to/hashes/file"
 corpus_name="your_corpus_name"
-private_key_path = "path/to/private/key"
-public_key_path = "path/to/public/key"
 # finalizing new timestamp
-date ="fill_in_date"
-time="fill_in_time"
 locktime=0
 identifier="PGMERKLE"
 tx_hash="0000000000000000000000000000000000000000000000000000000000000000"

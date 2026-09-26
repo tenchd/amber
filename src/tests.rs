@@ -381,8 +381,8 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
         // let input_filepaths = vec!["/media/devd/NVME11/kaggle_datasets/prachathai/prachatai_test.csv", 
         //                             "/media/devd/NVME11/kaggle_datasets/prachathai/prachatai_train.csv",
         //                             "/media/devd/NVME11/kaggle_datasets/prachathai/prachatai_validation.csv"];
-        let input_filepath = "/media/devd/NVME11/kaggle_datasets/dutch_newspaper/dutch-news-articles.csv";
-        let output_filepath = "/media/devd/NVME11/kaggle_datasets/newspapers_main/nos_netherlands/data";
+        let input_filepath = "/media/devd/NVME11/kaggle_datasets/lenta_2019/lenta-ru-news.csv";
+        let output_filepath = "/media/devd/NVME11/kaggle_datasets/newspapers_main/lenta_2019/data";
         crate::dataset::csv_to_directory(input_filepath, output_filepath);
     }
 }

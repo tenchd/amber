@@ -18,7 +18,7 @@ use crate::{
 use chrono::{DurationRound, TimeDelta, prelude::*};
 
 const AMBER_VERSION: &str = "0.1.0";
-const AMBER_VERSION_DATE: &str = "August 24, 2026";
+const AMBER_VERSION_DATE: &str = "Sept 25, 2026";
 
 // command line parsing
 #[derive(Parser, Debug)]

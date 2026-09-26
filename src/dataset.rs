@@ -75,4 +75,5 @@ pub fn csv_to_directory(input_filepath: &str, output_filepath: &str) {
 
         write_csv_line_to_file(result, counter, &mut path);
     }
+    println!("{}", counter+1);
 }
