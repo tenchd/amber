@@ -361,28 +361,4 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
 
         assert!(corpus_tree.get_root_hash() == leaf_hashes_tree.get_root_hash());
     }
-
-    #[test]
-    #[ignore]
-    fn time() {
-        let utc_raw = Utc::now();
-        let utc = utc_raw.duration_round(TimeDelta::try_minutes(15).unwrap()).unwrap();
-        println!("Utc timestamp in seconds: {}", utc_raw.timestamp());
-        println!("Date: {}, Time: {}", utc_raw.date_naive(), utc_raw.time());
-        let date = format!("{}", utc.format("%B%e, %Y").to_string());
-        println!("{}", date);
-        let time = format!("{}", utc.format("%H:%M").to_string());
-        println!("{}", time);
-    }
-
-    #[test]
-    #[ignore]
-    fn csv_builder(){
-        // let input_filepaths = vec!["/media/devd/NVME11/kaggle_datasets/prachathai/prachatai_test.csv", 
-        //                             "/media/devd/NVME11/kaggle_datasets/prachathai/prachatai_train.csv",
-        //                             "/media/devd/NVME11/kaggle_datasets/prachathai/prachatai_validation.csv"];
-        let input_filepath = "/media/devd/NVME11/kaggle_datasets/lenta_2019/lenta-ru-news.csv";
-        let output_filepath = "/media/devd/NVME11/kaggle_datasets/newspapers_main/lenta_2019/data";
-        crate::dataset::csv_to_directory(input_filepath, output_filepath);
-    }
 }
