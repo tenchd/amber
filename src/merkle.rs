@@ -215,7 +215,7 @@ impl MerkleProof {
     }
 
     // verifies a proof starting from the leaf hash, proceeding along the leaf-to-root path encoded by the proof until the root hash is reached. If the proof is valid, this computed root hash will match the Merkle tree root hash.
-    pub fn verify_proof(&self, starting_hash: [u8; 32]) -> bool {
+    pub fn verify_proof(&self, starting_hash: [u8; 32], verbose: bool) -> bool {
         let mut computed_hash = starting_hash;
         for (i, sibling_hash) in self.proof_hashes.iter().enumerate() {
             if self.proof_directions[i] {
@@ -225,16 +225,16 @@ impl MerkleProof {
             }
         }
         if computed_hash != self.root_hash {
-            println!("Computed hash doesn't match root hash. Proof verification failed.");
+            if verbose {println!("Computed hash doesn't match root hash. Proof verification failed.");}
             return false;
         }
         true
     }
 
     // verifies that some data is part of a merkle tree (represented by its root hash).
-    pub fn verify_proof_for_data(&self, data: &[u8], autoaccept: bool) -> bool {
+    pub fn verify_proof_for_data(&self, data: &[u8], autoaccept: bool, verbose: bool) -> bool {
         let starting_hash = double_hash(data);
-        if !self.verify_proof(starting_hash){
+        if !self.verify_proof(starting_hash, verbose){
             false
         }
         else if autoaccept {
@@ -243,23 +243,25 @@ impl MerkleProof {
             true
         }
         else {
-            crate::verify::verify_proof_timestamp(&self)
+            crate::verify::verify_proof_timestamp(&self, verbose)
         }
     }
 
     // verifies that some file is part of a merkle tree (represented by its root hash).
-    pub fn verify_proof_for_file(&self, filepath: &str, autoaccept: bool) -> bool {
+    pub fn verify_proof_for_file(&self, filepath: &str, autoaccept: bool, verbose: bool) -> bool {
         let starting_hash = double_hash_from_file(filepath);
-        if !self.verify_proof(starting_hash) {
+        if !self.verify_proof(starting_hash, verbose) {
             false
         }
         else if autoaccept {
-            println!("Input data properly hashes up the tree to the root.");
-            println!("Autoaccepting the blockchain verification process for testing purposes. DO NOT TRUST THIS RESULT AS A SECURE TIMESTAMP.");
+            if verbose {
+                println!("Input data properly hashes up the tree to the root.");
+                println!("Autoaccepting the blockchain verification process for testing purposes. DO NOT TRUST THIS RESULT AS A SECURE TIMESTAMP.");
+            }
             true
         }
         else {
-            crate::verify::verify_proof_timestamp(&self)
+            crate::verify::verify_proof_timestamp(&self, verbose)
         }
     }
 }

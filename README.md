@@ -151,7 +151,7 @@ and run `cargo run --release -- -v`. If your timestamp passes verification, you 
 You can create your own Merkle proof from an existing timestamp, given one of the files from the corresponding corpus, as follows:
 
 1. Ensure that `provided_tree_path` in `config.toml` is set to the location of the Merkle tree file you want to make a proof from.
-2. `cargo run --release -- -m <filepath>` where `<filepath>` is the path to the corpus file you wish to produce a proof for.
+2. `cargo run --release -- -m <filepath>` where `<path>` is the path to the corpus file you wish to produce a proof for. You can also provide a path to a directory and it will attempt to produce Merkle proof files for every file in the directory, verifying against the timestamp message on the blockchain.
 
-Note that the code will attempt to verify the proof on the blockchain and will not write the proof to file if verification fails.
+Note that the code will abort if it fails to produce a valid proof for one of the files (because the Merkle tree is invalid, or the file hash doesn't match a Merkle tree leaf, or the timestamp on the blockchain doesn't match, etc.).
 

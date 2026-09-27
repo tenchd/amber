@@ -2,9 +2,9 @@
 corpus_path="/path/to/corpus"
 hashes_path="/path/to/hashes/file"
 corpus_name="your_corpus_name"
-# finalizing new timestamp
 locktime=0
 identifier="IEXAMPLE"
+# finalizing new timestamp
 tx_hash="0000000000000000000000000000000000000000000000000000000000000000"
 # verifying existing timestamp
 provided_tree_path = "path/to/provided/tree"

@@ -28,10 +28,10 @@ fn compute_tag(identifier: &str, num_leaves: u32, root_hash: [u8; 32], explain_h
     tag
 }
 
-fn verify_tag(expected_tag: Vec<u8>, tx_hash: [u8; 32]) -> Option<TimestampBlockchainDetails> {
+fn verify_tag(expected_tag: Vec<u8>, tx_hash: [u8; 32], verbose: bool) -> Option<TimestampBlockchainDetails> {
     let tx_hash_string = format!("{}", HexFmt(tx_hash));
 
-    println!("Looking up transaction with hash {} on Bitcoin blockchain. It should have an OP_RETURN output with the timestamp's tag in the data payload.", tx_hash_string);
+    if verbose {println!("Looking up transaction with hash {} on Bitcoin blockchain. It should have an OP_RETURN output with the timestamp's tag in the data payload.", tx_hash_string);}
 
     let json_url = format!("https://blockchain.info/rawtx/{}", tx_hash_string);
     let json_response = get(json_url).unwrap();
@@ -89,15 +89,15 @@ pub fn verify_tree_timestamp(identifier: &str, tree: &MerkleTree, explain_hash: 
     let expected_tag = compute_tag(identifier, num_leaves, root_hash, explain_hash);
     //println!("The tag should be {}", HexFmt(&expected_tag));
 
-    verify_tag(expected_tag, tx_hash)
+    verify_tag(expected_tag, tx_hash, true)
 }
 
-pub fn verify_proof_timestamp(proof: &MerkleProof) -> bool {
+pub fn verify_proof_timestamp(proof: &MerkleProof, verbose: bool) -> bool {
     //println!("Computing tag based on provided identifier, merkle tree, and explain file.");
     let expected_tag = compute_tag(&proof.identifier, proof.num_leaves.try_into().unwrap(), proof.root_hash, proof.explain_hash);
-    println!("The tag should be {}", HexFmt(&expected_tag));
+    if verbose {println!("The tag should be {}", HexFmt(&expected_tag));}
 
-    let result = verify_tag(expected_tag, proof.tx_hash);
+    let result = verify_tag(expected_tag, proof.tx_hash, verbose);
     match result {
         Some(details) => {
             let chain_timestamp = details.timestamp;
@@ -115,7 +115,10 @@ pub fn verify_proof_timestamp(proof: &MerkleProof) -> bool {
                 return false;
             }
         }
-        _ => return false,
+        _ => {
+                println!("Tag (identifier + num_leaves + merkle root hash + explain hash) failed to verify on the blockchain.");
+                return false
+            }
     }
 }
 

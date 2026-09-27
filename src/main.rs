@@ -60,12 +60,12 @@ fn get_filenames_from_directory(path: &str) -> Vec<String> {
             }
         })
         .collect();
-    println!("Building a Merkle tree from {} files. This may take a couple of minutes.", filepaths.len());
     filepaths
 }
 
 fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
     let filepaths = get_filenames_from_directory(path);
+    println!("Building a Merkle tree from {} files. This may take a couple of minutes.", filepaths.len());
     //println!("{}", filepaths.first().unwrap());
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
 }
@@ -175,7 +175,7 @@ fn verify_file(tree_filename: &str, filepath: &str){
 
 fn verify_proof(filepath: &str, proof_file: &str) {
     let proof = MerkleProof::new_from_file(proof_file);
-    let result = proof.verify_proof_for_file(filepath, false);
+    let result = proof.verify_proof_for_file(filepath, false, true);
     if result {
         println!("File {} was verified by proof file {} via the Bitcoin blockchain.\nIts Merkle root hash {} appears in the Bitcoin transaction identified by tx hash {}.", filepath, proof_file, HexFmt(proof.root_hash), HexFmt(proof.tx_hash));
 
@@ -189,14 +189,40 @@ fn verify_proof(filepath: &str, proof_file: &str) {
     }
 }
 
-fn make_proof(input_filepath: &str, tree_filename: &str, corpus_name: &str) {
-    let output_filename = input_filepath.to_owned() + "_proof.txt";
+fn make_proof(input_path: &str, tree_filename: &str, corpus_name: &str) {
     println!("Reading merkle tree from file {}.", tree_filename);
     let unfossilized: TimestampedMerkleTree = TimestampedMerkleTree::new_from_fossilized_tree(tree_filename);
-    let proof = unfossilized.produce_proof_from_file(input_filepath);
-    proof.fossilize_proof(&output_filename, corpus_name);
-    proof.verify_proof_for_file(input_filepath, false);
-    println!("{} Merkle proof written to file {}", input_filepath, output_filename);
+    let md = std::fs::metadata(input_path).unwrap();
+    // if user provided the path to a single file, create a proof for that file only.
+    if md.is_file() {
+        let output_filename = input_path.to_owned() + "_proof.txt";
+        let proof = unfossilized.produce_proof_from_file(input_path);
+        proof.fossilize_proof(&output_filename, corpus_name);
+        proof.verify_proof_for_file(input_path, false, true);
+        println!("{} Merkle proof written to file {}", input_path, output_filename);
+    }
+    //if the user provided the path to a directory, create a proof for every file in that directory (recursively including subdirectories).
+    else {
+        println!("Producing merkle proofs for all files in directory {}", input_path);
+        let filepaths = get_filenames_from_directory(input_path);
+        println!("{} files found. Constructing proofs.", filepaths.len());
+        let mut first = true;
+        for filepath in filepaths {
+            let output_filename = filepath.to_owned() + "_proof.txt";
+            let proof = unfossilized.produce_proof_from_file(&filepath);
+            proof.fossilize_proof(&output_filename, corpus_name);
+            if first {
+                let blockchain_verified = proof.verify_proof_for_file(&filepath, false, false);
+                assert!(blockchain_verified, "Couldn't verify proof on blockchain. Aborting.");
+                first = false;
+            }
+            else {
+                let local_verified = proof.verify_proof_for_file(&filepath, true, false);
+                assert!(local_verified, "Proof file {} is invalid. Aborting.", filepath);
+            }
+        }
+        println!("Done writing proofs. Proof of file 'name.txt' is 'name.txt_proof.txt.'");
+    }
 }
 
 fn main() {
@@ -250,8 +276,8 @@ fn main() {
         }
     }
     else if args.make_proof != "".to_string() {
-        let input_file = args.make_proof;
-        make_proof(&input_file, &provided_tree_filename, &corpus_name);
+        let input_path: String = args.make_proof;
+        make_proof(&input_path, &provided_tree_filename, &corpus_name);
     }
     else {
         panic!("Need to provide a command line argument");

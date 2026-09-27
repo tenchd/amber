@@ -73,7 +73,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
         for (i, d) in data.iter().enumerate() {
             println!("testing proof for leaf index {} (data: {:?})", i + 1, String::from_utf8_lossy(d));
             let proof = timestamped_tree.produce_proof(i + 1);
-            assert!(proof.verify_proof_for_data(d, autoaccept), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
+            assert!(proof.verify_proof_for_data(d, autoaccept, true), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
         }
     }
 
@@ -106,7 +106,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
             for (i, d) in data_refs.iter().enumerate() {
                 //println!("testing proof for leaf index {} (data: {:?})", i + 1, String::from_utf8_lossy(d));
                 let proof = timestamped_tree.produce_proof(i + 1);
-                assert!(proof.verify_proof_for_data(d, autoaccept), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
+                assert!(proof.verify_proof_for_data(d, autoaccept, true), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
             }
         }
     }
@@ -129,7 +129,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
 
         let proof = timestamped_tree.produce_proof(1);
         //below is brittle; relies on a specific ordering of the files in the merkle tree which my code doesn't explicitly enforce. fix this later when i rethink indices
-        assert!(proof.verify_proof_for_file("testing/small_corpus/pg6.txt", autoaccept), "proof should be valid for pg6.txt");
+        assert!(proof.verify_proof_for_file("testing/small_corpus/pg6.txt", autoaccept, true), "proof should be valid for pg6.txt");
         println!("Proof for pg6.txt: {}", proof);
     }
 
@@ -276,16 +276,16 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
             println!("Testing proof for leaf with index {}", index);
             let starting_hash = timestamped_tree.tree.nodes[index].hash;
             let proof = timestamped_tree.produce_proof(index);
-            let result = proof.verify_proof(starting_hash);
+            let result = proof.verify_proof(starting_hash, true);
             assert!(result);
-            let chain_result = verify::verify_proof_timestamp(&proof);
+            let chain_result = verify::verify_proof_timestamp(&proof, true);
             assert!(chain_result);
         }
 
         println!("Testing proof generated from corpus file");
         let text_to_verify = "testing/pg996.txt";
         let proof = timestamped_tree.produce_proof_from_file(text_to_verify);
-        let result = proof.verify_proof_for_file(text_to_verify, autoaccept);
+        let result = proof.verify_proof_for_file(text_to_verify, autoaccept, true);
         proof.fossilize_proof("testing/pg996_proof.txt", dummy_corpus_name);
         assert!(result);
     }
