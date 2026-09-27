@@ -3,7 +3,6 @@ mod merkle;
 mod tag;
 mod tests;
 mod verify;
-mod dataset;
 
 use hex_fmt::HexFmt;
 use std::fs::File;

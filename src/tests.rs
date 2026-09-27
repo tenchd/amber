@@ -11,7 +11,6 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
     extern crate rand;
     use rand::{RngExt};
     use base64::prelude::*;
-    use chrono::{DurationRound, TimeDelta, prelude::*};
 
 
     #[test]

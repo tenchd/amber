@@ -38,8 +38,8 @@ You should see some output beginning with `Verifying timestamp in testing/refere
 
 After a few seconds, you should see the message 
 ```
-Success! The transaction was found in block 955522 and contains the tag in its OP_RETURN data payload.
-You have verified that the provided timestamp was written to the Bitcoin blockchain at date/time 2026-06-26 16:44:23 UTC
+Timestamp has been verified on the blockchain. Transaction found in block 955522 on June 26, 2026 at 16:44
+The estimated time listed in explain.txt and the exact timestamp recorded on the blockchain differ by -37 seconds.
 ```
 
 This means the code has verified via the Bitcoin blockchain that the secure timestamp in `testing/reference_timestamp` existed on June 26, 2026. Since it is a timestamp of the Project Gutenberg corpus, you can use it to verify Project Gutenberg text files. One such file is `testing/pg996.txt`, which is the novel Don Quixote. Verify it as follows:
@@ -50,7 +50,6 @@ You should see the following output:
 ```
 Reading merkle tree from file testing/reference_timestamp/pgmerkle.txt.
 Merkle tree has root hash: e56bf7ee... and contains 77113 leaves
-Merkle tree is valid.
 testing/pg996.txt is in the Merkle tree.
 ```
 
@@ -59,7 +58,6 @@ If you try another verifying another file which is not part of the PG corpus (I 
 ```
 Reading merkle tree from file testing/reference_timestamp/pgmerkle.txt.
 Merkle tree has root hash: e56bf7ee... and contains 77113 leaves
-Merkle tree is valid.
 unrelated_file.txt is NOT in the Merkle tree.
 ```
 
@@ -67,7 +65,7 @@ which informs you that the file is not in the Merkle tree, and therefore we have
 
 Incidentally, if you would like to download the entire June 26, 2026 Project Gutenberg corpus, you can get it [here](https://drive.proton.me/urls/TREXY65MA8#ku23FKKn2Nbm). Each file in this corpus can be verified using the above steps.
 
-Now that you see how this procedure works, you can use this method to verify any Amber v1 secure timestamp you encounter - simply change the `provided_tree_path` and `provided_explain_path` config variables to the locations of the merkle tree and explain files from the timestamp.
+Now that you see how this procedure works, you can use this method to verify any Amber v0.1 secure timestamp you encounter - simply change the `provided_tree_path` and `provided_explain_path` config variables to the locations of the Merkle tree and explain files from the timestamp.
 
 ### Verifying a Merkle Proof File
 You can use a Merkle proof file to verify a specific document in the corpus without requiring the whole Merkle tree file. Do so as follows:
@@ -88,7 +86,7 @@ This repository automates steps 1) and 3). You must do step 2) yourself (though 
 
 So on the one hand you want to do 2) shortly after 1), but you also want to check the output of 1) carefully before doing 2).
 
-My recommendation is to follow these directions once without writing anything to the blockchain, to familiarize yourself with the process and identify any issues ahead of time. Also carefully examine the merkle tree and explain files produced by following the process: read the explain file completely and carefully read the headers of the merkle tree file. Make sure everything looks correct! If something looks wrong, STOP and figure out the issue before writing anything to the blockchain.
+My recommendation is to follow these directions once without writing anything to the blockchain, to familiarize yourself with the process and identify any issues ahead of time. Also carefully examine the Merkle tree and explain files produced by following the process: read the explain file completely and carefully read the headers of the Merkle tree file. Make sure everything looks correct! If something looks wrong, STOP and figure out the issue before writing anything to the blockchain.
 
 With those warnings out of the way, here is how to produce the timestamp:
 
@@ -98,23 +96,21 @@ First, you must write some information about the corpus you're timestamping as w
     i. the source(s) of the texts in the corpus
     ii.  the structure of the corpus. Is each text represented as its own file? If so, what formats are those files in? If not, how are texts represented (e.g., a text is a line of a csv file)? 
 2. Edit `editable_templates/corpus_motivation.txt` so that it contains a short description of your motivation for timestamping the corpus. Why do you feel it might be valuable to preserve?
-3. Edit `editable_templates/user_description.txt` so that it contains a short description of you, the person or organization creating the timestamp. If you like, you can use this field to establish your identity cryptographically, for example by including your public key using it to sign a short message containing your name, the merkle tree root hash, the corpus name, and the date. If you do this, I recommend using a post-quantum signing algorithm such as SLH-DSA. Since SLH-DSA produces somewhat large (~17KB) signatures, consider providing the signed message in a separate file instead of inserting it here.
+3. Edit `editable_templates/user_description.txt` so that it contains a short description of you, the person or organization creating the timestamp. If you like, you can use this field to establish your identity cryptographically, for example by including your public key using it to sign a short message containing your name, the merkle tree root hash, the corpus name, and the date. If you do this, I recommend using a post-quantum signing algorithm such as SLH-DSA.
 4. Determine the current height of the Bitcoin blockchain in blocks. (You can do this by visiting https://findtheblock.com/tools/latest-blocks and noting the current chain height.)
 5. Set the following variables in config.toml:
-`corpus_path`: set to the top-level directory containing the corpus you wish to timestamp. Note that the code will search the directory recursively and include every non-directory file in the Merkle tree.
+`corpus_path`: set to the top-level directory containing the corpus you wish to timestamp. Note that the code will search the directory recursively and include each non-directory file as a leaf in the Merkle tree.
 `hashes_path`: for now, leave this at its default value: "generated_timestamp/leaf_hashes.txt".
 `corpus_name`: a short name for the corpus.
-`date`: the current date.
-`time`: the current time.
 `locktime`: set this equal to the block height you want your message-writing transaction to appear in. I recommend setting it equal to one plus the current height of the chain (the value you determined in step 4).
 `identifier`: any 8-character ASCII string you like. Ideally it will be related to the name of your corpus. This will appear at the beginning of the blockchain message and indicate that the message is part of a secure timestamp.
-6. Run `cargo run --release -- -b`. This will write three files to the `generated_timestamp` subdirectory:
+6. Run `cargo run --release -- -b`. This will write four files to the `generated_timestamp` subdirectory:
 - `merkle.txt_unfinished.txt`: an "unfinished" version of the merkle tree file that does not yet have the blockchain location information added.
 - `explain.txt`: the canonical explain.txt file for your timestamp. Do not alter it!
 - `tag.txt`: The hex dump of the message you will write to the blockchain in the next step.
 - `leaf_hashes.txt`: This file just lists the hashes of the leaf nodes of the Merkle tree. If you want to rebuild the tree, you can use this file to do it faster (see next subsection for details).
 
-Take *at least sixty seconds* to examine explain.txt, and to make sure that the Merkle tree has the number of leaves you expect (equal to the number of files in the corpus.
+Take *at least sixty seconds* to examine explain.txt, making sure that everything looks correct. Your corpus and user descriptions should be formatted correctly, the date and time listed in the document should be correct, etc. Also make sure that the Merkle tree has the number of leaves you expect (equal to the number of files in the corpus).
 
 #### Optional: Generate Merkle Tree from Leaf Hashes
 You can generate the Merkle tree from a file containing the pre-hashed leaf files rather than scanning the corpus directory as described above. This might be desirable for several reasons. 
@@ -127,7 +123,7 @@ In any case, the process for building from a pre-hashed leaf file is as follows.
 
 First, the file must be in the following format: The first line of the file is the number of leaves in the file as an integer, and each subsequent line is the base64 encoding of a leaf hash. The total number of lines should be the number of leaves + 1. 
 
-If you followed the directions above, when you generated the Merkle tree and explain.txt, you also generated a file containing the leaf hashes. You can use that file to rebuild the Merkle tree and explain.txt more quickly by running `cargo run --release -- -b -h`.
+If you followed the directions above, when you generated the Merkle tree and explain.txt, you also generated a file containing the leaf hashes. You can use that file to rebuild the Merkle tree and explain.txt more quickly by running `cargo run --release -- -b -h`. This could be useful if, for example, you noticed a mistake in explain.txt in the previous step and need to fix it before moving on.
 
 If you want to build a Merkle tree from some other leaf hash file, simply set `hashes_path` in `config.toml` to the location of the leaf hash file and then run `cargo run --release -- -b -h`.
 
@@ -136,13 +132,11 @@ Submit a transaction to the Bitcoin blockchain with a 0-sat output whose script 
 
 Wait until the transaction is mined into a block, and then for five subsequent blocks to be mined. At this point the transaction has been confirmed by six blocks and can be considered secure and final. 
 
-Note the height of the block that the transaction was mined in, as well as the transaction hash.
+Note the transaction hash of your confirmed blockchain transaction.
 
 ### Third Step: Finalizing the Timestamp
 These last steps write the location of your message on the blockchain into merkle.txt, to allow for automatic verification of your timestamp (using the quickstart directions above).
-1. Set the following variables in `config.toml`:
-`block_height`: the exact height of the block containing your accepted Bitcoin transaction.
-`tx_hash`: the hash of your accepted Bitcoin transaction
+1. Set the `tx_hash` variable in `config.toml` to the hash of your accepted Bitcoin transaction.
 2. `cargo run --release -- -g`
 
 To make sure everything worked correctly, you can set the following variables in `config.toml`:
@@ -156,9 +150,8 @@ and run `cargo run --release -- -v`. If your timestamp passes verification, you 
 ### Creating a Merkle Proof from an Existing Verified Timestamp
 You can create your own Merkle proof from an existing timestamp, given one of the files from the corresponding corpus, as follows:
 
-`cargo run --release -- -m <filepath>`
-
-where `<filepath>` is the path to the corpus file you wish to produce a proof for.
+1. Ensure that `provided_tree_path` in `config.toml` is set to the location of the Merkle tree file you want to make a proof from.
+2. `cargo run --release -- -m <filepath>` where `<filepath>` is the path to the corpus file you wish to produce a proof for.
 
 Note that the code will attempt to verify the proof on the blockchain and will not write the proof to file if verification fails.
 
