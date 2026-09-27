@@ -121,7 +121,7 @@ fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename:
     let explain_hash = double_hash_from_file(generated_explain_filename);
     let mut timestamped_tree = TimestampedMerkleTree::new_without_time(unfinished_tree, &identifier, tx_hash, explain_hash);
     println!("verifying tree file at {}", unfinished_tree_file);
-    let autoaccept = true;
+    let autoaccept = false;
     let result = timestamped_tree.verify_timestamp(generated_explain_filename, autoaccept);
     if result {
         timestamped_tree.fossilize_tree(generated_tree_filename, &corpus_name);
