@@ -113,6 +113,7 @@ pub struct MerkleProof {
     pub num_leaves: NodeHandle,
     pub explain_hash: [u8; 32],
     pub block_height: usize,
+    pub utc_timestamp: i64,
     pub tx_hash: [u8; 32],
 }
 
@@ -125,8 +126,8 @@ impl MerkleProof {
         let file = File::open(proof_filepath).expect("couldn't open proof file");
         let mut reader = BufReader::new(file);
 
-        let mut header_lines: Vec<String> = vec!["".to_string(); 10];
-        for i in 0..10 {
+        let mut header_lines: Vec<String> = vec!["".to_string(); 11];
+        for i in 0..11 {
             reader.read_line(&mut header_lines[i]).expect("Failed to read line");
         }
 
@@ -145,8 +146,11 @@ impl MerkleProof {
         let words  = header_lines[8].split_whitespace().collect::<Vec<&str>>();
         let tx_hash = parse_hash_from_str(words[2]);
 
-        let words = header_lines[9].split_whitespace().collect::<Vec<&str>>();
-        let _version: usize = words[5].parse().unwrap();
+        let words  = header_lines[9].split_whitespace().collect::<Vec<&str>>();
+        let utc_timestamp: i64 = words[2].parse().expect("Could not parse block height as usize");
+
+        let words = header_lines[10].split_whitespace().collect::<Vec<&str>>();
+        let _version: &str = words[5];
 
 
         let mut root_hash_line: String = "".to_string();
@@ -166,7 +170,7 @@ impl MerkleProof {
             proof_directions.push(direction);
         }
 
-        MerkleProof { root_hash: root_hash_bytes, proof_hashes, proof_directions, identifier: identifier.to_string(), num_leaves, explain_hash, block_height, tx_hash }
+        MerkleProof { root_hash: root_hash_bytes, proof_hashes, proof_directions, identifier: identifier.to_string(), num_leaves, explain_hash, block_height, utc_timestamp, tx_hash }
     }
 
     // 
@@ -193,6 +197,8 @@ impl MerkleProof {
         values.insert("corpus_name", corpus_name);
         let version_string = &AMBER_VERSION.to_string();
         values.insert("version", version_string);
+        let utc_timestamp_string = self.utc_timestamp.to_string();
+        values.insert("chain_utc_timestamp", &utc_timestamp_string);
 
         let text = template.try_fill_in(&values).unwrap().to_string();
 
@@ -310,7 +316,7 @@ impl MerkleTree {
         MerkleTree { root_index, num_leaves, nodes, hash_lookup }
     }
 
-    fn new_from_tree_file_suffix(reader: BufReader<File>, num_leaves: usize) -> MerkleTree {
+    fn new_from_tree_file_suffix(reader: BufReader<File>, num_leaves: usize, full: bool) -> MerkleTree {
         let mut fossil_hashes: Vec<[u8; 32]> = vec![];
         // read the fossilized sequence of merkle tree node hashes.
         for line in reader.lines() {
@@ -337,14 +343,16 @@ impl MerkleTree {
         let tree = MerkleTree { root_index, num_leaves, nodes, hash_lookup };
         tree.verify_tree();
 
-        // make sure all hashes match fossil
-        assert!(&tree.get_root_hash() == fossil_hashes.last().unwrap());
-        for i in 0..fossil_hashes.len() {
-            let fossil_hash = fossil_hashes[i];
-            let tree_hash = tree.nodes[i+1].hash;
-            if fossil_hash != tree_hash {
-                println!("Warning: tree is valid but the hashes don't match those in the fossil file at position {}. That's very weird.", i);
-                break;
+        if full {
+            // make sure all hashes match fossil
+            assert!(&tree.get_root_hash() == fossil_hashes.last().unwrap());
+            for i in 0..fossil_hashes.len() {
+                let fossil_hash = fossil_hashes[i];
+                let tree_hash = tree.nodes[i+1].hash;
+                if fossil_hash != tree_hash {
+                    println!("Warning: tree is valid but the hashes don't match those in the fossil file at position {}. That's very weird.", i);
+                    break;
+                }
             }
         }
         tree
@@ -352,7 +360,7 @@ impl MerkleTree {
 
     // rebuild tree that has been written to a file in my "fossilized" format. 
     pub fn new_from_unfinished_tree_file(tree_filename: &str) -> Self {
-        let file = File::open(tree_filename).expect("couldn't open fossil tree file");
+        let file = File::open(tree_filename).expect(&format!("couldn't open fossil tree file {}", tree_filename));
         let mut reader = BufReader::new(file);
 
         // need to read first few header lines!
@@ -366,7 +374,25 @@ impl MerkleTree {
         let words  = header_lines[1].split_whitespace().collect::<Vec<&str>>();
         let num_leaves: NodeHandle = words[4].parse().expect("Unable to parse num_leaves from line 2 of file");
 
-        Self::new_from_tree_file_suffix(reader, num_leaves)
+        Self::new_from_tree_file_suffix(reader, num_leaves, true)
+    }
+
+    // builds tree from a file that simply lists the leaf hashes. Used for "blind" tree construction when user does not want to reveal the files that were hashed.
+    pub fn new_from_hashes(hashes_filepath: &str) -> Self {
+        let file = File::open(hashes_filepath).expect("couldn't open hashes file");
+        let mut reader = BufReader::new(file);
+
+        let mut first_line = "".to_string();
+        reader.read_line(&mut first_line).expect("Failed to read first line");
+        first_line.pop();
+        let num_leaves: usize = first_line.parse().expect("Failed to parse number of leaves");
+
+        Self::new_from_tree_file_suffix(reader, num_leaves, false)
+    }
+
+    pub fn new_empty() -> Self {
+        let hash_lookup = std::collections::HashMap::<[u8;32],usize>::new();
+        MerkleTree{root_index: 0, num_leaves: 1, nodes: vec![], hash_lookup: hash_lookup}
     }
 
     pub fn display_state(nodes: &Vec<MerkleNode>) {
@@ -504,6 +530,17 @@ impl MerkleTree {
         }
     }
 
+    pub fn write_leaf_hashes_to_file(&self, leaf_hash_filename: &str) {
+        let mut file = File::create(leaf_hash_filename).expect("failed to create file");
+        let num_leaves_line = format!("{}\n", self.num_leaves);
+        file.write_all(&num_leaves_line.into_bytes()).unwrap();
+
+        for i in 1..self.num_leaves + 1 {
+            let line = format!("{}\n", BASE64_STANDARD.encode(self.nodes[i].hash));
+            file.write_all(line.as_bytes()).unwrap();
+        }
+    }
+
     // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
     pub fn write_unfinished_tree_to_file(&self, tree_filename: &str, date: &str,) {
         let unfinished_merkle_template_filepath = "fixed_templates/unfinished_merkle_template.txt";
@@ -533,14 +570,21 @@ pub struct TimestampedMerkleTree {
     pub block_height: usize,
     pub tx_hash: [u8; 32],
     pub explain_hash: [u8; 32],
+    pub utc_timestamp: i64,
     verified_timestamp: bool,
 }
 
 #[allow(dead_code)]
 impl TimestampedMerkleTree {
     // read a merkle tree from a file. 
-    pub fn new(tree: MerkleTree, identifier: &str, block_height: usize, tx_hash: [u8; 32], explain_hash: [u8; 32]) -> TimestampedMerkleTree {
-        TimestampedMerkleTree { tree, identifier: identifier.to_string(), block_height, tx_hash, explain_hash, verified_timestamp: false }
+    pub fn new(tree: MerkleTree, identifier: &str, utc_raw: i64, block_height: usize, tx_hash: [u8; 32], explain_hash: [u8; 32]) -> TimestampedMerkleTree {
+        TimestampedMerkleTree { tree, identifier: identifier.to_string(), block_height, tx_hash, explain_hash, utc_timestamp: utc_raw, verified_timestamp: false }
+    }
+
+    pub fn new_without_time(tree: MerkleTree, identifier: &str, tx_hash: [u8; 32], explain_hash: [u8; 32]) -> TimestampedMerkleTree {
+        let utc_raw = chrono::Utc::now();
+        let block_height = 0;
+        TimestampedMerkleTree::new(tree, identifier, utc_raw.timestamp(), block_height, tx_hash, explain_hash)
     }
 
     pub fn new_from_fossilized_tree(fossil_filepath: &str) -> TimestampedMerkleTree {
@@ -548,8 +592,8 @@ impl TimestampedMerkleTree {
         let mut reader = BufReader::new(file);
 
         // need to read first few header lines!
-        let mut header_lines: Vec<String> = vec!["".to_string(); 8];
-        for i in 0..8 {
+        let mut header_lines: Vec<String> = vec!["".to_string(); 9];
+        for i in 0..9 {
             reader.read_line(&mut header_lines[i]).expect("Failed to read line");
         }
 
@@ -563,18 +607,20 @@ impl TimestampedMerkleTree {
         let tx_hash_string = words[3];
         let tx_hash = parse_hash_from_str(tx_hash_string);
         let words = header_lines[5].split_whitespace().collect::<Vec<&str>>();
+        let utc_timestamp: i64 = words[3].parse().expect("Unable to parse utc timestamp from line 5 of file");
+        let words = header_lines[6].split_whitespace().collect::<Vec<&str>>();
         let explain_hash_string = words[3];
         let explain_hash = parse_hash_from_str(explain_hash_string);
-        let words = header_lines[6].split_whitespace().collect::<Vec<&str>>();
-        let _version: usize = words[3].parse().unwrap();
+        let words = header_lines[7].split_whitespace().collect::<Vec<&str>>();
+        let _version: &str = words[3];
 
-        let tree = MerkleTree::new_from_tree_file_suffix(reader, num_leaves);
+        let tree = MerkleTree::new_from_tree_file_suffix(reader, num_leaves, true);
         tree.verify_tree();
-        Self::new(tree, identifier, block_height, tx_hash, explain_hash)
+        Self::new(tree, identifier, utc_timestamp, block_height, tx_hash, explain_hash) //note for tomorrow: read utctimestamp from fossil file and then add it to this call
     }
 
-    pub fn is_verified(&self) {
-        self.verified_timestamp;
+    pub fn is_verified(&self) -> bool {
+        self.verified_timestamp
     }
 
     pub fn verify_timestamp(&mut self, explain_filepath: &str, autoaccept: bool) -> bool {
@@ -590,25 +636,49 @@ impl TimestampedMerkleTree {
         }
 
         let result = crate::verify::verify_tree_timestamp(&self.identifier, &self.tree, self.explain_hash, self.tx_hash);
-        if !result{
-            // println!("Failed to verify the timestamp on the blockchain. Deleting timestamped merkle tree file. {}", tree_filename);
-            // std::fs::remove_file(tag_tree_filename).unwrap();
-            println!("Failed to verify the timestamp on the blockchain.");
+        match result {
+            Some(timestamp_details) => {
+                if self.block_height == 0 {
+                    self.block_height = timestamp_details.block_height;
+                }
+                else if self.block_height != timestamp_details.block_height {
+                    println!("WARNING: the block height in the fossil file does not match the true block height of the transaction containing the timestamp. The fossil file says the block height is {}, but the true block height is {}", self.block_height, timestamp_details.block_height);
+                }
+                self.utc_timestamp = timestamp_details.timestamp;
+                self.verified_timestamp = true;
+                let utc = chrono::DateTime::from_timestamp(timestamp_details.timestamp, 0).unwrap();
+                let date = format!("{}", utc.format("%B %e, %Y").to_string());
+                let time = format!("{}", utc.format("%H:%M").to_string());
+                println!("Timestamp has been verified on the blockchain. Transaction found in block {} on {} at {}", timestamp_details.block_height, date, time);
+                return true;
+            }
+            _ => {
+                println!("Failed to verify the timestamp on the blockchain.");
+                return false;
+            }
         }
-        else {
-            self.verified_timestamp = true;
-        }
-        result
+        
     }
 
     // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
-    pub fn fossilize_tree(&self, tree_filename: &str, date: &str, corpus_name: &str) {
+    pub fn fossilize_tree(&self, tree_filename: &str, corpus_name: &str) {
+        if !(self.is_verified()) {
+            println!("!!!!!!!!!!");
+            println!("WARNING: You are fossilizing an unverified timestamped merkle tree. You should only be doing this as a test. There is no guarantee that the resulting fossil file will verify on the blockchain.");
+            println!("!!!!!!!!!!");
+        }
         let merkle_template_filepath = "fixed_templates/merkle_template.txt";
         let template_string = read_to_string(merkle_template_filepath).unwrap();
         let template = Template::from(template_string.as_str());
 
+        let utc = chrono::DateTime::from_timestamp(self.utc_timestamp, 0).unwrap();
+        let date = format!("{}", utc.format("%B%e, %Y").to_string());
+
+        let utc_string = self.utc_timestamp.to_string();
+
         let mut values: HashMap<&str, &str> = HashMap::new();
-        values.insert("date",date);
+        values.insert("chain_utc_timestamp", &utc_string);
+        values.insert("date",&date);
         let num_leaves_string = format!("{}", self.tree.num_leaves);
         values.insert("num_leaves", &num_leaves_string);
         values.insert("identifier", &self.identifier);
@@ -658,7 +728,7 @@ impl TimestampedMerkleTree {
         }
 
         let root_hash = self.tree.get_root_hash();
-        MerkleProof { root_hash, proof_hashes, proof_directions, identifier: self.identifier.clone(), num_leaves: self.tree.num_leaves, explain_hash: self.explain_hash, block_height: self.block_height, tx_hash: self.tx_hash}
+        MerkleProof { root_hash, proof_hashes, proof_directions, identifier: self.identifier.clone(), num_leaves: self.tree.num_leaves, explain_hash: self.explain_hash, block_height: self.block_height, utc_timestamp: self. utc_timestamp, tx_hash: self.tx_hash}
     }
 
     pub fn produce_proof_from_file(&self, filepath: &str) -> MerkleProof {
