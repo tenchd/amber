@@ -104,11 +104,12 @@ pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filen
     }
 }
 
-pub fn verify_tree(provided_tree_filename: &str, provided_explain_filename: &str) {
+pub fn verify_tree(provided_tree_filename: &str, provided_explain_filename: &str) -> (bool, String, String, String, String, String) {
     println!("Verifying timestamp in {}", provided_tree_filename);
     let mut timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(&provided_tree_filename);
     let autoaccept = false;
     let result = timestamped_tree.verify_timestamp(&provided_explain_filename, autoaccept);
+    let mut difference = 0;
     if !result {
         println!("failed to verify");
     }
@@ -124,12 +125,18 @@ pub fn verify_tree(provided_tree_filename: &str, provided_explain_filename: &str
         else {
             _explain_utc_timestamp = verify::get_explain_utc_timestamp(&provided_explain_filename);
         }
-        let difference = chain_utc_timestamp - _explain_utc_timestamp;
+        difference = chain_utc_timestamp - _explain_utc_timestamp;
         println!("The estimated time listed in explain.txt and the exact timestamp recorded on the blockchain differ by {} seconds.", difference);
     }
+    let tx_hash = timestamped_tree.tx_hash;
+    let block = timestamped_tree.block_height;
+    let utc = chrono::DateTime::from_timestamp(timestamped_tree.utc_timestamp, 0).unwrap();
+    let date = format!("{}", utc.format("%B %e, %Y").to_string());
+    let time = format!("{}", utc.format("%H:%M").to_string());
+    (result, HexFmt(tx_hash).to_string(), block.to_string(), date, time, difference.to_string())
 }
 
-pub fn verify_file(tree_filename: &str, filepath: &str){
+pub fn verify_file(tree_filename: &str, filepath: &str) -> bool {
     println!("Reading merkle tree from file {}.", tree_filename);
     let unfossilized: TimestampedMerkleTree = TimestampedMerkleTree::new_from_fossilized_tree(tree_filename);
     println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.tree.get_root_hash()[..4]), unfossilized.tree.num_leaves);
@@ -142,22 +149,26 @@ pub fn verify_file(tree_filename: &str, filepath: &str){
     else {
         println!("{} is NOT in the Merkle tree.", filepath);
     }
+    contains
 }
 
-pub fn verify_proof(filepath: &str, proof_file: &str) {
+pub fn verify_proof(filepath: &str, proof_file: &str) -> (bool, String, String, String, String) {
     let proof = MerkleProof::new_from_file(proof_file);
     let result = proof.verify_proof_for_file(filepath, false, true);
+    let utc = chrono::DateTime::from_timestamp(proof.utc_timestamp, 0).unwrap();
+    let date = format!("{}", utc.format("%B %e, %Y").to_string());
+    let time = format!("{}", utc.format("%H:%M").to_string());
     if result {
         println!("File {} was verified by proof file {} via the Bitcoin blockchain.\nIts Merkle root hash {} appears in the Bitcoin transaction identified by tx hash {}.", filepath, proof_file, HexFmt(proof.root_hash), HexFmt(proof.tx_hash));
 
-        let utc = chrono::DateTime::from_timestamp(proof.utc_timestamp, 0).unwrap();
-        let date = format!("{}", utc.format("%B %e, %Y").to_string());
-        let time = format!("{}", utc.format("%H:%M").to_string());
         println!("This proves that {} existed on {} at {}.", filepath, date, time);
     }
     else {
         println!("File {} failed to verify for proof file {}. It does NOT certify any timestamp for the file.", filepath, proof_file);
     }
+    let tx_hash = HexFmt(proof.tx_hash).to_string();
+    let block = proof.block_height.to_string();
+    (result, tx_hash, block, date, time)
 }
 
 pub fn make_proof(input_path: &str, tree_filename: &str, corpus_name: &str) {

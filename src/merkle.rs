@@ -1,6 +1,7 @@
 use hex_fmt::HexFmt;
 use sha2::{Sha256, Digest};
 use std::{fmt};
+use std::path::Path;
 use std::fs::{File,read_to_string};
 use std::io::{Read,Write,BufReader, prelude::*,};
 use std::collections::HashMap;
@@ -175,8 +176,8 @@ impl MerkleProof {
 
     // 
     pub fn fossilize_proof(&self, filename: &str, corpus_name: &str) {
-        let proof_template_filepath = "fixed_templates/proof_template.txt";
-        let template_string = read_to_string(proof_template_filepath).unwrap();
+        let proof_template_filepath = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixed_templates/proof_template.txt");
+        let template_string = read_to_string(&proof_template_filepath).expect(&format!("Tried to find {:?}", &proof_template_filepath));
         let template = Template::from(template_string.as_str());
 
         // identifier: ${identifier}

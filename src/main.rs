@@ -68,16 +68,16 @@ fn main() {
 
     }
     else if args.verify_timestamp {
-        verify_tree(&provided_tree_filename, &provided_explain_filename);
+        _ = verify_tree(&provided_tree_filename, &provided_explain_filename);
     }
     else if args.file_to_verify != "".to_string() {
         let filepath = args.file_to_verify;
         if args.proof_verify != "".to_string() {
             let proof_file = args.proof_verify;
-            verify_proof(&filepath, &proof_file);
+            _ = verify_proof(&filepath, &proof_file);
         }
         else {
-            verify_file(&provided_tree_filename, &filepath);
+            _ = verify_file(&provided_tree_filename, &filepath);
         }
     }
     else if args.make_proof != "".to_string() {
