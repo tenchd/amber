@@ -87,7 +87,7 @@ pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool
     tree
 }
 
-pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) {
+pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> Option<TimestampedMerkleTree> {
     let unfinished_tree_file = format!("{}_unfinished.txt",generated_tree_filename);
     let unfinished_tree = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_file);
     let explain_hash = double_hash_from_file(generated_explain_filename);
@@ -100,10 +100,12 @@ pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filen
 
         println!("Timestamp verified! Wrote the updated merkle tree file at {}. Deleting temporary untimestamped merkle tree file at {}", generated_tree_filename, unfinished_tree_file);
         std::fs::remove_file(unfinished_tree_file).unwrap();
+        return Some(timestamped_tree);
     }
     if autoaccept{
         println!("WARNING: you set the autoaccept flag to true so we did not actually verify w.r.t. the blockchain. This was for testing purposes only.");
     }
+    None
 }
 
 pub fn verify_tree(provided_tree_filename: &str, provided_explain_filename: &str) -> (bool, TimestampedMerkleTree) {
@@ -263,11 +265,13 @@ impl Session {
         assert!(self.timestamp_output_path.is_some());
         let mut output_dir = self.timestamp_output_path.as_mut().unwrap();
         output_dir.push("merkle.txt");
+        self.tree_filename = Some(output_dir.clone());
         let tree_filename_buf = output_dir.clone();
         let tree_filename = tree_filename_buf.to_str().unwrap();
         output_dir.pop();
 
         output_dir.push("explain.txt");
+        self.explain_filename = Some(output_dir.clone());
         let explain_filename_buf = output_dir.clone();
         let explain_filename = explain_filename_buf.to_str().unwrap();
         output_dir.pop();
@@ -297,6 +301,21 @@ impl Session {
         }
 
         self.uftree = Some(build_timestamp(corpus_path, hashes_path, hashes_source, tree_filename, explain_filename, tag_filename, corpus_name, locktime, identifier))
+    }
+
+    pub fn finalize_timestamp(&mut self, generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> bool {
+        self.uftree = None;
+
+        self.tstree = finalize_timestamp(generated_tree_filename, generated_explain_filename, corpus_name, identifier, tx_hash);
+
+        if self.tstree.is_some() {
+            return true;
+        }
+        false
+    }
+
+    pub fn parse_hash(input_string: &str) -> [u8; 32] {
+        merkle::parse_hash_from_str(input_string)
     }
 
 }

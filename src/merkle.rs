@@ -670,7 +670,7 @@ impl TimestampedMerkleTree {
             println!("WARNING: You are fossilizing an unverified timestamped merkle tree. You should only be doing this as a test. There is no guarantee that the resulting fossil file will verify on the blockchain.");
             println!("!!!!!!!!!!");
         }
-        let merkle_template_filepath = "fixed_templates/merkle_template.txt";
+        let merkle_template_filepath = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixed_templates/merkle_template.txt");
         let template_string = read_to_string(merkle_template_filepath).unwrap();
         let template = Template::from(template_string.as_str());
 
