@@ -277,6 +277,11 @@ impl Session {
         let tag_filename = tag_filename_buf.to_str().unwrap();
         output_dir.pop();
 
+        output_dir.push("leaf_hashes.txt");
+        let leaf_hash_filename_buf = output_dir.clone();
+        let leaf_hash_filename = leaf_hash_filename_buf.to_str().unwrap();
+        output_dir.pop();
+
         let output_path = self.timestamp_output_path.as_ref().unwrap().to_str().unwrap();
         let mut corpus_path = "";
         let mut hashes_path = "";
@@ -288,6 +293,7 @@ impl Session {
         else {
             assert!(self.source_dir_path.is_some());
             corpus_path = self.source_dir_path.as_ref().unwrap().to_str().unwrap();
+            hashes_path = leaf_hash_filename;
         }
 
         self.uftree = Some(build_timestamp(corpus_path, hashes_path, hashes_source, tree_filename, explain_filename, tag_filename, corpus_name, locktime, identifier))
