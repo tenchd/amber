@@ -6,6 +6,7 @@ mod verify;
 use hex_fmt::HexFmt;
 use std::fs::File;
 use std::io::{Write};
+use std::path::PathBuf;
 use walkdir::WalkDir;
 use crate::merkle::{double_hash_from_file};
 use crate::{
@@ -63,26 +64,27 @@ pub fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: 
     println!("Wrote tag to file {}", tag_filename);
 }
 
-pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, locktime: usize, identifier: &str) {
-    let mut _tree = MerkleTree::new_empty();
+pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, locktime: usize, identifier: &str) -> MerkleTree {
+    let mut tree = MerkleTree::new_empty();
     if hashes_source {
         println!("Building merkle tree from leaf hashes in {}", hashes_path);
-        _tree = MerkleTree::new_from_hashes(hashes_path);
+        tree = MerkleTree::new_from_hashes(hashes_path);
     }
     else {
-        _tree = build_merkle_tree_from_directory(corpus_path);
-        _tree.write_leaf_hashes_to_file(hashes_path);
+        tree = build_merkle_tree_from_directory(corpus_path);
+        tree.write_leaf_hashes_to_file(hashes_path);
     }
     let tree_filename_unfinished = format!("{}_unfinished.txt",tree_filename);
-    println!("Merkle tree built. Root hash is {}", HexFmt(_tree.get_root_hash()));
+    println!("Merkle tree built. Root hash is {}", HexFmt(tree.get_root_hash()));
 
     let utc_raw = Utc::now();
     let utc = utc_raw.duration_round(TimeDelta::try_minutes(15).unwrap()).unwrap();
     let date = format!("{}", utc.format("%B%e, %Y").to_string());
-    _tree.write_unfinished_tree_to_file(&tree_filename_unfinished, &date);
+    tree.write_unfinished_tree_to_file(&tree_filename_unfinished, &date);
     println!("wrote tree to file {}", tree_filename_unfinished);
 
     build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, explain_filename, tag_filename, corpus_name, utc_raw, locktime, identifier);
+    tree
 }
 
 pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) {
@@ -104,12 +106,12 @@ pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filen
     }
 }
 
-pub fn verify_tree(provided_tree_filename: &str, provided_explain_filename: &str) -> (bool, String, String, String, String, String) {
+pub fn verify_tree(provided_tree_filename: &str, provided_explain_filename: &str) -> (bool, TimestampedMerkleTree) {
     println!("Verifying timestamp in {}", provided_tree_filename);
     let mut timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(&provided_tree_filename);
     let autoaccept = false;
     let result = timestamped_tree.verify_timestamp(&provided_explain_filename, autoaccept);
-    let mut difference = 0;
+    //let mut difference = 0;
     if !result {
         println!("failed to verify");
     }
@@ -125,7 +127,7 @@ pub fn verify_tree(provided_tree_filename: &str, provided_explain_filename: &str
         else {
             _explain_utc_timestamp = verify::get_explain_utc_timestamp(&provided_explain_filename);
         }
-        difference = chain_utc_timestamp - _explain_utc_timestamp;
+        let difference = chain_utc_timestamp - _explain_utc_timestamp;
         println!("The estimated time listed in explain.txt and the exact timestamp recorded on the blockchain differ by {} seconds.", difference);
     }
     let tx_hash = timestamped_tree.tx_hash;
@@ -133,7 +135,7 @@ pub fn verify_tree(provided_tree_filename: &str, provided_explain_filename: &str
     let utc = chrono::DateTime::from_timestamp(timestamped_tree.utc_timestamp, 0).unwrap();
     let date = format!("{}", utc.format("%B %e, %Y").to_string());
     let time = format!("{}", utc.format("%H:%M").to_string());
-    (result, HexFmt(tx_hash).to_string(), block.to_string(), date, time, difference.to_string())
+    (result, timestamped_tree)
 }
 
 pub fn verify_file(tree_filename: &str, filepath: &str) -> bool {
@@ -209,4 +211,86 @@ pub fn make_proof(input_path: &str, tree_filename: &str, corpus_name: &str) {
 
 pub fn parse_hash_from_string(input_string: &str) -> [u8; 32]{
     merkle::parse_hash_from_str(input_string)
+}
+
+pub struct Session {
+    pub tstree: Option<TimestampedMerkleTree>,
+    pub uftree: Option<MerkleTree>,
+    pub tree_filename: Option<PathBuf>,
+    pub explain_filename: Option<PathBuf>,
+    pub auth_filename: Option<PathBuf>,
+    pub timestamp_output_path: Option<PathBuf>,
+    pub source_dir_path: Option<PathBuf>,
+    pub hashes_path: Option<PathBuf>,
+}
+
+impl Session {
+    pub fn new() -> Self {
+        Self {
+            tstree: None,
+            uftree: None,
+            tree_filename: None,
+            explain_filename: None,
+            auth_filename: None,
+            timestamp_output_path: None,
+            source_dir_path: None,
+            hashes_path: None,
+        }
+    }
+
+    pub fn clear_state(&mut self) {
+        (self.tstree, self.uftree, self.tree_filename, self.explain_filename, self.auth_filename, self.timestamp_output_path, self.source_dir_path, self.hashes_path) = (None, None, None, None, None, None, None, None);
+    }
+
+    pub fn verify_tree(&mut self) -> bool {
+        assert!(self.tree_filename.is_some());
+        assert!(self.explain_filename.is_some());
+        let tree_path = self.tree_filename.as_ref().unwrap().to_str().unwrap();
+        let explain_path = self.explain_filename.as_ref().unwrap().to_str().unwrap();
+        let (result, tree) = verify_tree(tree_path, explain_path);
+        self.tstree = Some(tree);
+        result
+    }
+
+    pub fn verify_file(&mut self) -> bool {
+        assert!(self.auth_filename.is_some());
+        let auth_path = self.auth_filename.as_ref().unwrap().to_str().unwrap();
+        self.tstree.as_ref().unwrap().tree.verify_from_file(auth_path)
+    }
+
+    //corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, locktime: usize, identifier: &str
+    pub fn build_timestamp(&mut self, corpus_name: &str, locktime: usize, identifier: &str, hashes_source: bool) {
+        assert!(self.timestamp_output_path.is_some());
+        let mut output_dir = self.timestamp_output_path.as_mut().unwrap();
+        output_dir.push("merkle.txt");
+        let tree_filename_buf = output_dir.clone();
+        let tree_filename = tree_filename_buf.to_str().unwrap();
+        output_dir.pop();
+
+        output_dir.push("explain.txt");
+        let explain_filename_buf = output_dir.clone();
+        let explain_filename = explain_filename_buf.to_str().unwrap();
+        output_dir.pop();
+
+        output_dir.push("tag.txt");
+        let tag_filename_buf = output_dir.clone();
+        let tag_filename = tag_filename_buf.to_str().unwrap();
+        output_dir.pop();
+
+        let output_path = self.timestamp_output_path.as_ref().unwrap().to_str().unwrap();
+        let mut corpus_path = "";
+        let mut hashes_path = "";
+
+        if hashes_source {
+            assert!(self.hashes_path.is_some());
+            hashes_path = self.hashes_path.as_ref().unwrap().to_str().unwrap();
+        }
+        else {
+            assert!(self.source_dir_path.is_some());
+            corpus_path = self.source_dir_path.as_ref().unwrap().to_str().unwrap();
+        }
+
+        self.uftree = Some(build_timestamp(corpus_path, hashes_path, hashes_source, tree_filename, explain_filename, tag_filename, corpus_name, locktime, identifier))
+    }
+
 }
