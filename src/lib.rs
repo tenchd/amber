@@ -89,7 +89,6 @@ pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool
 
 pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> Option<TimestampedMerkleTree> {
     let unfinished_tree_file = format!("{}_unfinished.txt",generated_tree_filename);
-    println!("{}", unfinished_tree_file);
     let unfinished_tree = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_file);
     let explain_hash = double_hash_from_file(generated_explain_filename);
     let mut timestamped_tree = TimestampedMerkleTree::new_without_time(unfinished_tree, &identifier, tx_hash, explain_hash);
@@ -106,7 +105,6 @@ pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filen
     if autoaccept{
         println!("WARNING: you set the autoaccept flag to true so we did not actually verify w.r.t. the blockchain. This was for testing purposes only.");
     }
-    println!("DONE");
     None
 }
 
@@ -215,6 +213,10 @@ pub fn make_proof(input_path: &str, tree_filename: &str, corpus_name: &str) {
 
 pub fn parse_hash_from_string(input_string: &str) -> [u8; 32]{
     merkle::parse_hash_from_str(input_string)
+}
+
+pub fn get_version_and_date() -> (String, String) {
+    (AMBER_VERSION.to_string(), AMBER_VERSION_DATE.to_string())
 }
 
 pub struct Session {
