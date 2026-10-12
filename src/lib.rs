@@ -89,6 +89,7 @@ pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool
 
 pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> Option<TimestampedMerkleTree> {
     let unfinished_tree_file = format!("{}_unfinished.txt",generated_tree_filename);
+    println!("{}", unfinished_tree_file);
     let unfinished_tree = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_file);
     let explain_hash = double_hash_from_file(generated_explain_filename);
     let mut timestamped_tree = TimestampedMerkleTree::new_without_time(unfinished_tree, &identifier, tx_hash, explain_hash);
@@ -105,6 +106,7 @@ pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filen
     if autoaccept{
         println!("WARNING: you set the autoaccept flag to true so we did not actually verify w.r.t. the blockchain. This was for testing purposes only.");
     }
+    println!("DONE");
     None
 }
 
@@ -305,7 +307,7 @@ impl Session {
 
     pub fn finalize_timestamp(&mut self, generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> bool {
         self.uftree = None;
-
+        
         self.tstree = finalize_timestamp(generated_tree_filename, generated_explain_filename, corpus_name, identifier, tx_hash);
 
         if self.tstree.is_some() {
