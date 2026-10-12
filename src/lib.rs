@@ -175,7 +175,7 @@ pub fn verify_proof(filepath: &str, proof_file: &str) -> (bool, String, String, 
     (result, tx_hash, block, date, time)
 }
 
-pub fn make_proof(input_path: &str, tree_filename: &str, corpus_name: &str) {
+pub fn make_proof(input_path: &str, tree_filename: &str, corpus_name: &str) -> bool {
     println!("Reading merkle tree from file {}.", tree_filename);
     let unfossilized: TimestampedMerkleTree = TimestampedMerkleTree::new_from_fossilized_tree(tree_filename);
     let md = std::fs::metadata(input_path).unwrap();
@@ -186,6 +186,7 @@ pub fn make_proof(input_path: &str, tree_filename: &str, corpus_name: &str) {
         proof.fossilize_proof(&output_filename, corpus_name);
         proof.verify_proof_for_file(input_path, false, true);
         println!("{} Merkle proof written to file {}", input_path, output_filename);
+        return true;
     }
     //if the user provided the path to a directory, create a proof for every file in that directory (recursively including subdirectories).
     else {
@@ -205,9 +206,11 @@ pub fn make_proof(input_path: &str, tree_filename: &str, corpus_name: &str) {
             else {
                 let local_verified = proof.verify_proof_for_file(&filepath, true, false);
                 assert!(local_verified, "Proof file {} is invalid. Aborting.", filepath);
+                return false;
             }
         }
         println!("Done writing proofs. Proof of file 'name.txt' is 'name.txt_proof.txt.'");
+        return true;
     }
 }
 
