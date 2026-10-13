@@ -227,6 +227,7 @@ pub struct Session {
     pub uftree: Option<MerkleTree>,
     pub tree_filename: Option<PathBuf>,
     pub explain_filename: Option<PathBuf>,
+    pub tag_filename: Option<PathBuf>,
     pub auth_filename: Option<PathBuf>,
     pub timestamp_output_path: Option<PathBuf>,
     pub source_dir_path: Option<PathBuf>,
@@ -240,6 +241,7 @@ impl Session {
             uftree: None,
             tree_filename: None,
             explain_filename: None,
+            tag_filename: None,
             auth_filename: None,
             timestamp_output_path: None,
             source_dir_path: None,
@@ -284,6 +286,7 @@ impl Session {
         output_dir.pop();
 
         output_dir.push("tag.txt");
+        self.tag_filename = Some(output_dir.clone());
         let tag_filename_buf = output_dir.clone();
         let tag_filename = tag_filename_buf.to_str().unwrap();
         output_dir.pop();
