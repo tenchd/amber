@@ -53,7 +53,7 @@ fn main() {
             println!("Ignoring verification request. Building tree+docs.")
         }
 
-        build_timestamp(&corpus_path, &hashes_path, args.hash_source, &generated_tree_filename, &generated_explain_filename, &generated_tag_filename, &corpus_name, locktime, &identifier);
+        build_timestamp(&corpus_path, &hashes_path, args.hash_source, &generated_tree_filename, &generated_explain_filename, &generated_tag_filename, &corpus_name, locktime, &identifier, None, None, None);
 
     }
     else if args.generate_timestamp {

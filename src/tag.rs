@@ -1,6 +1,6 @@
 use std::fs::{File, read_to_string};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use hex_fmt::HexFmt;
 use text_template::Template;
 use std::collections::HashMap;
@@ -9,6 +9,7 @@ use crate::{AMBER_VERSION, AMBER_VERSION_DATE};
 
 // Create the identifier, num_leaves, and root hash part of the tag that will be written to the blockchain.
 pub fn create_chain_tag_prefix(identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32]) -> Vec<u8> {
+    println!("{}", identifier);
     assert!(identifier.is_ascii(), "Identifier must be ascii characters only.");
     assert!(identifier.len() == 8, "Identifier must have exactly 8 characters. You supplied {}", identifier.len());
 
@@ -31,7 +32,7 @@ pub fn create_chain_tag(identifier: &str, num_merkle_leaves: u32, merkle_root_ha
 }
 
 // Inserts relevant details about the merkle tree, target block, day & time, etc. into the explanatory document and writes the document as a txt file.
-pub fn write_document(output_filename: &str, corpus_name: &str, utc: chrono::DateTime<chrono::Utc>, date: &str, time: &str, locktime: usize, identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32]) {
+pub fn write_document(output_filename: &str, corpus_name: &str, utc: chrono::DateTime<chrono::Utc>, date: &str, time: &str, locktime: usize, identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32], corpus_desc: Option<String>, corpus_motiv: Option<String>, user_desc: Option<String>) {
     let explain_template_filepath = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixed_templates/explain_template.txt");
     let template_string = read_to_string(explain_template_filepath).unwrap();
     let template = Template::from(template_string.as_str());
@@ -55,14 +56,23 @@ pub fn write_document(output_filename: &str, corpus_name: &str, utc: chrono::Dat
     values.insert("merkle_root_hash", root_hash_hex_string.as_str());
 
     values.insert("corpus_name", corpus_name);
-    let corpus_description = read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("editable_templates/corpus_description.txt")).unwrap();
+    let mut corpus_description = read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("editable_templates/corpus_description.txt")).unwrap();
+    if corpus_desc.is_some() {
+        corpus_description = corpus_desc.unwrap();
+    }
     values.insert("corpus_description", &corpus_description);
-    let corpus_motivation = read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("editable_templates/corpus_motivation.txt")).unwrap();
+    let mut corpus_motivation = read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("editable_templates/corpus_motivation.txt")).unwrap();
+    if corpus_motiv.is_some() {
+        corpus_motivation = corpus_motiv.unwrap();
+    }
     values.insert("corpus_motivation", &corpus_motivation);
     let version_string = &AMBER_VERSION.to_string();
     values.insert("version", version_string);
     values.insert("version_date", AMBER_VERSION_DATE);
-    let user_description = read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("editable_templates/user_description.txt")).unwrap();
+    let mut user_description = read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("editable_templates/user_description.txt")).unwrap();
+    if user_desc.is_some() {
+        user_description = user_desc.unwrap();
+    }
     values.insert("user_description", &user_description);
 
     let tag_prefix = create_chain_tag_prefix(identifier, num_merkle_leaves, merkle_root_hash);

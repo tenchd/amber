@@ -41,7 +41,7 @@ pub fn build_merkle_tree_from_directory(path: &str) -> MerkleTree {
     //println!("{}", filepaths.first().unwrap());
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
 }
-pub fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, utc_raw: DateTime<Utc>, locktime: usize, identifier: &str){
+pub fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, utc_raw: DateTime<Utc>, locktime: usize, identifier: &str, corpus_desc: Option<String>, corpus_motiv: Option<String>, user_desc: Option<String>){
     println!("Reading merkle tree from file {}.", tree_filename);
     let unfossilized: MerkleTree = MerkleTree::new_from_unfinished_tree_file(tree_filename);
     println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
@@ -53,7 +53,7 @@ pub fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: 
     let time = format!("{}", utc.format("%H:%M").to_string());
 
     let document_filename = explain_filename;
-    crate::tag::write_document(document_filename, corpus_name, utc_raw, &date, &time, locktime, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash());
+    crate::tag::write_document(document_filename, corpus_name, utc_raw, &date, &time, locktime, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), corpus_desc, corpus_motiv, user_desc);
     let document_hash = double_hash_from_file(document_filename);
     let tag = crate::tag::create_chain_tag(identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), document_hash);
     println!("Wrote explainer document to file {}", document_filename);
@@ -64,7 +64,7 @@ pub fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: 
     println!("Wrote tag to file {}", tag_filename);
 }
 
-pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, locktime: usize, identifier: &str) -> MerkleTree {
+pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, locktime: usize, identifier: &str, corpus_desc: Option<String>, corpus_motiv: Option<String>, user_desc: Option<String>) -> MerkleTree {
     let mut tree = MerkleTree::new_empty();
     if hashes_source {
         println!("Building merkle tree from leaf hashes in {}", hashes_path);
@@ -83,7 +83,7 @@ pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool
     tree.write_unfinished_tree_to_file(&tree_filename_unfinished, &date);
     println!("wrote tree to file {}", tree_filename_unfinished);
 
-    build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, explain_filename, tag_filename, corpus_name, utc_raw, locktime, identifier);
+    build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, explain_filename, tag_filename, corpus_name, utc_raw, locktime, identifier, corpus_desc, corpus_motiv, user_desc);
     tree
 }
 
@@ -270,7 +270,7 @@ impl Session {
     }
 
     //corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, locktime: usize, identifier: &str
-    pub fn build_timestamp(&mut self, corpus_name: &str, locktime: usize, identifier: &str, hashes_source: bool) {
+    pub fn build_timestamp(&mut self, corpus_name: &str, locktime: usize, identifier: &str, hashes_source: bool, corpus_desc: String, corpus_motiv: String, user_desc: String) {
         assert!(self.timestamp_output_path.is_some());
         let mut output_dir = self.timestamp_output_path.as_mut().unwrap();
         output_dir.push("merkle.txt");
@@ -310,7 +310,7 @@ impl Session {
             hashes_path = leaf_hash_filename;
         }
 
-        self.uftree = Some(build_timestamp(corpus_path, hashes_path, hashes_source, tree_filename, explain_filename, tag_filename, corpus_name, locktime, identifier))
+        self.uftree = Some(build_timestamp(corpus_path, hashes_path, hashes_source, tree_filename, explain_filename, tag_filename, corpus_name, locktime, identifier, Some(corpus_desc), Some(corpus_motiv), Some(user_desc)))
     }
 
     pub fn finalize_timestamp(&mut self, generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> bool {
