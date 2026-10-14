@@ -151,12 +151,13 @@ pub fn verify_file(tree_filename: &str, filepath: &str) -> bool {
     contains
 }
 
-pub fn verify_proof(filepath: &str, proof_file: &str) -> (bool, String, String, String, String) {
+pub fn verify_proof(filepath: &str, proof_file: &str) -> (bool, i64, String, String, String, String, String) {
     let proof = MerkleProof::new_from_file(proof_file);
     let result = proof.verify_proof_for_file(filepath, false, true);
     let utc = chrono::DateTime::from_timestamp(proof.utc_timestamp, 0).unwrap();
     let date = format!("{}", utc.format("%B %e, %Y").to_string());
     let time = format!("{}", utc.format("%H:%M").to_string());
+    let identifier = proof.identifier;
     if result {
         println!("File {} was verified by proof file {} via the Bitcoin blockchain.\nIts Merkle root hash {} appears in the Bitcoin transaction identified by tx hash {}.", filepath, proof_file, HexFmt(proof.root_hash), HexFmt(proof.tx_hash));
 
@@ -167,7 +168,7 @@ pub fn verify_proof(filepath: &str, proof_file: &str) -> (bool, String, String, 
     }
     let tx_hash = HexFmt(proof.tx_hash).to_string();
     let block = proof.block_height.to_string();
-    (result, tx_hash, block, date, time)
+    (result, proof.utc_timestamp, tx_hash, block, date, time, identifier)
 }
 
 pub fn make_proof(input_path: &str, tree_filename: &str, corpus_name: &str) -> bool {
