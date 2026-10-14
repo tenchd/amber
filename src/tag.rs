@@ -1,6 +1,6 @@
 use std::fs::{File, read_to_string};
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 use hex_fmt::HexFmt;
 use text_template::Template;
 use std::collections::HashMap;
@@ -9,7 +9,6 @@ use crate::{AMBER_VERSION, AMBER_VERSION_DATE};
 
 // Create the identifier, num_leaves, and root hash part of the tag that will be written to the blockchain.
 pub fn create_chain_tag_prefix(identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32]) -> Vec<u8> {
-    println!("{}", identifier);
     assert!(identifier.is_ascii(), "Identifier must be ascii characters only.");
     assert!(identifier.len() == 8, "Identifier must have exactly 8 characters. You supplied {}", identifier.len());
 

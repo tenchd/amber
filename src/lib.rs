@@ -65,7 +65,7 @@ pub fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: 
 }
 
 pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, locktime: usize, identifier: &str, corpus_desc: Option<String>, corpus_motiv: Option<String>, user_desc: Option<String>) -> MerkleTree {
-    let mut tree = MerkleTree::new_empty();
+    let tree;
     if hashes_source {
         println!("Building merkle tree from leaf hashes in {}", hashes_path);
         tree = MerkleTree::new_from_hashes(hashes_path);
@@ -132,11 +132,6 @@ pub fn verify_tree(provided_tree_filename: &str, provided_explain_filename: &str
         let difference = chain_utc_timestamp - _explain_utc_timestamp;
         println!("The estimated time listed in explain.txt and the exact timestamp recorded on the blockchain differ by {} seconds.", difference);
     }
-    let tx_hash = timestamped_tree.tx_hash;
-    let block = timestamped_tree.block_height;
-    let utc = chrono::DateTime::from_timestamp(timestamped_tree.utc_timestamp, 0).unwrap();
-    let date = format!("{}", utc.format("%B %e, %Y").to_string());
-    let time = format!("{}", utc.format("%H:%M").to_string());
     (result, timestamped_tree)
 }
 
@@ -272,7 +267,7 @@ impl Session {
     //corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, locktime: usize, identifier: &str
     pub fn build_timestamp(&mut self, corpus_name: &str, locktime: usize, identifier: &str, hashes_source: bool, corpus_desc: String, corpus_motiv: String, user_desc: String) {
         assert!(self.timestamp_output_path.is_some());
-        let mut output_dir = self.timestamp_output_path.as_mut().unwrap();
+        let output_dir = self.timestamp_output_path.as_mut().unwrap();
         output_dir.push("merkle.txt");
         self.tree_filename = Some(output_dir.clone());
         let tree_filename_buf = output_dir.clone();
@@ -296,9 +291,9 @@ impl Session {
         let leaf_hash_filename = leaf_hash_filename_buf.to_str().unwrap();
         output_dir.pop();
 
-        let output_path = self.timestamp_output_path.as_ref().unwrap().to_str().unwrap();
+        //let output_path = self.timestamp_output_path.as_ref().unwrap().to_str().unwrap();
         let mut corpus_path = "";
-        let mut hashes_path = "";
+        let hashes_path;
 
         if hashes_source {
             assert!(self.hashes_path.is_some());
