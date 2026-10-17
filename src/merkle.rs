@@ -9,6 +9,7 @@ use base64::prelude::*;
 use text_template::Template;
 
 use crate::AMBER_VERSION;
+use crate::FailureReason::{self, AutoAccept, BlockHeightMismatchNonFatal, ExplainHashMismatch, FileHashMismatch, Success};
 
 // apply SHA256 hash twice to input bytes.
 pub fn double_hash(input: &[u8]) -> [u8; 32] {
@@ -233,15 +234,15 @@ impl MerkleProof {
     }
 
     // verifies that some data is part of a merkle tree (represented by its root hash).
-    pub fn verify_proof_for_data(&self, data: &[u8], autoaccept: bool, verbose: bool) -> bool {
+    pub fn verify_proof_for_data(&self, data: &[u8], autoaccept: bool, verbose: bool) -> (bool, FailureReason) {
         let starting_hash = double_hash(data);
         if !self.verify_proof(starting_hash, verbose){
-            false
+            (false, FileHashMismatch)
         }
         else if autoaccept {
             println!("Input data properly hashes up the tree to the root.");
             println!("Autoaccepting the blockchain verification process for testing purposes. DO NOT TRUST THIS RESULT AS A SECURE TIMESTAMP.");
-            true
+            (true, AutoAccept)
         }
         else {
             crate::verify::verify_proof_timestamp(&self, verbose)
@@ -249,17 +250,17 @@ impl MerkleProof {
     }
 
     // verifies that some file is part of a merkle tree (represented by its root hash).
-    pub fn verify_proof_for_file(&self, filepath: &str, autoaccept: bool, verbose: bool) -> bool {
+    pub fn verify_proof_for_file(&self, filepath: &str, autoaccept: bool, verbose: bool) -> (bool, FailureReason) {
         let starting_hash = double_hash_from_file(filepath);
         if !self.verify_proof(starting_hash, verbose) {
-            false
+            (false, FileHashMismatch)
         }
         else if autoaccept {
             if verbose {
                 println!("Input data properly hashes up the tree to the root.");
                 println!("Autoaccepting the blockchain verification process for testing purposes. DO NOT TRUST THIS RESULT AS A SECURE TIMESTAMP.");
             }
-            true
+            (true, AutoAccept)
         }
         else {
             crate::verify::verify_proof_timestamp(&self, verbose)
@@ -626,26 +627,35 @@ impl TimestampedMerkleTree {
         self.verified_timestamp
     }
 
-    pub fn verify_timestamp(&mut self, explain_filepath: &str, autoaccept: bool) -> bool {
+    pub fn verify_timestamp(&mut self, explain_filepath: &str, autoaccept: bool) -> (bool, FailureReason) {
         if autoaccept {
             println!("Autoaccepting the blockchain verification process for testing purposes. DO NOT TRUST THIS RESULT AS A SECURE TIMESTAMP.");
-            return true;
+            return (true, AutoAccept);
         }
         
         let observed_explain_hash = double_hash_from_file(explain_filepath);
         if observed_explain_hash != self.explain_hash {
             println!("Failed to verify: explain.txt does not match explain hash in merkle tree file");
-            return false;
+            return (false, ExplainHashMismatch);
         }
 
-        let result = crate::verify::verify_tree_timestamp(&self.identifier, &self.tree, self.explain_hash, self.tx_hash);
+        let (result, reason) = crate::verify::verify_tree_timestamp(&self.identifier, &self.tree, self.explain_hash, self.tx_hash);
         match result {
             Some(timestamp_details) => {
+                let success_reason;
+
                 if self.block_height == 0 {
                     self.block_height = timestamp_details.block_height;
+                    success_reason = Success;
                 }
-                else if self.block_height != timestamp_details.block_height {
-                    println!("WARNING: the block height in the fossil file does not match the true block height of the transaction containing the timestamp. The fossil file says the block height is {}, but the true block height is {}", self.block_height, timestamp_details.block_height);
+                else {
+                    if self.block_height != timestamp_details.block_height {
+                        println!("WARNING: the block height in the fossil file does not match the true block height of the transaction containing the timestamp. The fossil file says the block height is {}, but the true block height is {}", self.block_height, timestamp_details.block_height);
+                        success_reason = BlockHeightMismatchNonFatal;
+                    }
+                    else {
+                        success_reason = Success;
+                    }
                 }
                 self.utc_timestamp = timestamp_details.timestamp;
                 self.verified_timestamp = true;
@@ -653,11 +663,11 @@ impl TimestampedMerkleTree {
                 let date = format!("{}", utc.format("%B %e, %Y").to_string());
                 let time = format!("{}", utc.format("%H:%M").to_string());
                 println!("Timestamp has been verified on the blockchain. Transaction found in block {} on {} at {}", timestamp_details.block_height, date, time);
-                return true;
+                return (true, success_reason);
             }
             _ => {
                 println!("Failed to verify the timestamp on the blockchain.");
-                return false;
+                return (false, reason);
             }
         }
         

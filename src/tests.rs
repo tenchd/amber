@@ -73,7 +73,8 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
         for (i, d) in data.iter().enumerate() {
             println!("testing proof for leaf index {} (data: {:?})", i + 1, String::from_utf8_lossy(d));
             let proof = timestamped_tree.produce_proof(i + 1);
-            assert!(proof.verify_proof_for_data(d, autoaccept, true), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
+            let (result, _reason) = proof.verify_proof_for_data(d, autoaccept, true);
+            assert!(result, "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
         }
     }
 
@@ -106,7 +107,8 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
             for (i, d) in data_refs.iter().enumerate() {
                 //println!("testing proof for leaf index {} (data: {:?})", i + 1, String::from_utf8_lossy(d));
                 let proof = timestamped_tree.produce_proof(i + 1);
-                assert!(proof.verify_proof_for_data(d, autoaccept, true), "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
+                let (result, _reason) = proof.verify_proof_for_data(d, autoaccept, true);
+                assert!(result, "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
             }
         }
     }
@@ -129,7 +131,8 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
 
         let proof = timestamped_tree.produce_proof(1);
         //below is brittle; relies on a specific ordering of the files in the merkle tree which my code doesn't explicitly enforce. fix this later when i rethink indices
-        assert!(proof.verify_proof_for_file("testing/small_corpus/pg6.txt", autoaccept, true), "proof should be valid for pg6.txt");
+        let (result, _reason) = proof.verify_proof_for_file("testing/small_corpus/pg6.txt", autoaccept, true);
+        assert!(result, "proof should be valid for pg6.txt");
         println!("Proof for pg6.txt: {}", proof);
     }
 
@@ -257,19 +260,31 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
         let mut timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(tree_filename);
         let autoaccept = false;
         println!("create correct tag and verify that it exists on the blockchain at the correct block height and tx hash.");
-        let result = timestamped_tree.verify_timestamp(explain_filename, autoaccept);
+        let (result, reason) = timestamped_tree.verify_timestamp(explain_filename, autoaccept);
         assert!(result);
+        assert_eq!(reason, crate::FailureReason::Success);
         println!("------------");
         println!("use incorrect explain file. verification should fail immediately.");
-        let badresult = timestamped_tree.verify_timestamp(incorrect_explain_filename, autoaccept);
+        let (badresult, badreason) = timestamped_tree.verify_timestamp(incorrect_explain_filename, autoaccept);
         assert!(!badresult);
+        assert_eq!(badreason, crate::FailureReason::ExplainHashMismatch);
+        println!("The reason this one failed is: {}", badreason);
         println!("------------");
         println!("now force a check with an incorrect tag. blockchain verification should fail.");
         let bad_identifier = "WRONGLBL";
-        let badresult = crate::verify::verify_tree_timestamp(bad_identifier, &timestamped_tree.tree, timestamped_tree.explain_hash, timestamped_tree.tx_hash);
+        let (badresult, badreason) = crate::verify::verify_tree_timestamp(bad_identifier, &timestamped_tree.tree, timestamped_tree.explain_hash, timestamped_tree.tx_hash);
         assert!(badresult.is_none());
-        println!("------------");
-        println!("now create a few proof files, and verify them on the chain as well.");
+        println!("The reason this one failed is: {}", badreason);
+        assert_eq!(badreason, crate::FailureReason::TagNotFound);
+    }
+
+    #[test]
+    fn blockchain_proof_verification() {
+        println!("create a few proof files, and verify them on the chain as well.");
+        let tree_filename = "testing/reference_timestamp/pgmerkle.txt";
+        let dummy_corpus_name = "Project Gutenberg";
+        let timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(tree_filename);
+        let autoaccept = false;
         
         for _i in 1..4 {
             let index = rand::rng().random_range(0..timestamped_tree.tree.num_leaves);
@@ -278,14 +293,14 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
             let proof = timestamped_tree.produce_proof(index);
             let result = proof.verify_proof(starting_hash, true);
             assert!(result);
-            let chain_result = verify::verify_proof_timestamp(&proof, true);
+            let (chain_result, _) = verify::verify_proof_timestamp(&proof, true);
             assert!(chain_result);
         }
 
         println!("Testing proof generated from corpus file");
         let text_to_verify = "testing/pg996.txt";
         let proof = timestamped_tree.produce_proof_from_file(text_to_verify);
-        let result = proof.verify_proof_for_file(text_to_verify, autoaccept, true);
+        let (result, _reason) = proof.verify_proof_for_file(text_to_verify, autoaccept, true);
         proof.fossilize_proof("testing/pg996_proof.txt", dummy_corpus_name);
         assert!(result);
     }

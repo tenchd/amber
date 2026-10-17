@@ -87,52 +87,66 @@ pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool
     tree
 }
 
-pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> Option<TimestampedMerkleTree> {
+pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> (Option<TimestampedMerkleTree>, FailureReason) {
     let unfinished_tree_file = format!("{}_unfinished.txt",generated_tree_filename);
     let unfinished_tree = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_file);
     let explain_hash = double_hash_from_file(generated_explain_filename);
     let mut timestamped_tree = TimestampedMerkleTree::new_without_time(unfinished_tree, &identifier, tx_hash, explain_hash);
     println!("verifying tree file at {}", unfinished_tree_file);
     let autoaccept = false;
-    let result = timestamped_tree.verify_timestamp(generated_explain_filename, autoaccept);
+    let (result, reason) = timestamped_tree.verify_timestamp(generated_explain_filename, autoaccept);
     if result {
         timestamped_tree.fossilize_tree(generated_tree_filename, &corpus_name);
 
         println!("Timestamp verified! Wrote the updated merkle tree file at {}. Deleting temporary untimestamped merkle tree file at {}", generated_tree_filename, unfinished_tree_file);
         std::fs::remove_file(unfinished_tree_file).unwrap();
-        return Some(timestamped_tree);
+        return (Some(timestamped_tree), reason);
     }
     if autoaccept{
         println!("WARNING: you set the autoaccept flag to true so we did not actually verify w.r.t. the blockchain. This was for testing purposes only.");
     }
-    None
+    (None, reason)
 }
 
-pub fn verify_tree(provided_tree_filename: &str, provided_explain_filename: &str) -> (bool, TimestampedMerkleTree) {
+pub fn verify_tree(provided_tree_filename: &str, provided_explain_filename: &str) -> (bool, TimestampedMerkleTree, FailureReason) {
     println!("Verifying timestamp in {}", provided_tree_filename);
     let mut timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(&provided_tree_filename);
     let autoaccept = false;
-    let result = timestamped_tree.verify_timestamp(&provided_explain_filename, autoaccept);
+    // remembering this timestamp value now because the verify_timestamp() function call will update the tree timestamp if they disagree.
+    let tree_timestamp = timestamped_tree.utc_timestamp;
+    let (mut result, mut reason) = timestamped_tree.verify_timestamp(&provided_explain_filename, autoaccept);
     //let mut difference = 0;
+    let chain_utc_timestamp = timestamped_tree.utc_timestamp;
     if !result {
         println!("failed to verify");
     }
     else {
-        let chain_utc_timestamp = timestamped_tree.utc_timestamp;
-        let mut _explain_utc_timestamp = 0;
+        let explain_utc_timestamp;
         // special case: If we're verifying the PG timestamp, we will hardcode a utc timestamp because that explain file did not include one. Since any other timestamp was made with Amber version >0.1, we can rely on its explain.txt file to have a utc timestamp on the second line of the file.
         let explain_hash = format!("{}", HexFmt(double_hash_from_file(&provided_explain_filename)));
         let pg_explain_hash = "deb4859fb5f483d0251cbe9ebe9908e0591a53511311ee07b134354eac324e22";
         if explain_hash == pg_explain_hash {
-            _explain_utc_timestamp = 1782492300;
+            explain_utc_timestamp = 1782492300;
         }
         else {
-            _explain_utc_timestamp = verify::get_explain_utc_timestamp(&provided_explain_filename);
+            explain_utc_timestamp = verify::get_explain_utc_timestamp(&provided_explain_filename);
+
         }
-        let difference = chain_utc_timestamp - _explain_utc_timestamp;
+        let difference = chain_utc_timestamp - explain_utc_timestamp;
         println!("The estimated time listed in explain.txt and the exact timestamp recorded on the blockchain differ by {} seconds.", difference);
+        let max_allowable_difference = 86400; // maximinum allowable difference between claimed timestamp and true timestamp is 24 hours.
+        if difference > max_allowable_difference {
+            result = false;
+            reason = FailureReason::TimestampMismatchFatal;
+        }
     }
-    (result, timestamped_tree)
+    println!("reason: {}", reason);
+    println!("tree: {}, chain: {}", tree_timestamp, chain_utc_timestamp);
+    if reason == FailureReason::Success && tree_timestamp != chain_utc_timestamp {
+        reason = FailureReason::TimestampMismatchNonFatal;
+        println!("mismatch detected");
+    }
+    (result, timestamped_tree, reason)
 }
 
 pub fn verify_file(tree_filename: &str, filepath: &str) -> bool {
@@ -151,9 +165,9 @@ pub fn verify_file(tree_filename: &str, filepath: &str) -> bool {
     contains
 }
 
-pub fn verify_proof(filepath: &str, proof_file: &str) -> (bool, i64, String, String, String, String, String) {
+pub fn verify_proof(filepath: &str, proof_file: &str) -> (bool, FailureReason, i64, String, String, String, String, String) {
     let proof = MerkleProof::new_from_file(proof_file);
-    let result = proof.verify_proof_for_file(filepath, false, true);
+    let (result, reason) = proof.verify_proof_for_file(filepath, false, true);
     let utc = chrono::DateTime::from_timestamp(proof.utc_timestamp, 0).unwrap();
     let date = format!("{}", utc.format("%B %e, %Y").to_string());
     let time = format!("{}", utc.format("%H:%M").to_string());
@@ -168,7 +182,7 @@ pub fn verify_proof(filepath: &str, proof_file: &str) -> (bool, i64, String, Str
     }
     let tx_hash = HexFmt(proof.tx_hash).to_string();
     let block = proof.block_height.to_string();
-    (result, proof.utc_timestamp, tx_hash, block, date, time, identifier)
+    (result, reason, proof.utc_timestamp, tx_hash, block, date, time, identifier)
 }
 
 pub fn make_proof(input_path: &str, tree_filename: &str, corpus_name: &str) -> bool {
@@ -195,12 +209,12 @@ pub fn make_proof(input_path: &str, tree_filename: &str, corpus_name: &str) -> b
             let proof = unfossilized.produce_proof_from_file(&filepath);
             proof.fossilize_proof(&output_filename, corpus_name);
             if first {
-                let blockchain_verified = proof.verify_proof_for_file(&filepath, false, false);
+                let (blockchain_verified, _) = proof.verify_proof_for_file(&filepath, false, false);
                 assert!(blockchain_verified, "Couldn't verify proof on blockchain. Aborting.");
                 first = false;
             }
             else {
-                let local_verified = proof.verify_proof_for_file(&filepath, true, false);
+                let (local_verified, _) = proof.verify_proof_for_file(&filepath, true, false);
                 assert!(local_verified, "Proof file {} is invalid. Aborting.", filepath);
                 return false;
             }
@@ -216,6 +230,44 @@ pub fn parse_hash_from_string(input_string: &str) -> [u8; 32]{
 
 pub fn get_version_and_date() -> (String, String) {
     (AMBER_VERSION.to_string(), AMBER_VERSION_DATE.to_string())
+}
+
+#[derive(PartialEq, Debug)]
+pub enum FailureReason {
+    Success, // a true success. checked everything about the timestamp and it all was correct.
+    AutoAccept, // a fake success. here you check the local parts of the timestamp match each other but don't actually look at the blockchain.
+    TimestampMismatchNonFatal, // the tag was found in the transaction, but the tx timestamp doesn't match the one listed in the tree/proof file.
+    // this is a success technically because the timestamp WAS found, but the time listed in the file header may be significantly wrong.
+    BlockHeightMismatchNonFatal,
+    MerkleFileNotParseable, // code can't read/parse merkle tree file
+    ExplainFileNotParseable, // code can't read/parse explain file
+    ExplainHashMismatch,  // double SHA256 hash of explain.txt doesn't match the header entry in merkle.txt
+    FileHashMismatch, // double SHA256 hash of file provided alongside proof doesn't match first hash in proof leaf-> root path
+    NoBlockchainResponse, // didn't get a response from the blockchain website (could be connectivity issue, or incorrect tx hash) 
+    // in the future if you don't get a blockchain response, ping blockchain.info to see if the main page is up.
+    TxNotFound, // the blockchain website didn't find a transaction with the supplied tx hash.
+    TimestampMismatchFatal, // the tag was found in the transaction, but the chain utc timestamp is more than 24 hours different that the timestamp listed in explain.txt.
+    TagNotFound, // the blockchain transaction doesn't contain an OP_RETURN script with the expected tag.
+} 
+
+impl std::fmt::Display for FailureReason {
+    fn fmt (&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            FailureReason::Success => write!(f, "The timestamp was successfully verified."),
+            FailureReason::AutoAccept => write!(f, "The timestamp was locally verified, but not checked on the blockchain."),
+            FailureReason::TimestampMismatchNonFatal => write!(f, "While the timestamp verified successfully on the blockchain, the utc timestamp listed in the merkle tree file header is wrong; It does not match the true timestamp on the blockchain. This header value should be corrected."),
+            FailureReason::BlockHeightMismatchNonFatal => write!(f, "While the timestamp verified successfully on the blockchain, the block height in the fossil file does not match the true block height of the transaction containing the timestamp. This header value should be corrected."),
+            FailureReason::MerkleFileNotParseable => write!(f, "The file containing the merkle tree could not be parsed."),
+            FailureReason::ExplainFileNotParseable => write!(f, "Explain.txt could not be parsed."),
+            FailureReason::ExplainHashMismatch => write!(f, "The hash of explain.txt does not match the hash listed in the merkle/proof file header."),
+            FailureReason::FileHashMismatch => write!(f, "The hash of the provided file does not match the expected hash in the proof file."),
+            FailureReason::NoBlockchainResponse => write!(f, "The blockchain lookup website did not respond to the request."),
+            FailureReason::TxNotFound => write!(f, "The blockchain lookup website could not find a transaction with the specified tx hash."),
+            FailureReason::TimestampMismatchFatal => write!(f, "The utc timestamp listed in explain.txt is > 24hrs different than utc timestamp on the blockchain."),
+            FailureReason::TagNotFound => write!(f, "The expected timestamp message was not found in the blockchain transaction."),
+
+        }
+    }
 }
 
 pub struct Session {
@@ -249,14 +301,14 @@ impl Session {
         (self.tstree, self.uftree, self.tree_filename, self.explain_filename, self.auth_filename, self.timestamp_output_path, self.source_dir_path, self.hashes_path) = (None, None, None, None, None, None, None, None);
     }
 
-    pub fn verify_tree(&mut self) -> bool {
+    pub fn verify_tree(&mut self) -> (bool, FailureReason) {
         assert!(self.tree_filename.is_some());
         assert!(self.explain_filename.is_some());
         let tree_path = self.tree_filename.as_ref().unwrap().to_str().unwrap();
         let explain_path = self.explain_filename.as_ref().unwrap().to_str().unwrap();
-        let (result, tree) = verify_tree(tree_path, explain_path);
+        let (result, tree, reason) = verify_tree(tree_path, explain_path);
         self.tstree = Some(tree);
-        result
+        (result, reason)
     }
 
     pub fn verify_file(&mut self) -> bool {
@@ -309,15 +361,17 @@ impl Session {
         self.uftree = Some(build_timestamp(corpus_path, hashes_path, hashes_source, tree_filename, explain_filename, tag_filename, corpus_name, locktime, identifier, Some(corpus_desc), Some(corpus_motiv), Some(user_desc)))
     }
 
-    pub fn finalize_timestamp(&mut self, generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> bool {
+    pub fn finalize_timestamp(&mut self, generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> (bool, FailureReason) {
         self.uftree = None;
+
+        let reason;
         
-        self.tstree = finalize_timestamp(generated_tree_filename, generated_explain_filename, corpus_name, identifier, tx_hash);
+        (self.tstree, reason) = finalize_timestamp(generated_tree_filename, generated_explain_filename, corpus_name, identifier, tx_hash);
 
         if self.tstree.is_some() {
-            return true;
+            return (true, reason);
         }
-        false
+        (false, reason)
     }
 
     pub fn parse_hash(input_string: &str) -> [u8; 32] {
