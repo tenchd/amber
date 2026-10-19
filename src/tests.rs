@@ -252,11 +252,10 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
     }
 
     #[test]
-    fn blockchain_tree_and_proof_verification() {
+    fn blockchain_tree_verification() {
         let tree_filename = "testing/reference_timestamp/pgmerkle.txt";
         let explain_filename = "testing/reference_timestamp/canonical_pg_explain.txt";
         let incorrect_explain_filename = "testing/incorrect_explain.txt";
-        let dummy_corpus_name = "Project Gutenberg";
         let mut timestamped_tree = TimestampedMerkleTree::new_from_fossilized_tree(tree_filename);
         let autoaccept = false;
         println!("create correct tag and verify that it exists on the blockchain at the correct block height and tx hash.");
