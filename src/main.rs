@@ -61,10 +61,10 @@ fn main() {
             println!("Ignoring verification request. Building timestamp.");
         }
         let tx_hash_string = settings.get_string("tx_hash").unwrap();
-        let tx_hash = parse_hash_from_string(&tx_hash_string);
+        let (tx_hash, _) = parse_hash_from_string(&tx_hash_string);
         // need to read in unfinished merkle file, build a timestamped merkle file from it, verify the timestamp on the chain, then write to the timestamped tree to file.
         
-        finalize_timestamp(generated_tree_filename, generated_explain_filename, &corpus_name, &identifier, tx_hash);
+        finalize_timestamp(generated_tree_filename, generated_explain_filename, &corpus_name, &identifier, tx_hash.unwrap());
 
     }
     else if args.verify_timestamp {
@@ -82,7 +82,7 @@ fn main() {
     }
     else if args.make_proof != "".to_string() {
         let input_path: String = args.make_proof;
-        make_proof(&input_path, &provided_tree_filename, &corpus_name);
+        make_proof(&input_path, &provided_tree_filename, &provided_explain_filename, &corpus_name);
     }
     else {
         panic!("Need to provide a command line argument");

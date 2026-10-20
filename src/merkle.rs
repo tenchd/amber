@@ -1,6 +1,6 @@
 use hex_fmt::HexFmt;
 use sha2::{Sha256, Digest};
-use std::{fmt};
+use std::fmt;
 use std::path::Path;
 use std::fs::{File,read_to_string};
 use std::io::{Read,Write,BufReader, prelude::*,};
@@ -9,7 +9,7 @@ use base64::prelude::*;
 use text_template::Template;
 
 use crate::AMBER_VERSION;
-use crate::FailureReason::{self, AutoAccept, BlockHeightMismatchNonFatal, ExplainHashMismatch, FileHashMismatch, Success};
+use crate::FailureReason::{self, AutoAccept, BlockHeightMismatchNonFatal, ExplainHashMismatch, FileHashMismatch, FileNotInMerkleTree, MerkleFileNotParseable, ProofFileNotParseable, Success, TxHashNotParseable};
 
 // apply SHA256 hash twice to input bytes.
 pub fn double_hash(input: &[u8]) -> [u8; 32] {
@@ -47,12 +47,20 @@ pub fn double_hash_from_file(filepath: &str) -> [u8; 32] {
     hash_bytes_length
 }
 
-pub fn parse_hash_from_str(input_string: &str) -> [u8; 32] {
-    let raw_hash = hex::decode(input_string).expect("Couldn't parse string into hex bytes");
-    let mut hash_bytes = vec![0u8; 32];
-    hash_bytes.copy_from_slice(&raw_hash);
-    let hash: [u8; 32] = hash_bytes.try_into().expect("Hash length must be 32 bytes");
-    hash
+pub fn parse_hash_from_str(input_string: &str) -> (Option<[u8; 32]>, FailureReason) {
+    let mut hash = [0u8; 32];
+    let result = hex::decode_to_slice(input_string, &mut hash);
+    let reason;
+    match result {
+        Ok(_) => {
+            reason = Success;
+            return (Some(hash), reason);
+        },
+        Err(_) => {
+            reason = TxHashNotParseable;
+            return (None, reason);
+        },
+    }
 }
 
 // nodes are owned by the 'nodes' vector in the MerkleTree struct. a NodeHandle is a identifier/index for a merkle node in the vector. 1-indexed; 0 means none.
@@ -121,7 +129,7 @@ pub struct MerkleProof {
 
 #[allow(dead_code)]
 impl MerkleProof {
-    pub fn new_from_file(proof_filepath: &str) -> MerkleProof {
+    pub fn new_from_file(proof_filepath: &str) -> (Option<MerkleProof>, FailureReason) {
         let mut proof_hashes: Vec<[u8; 32]> = vec![];
         let mut proof_directions: Vec<bool> = vec![];
 
@@ -130,26 +138,48 @@ impl MerkleProof {
 
         let mut header_lines: Vec<String> = vec!["".to_string(); 11];
         for i in 0..11 {
-            reader.read_line(&mut header_lines[i]).expect("Failed to read line");
+            let result = reader.read_line(&mut header_lines[i]);
+            if result.is_err() {
+                return (None, ProofFileNotParseable)
+            }
         }
 
         let words  = header_lines[4].split_whitespace().collect::<Vec<&str>>();
         let identifier: &str = words[2];
 
         let words  = header_lines[5].split_whitespace().collect::<Vec<&str>>();
-        let num_leaves: NodeHandle = words[2].parse().expect(&format!("Couldn't parse {} into usize for number of leaves in Merkle tree", words[2]));
+        let num_leaves_result = words[2].parse::<NodeHandle>();
+        if num_leaves_result.is_err() {
+            return (None, ProofFileNotParseable)
+        }
+        let num_leaves = num_leaves_result.unwrap();
 
         let words  = header_lines[6].split_whitespace().collect::<Vec<&str>>();
-        let explain_hash = parse_hash_from_str(words[3]);
+        let (explain_hash, _) = parse_hash_from_str(words[3]);
+        if explain_hash.is_none() {
+            return (None, ProofFileNotParseable);
+        }
 
         let words  = header_lines[7].split_whitespace().collect::<Vec<&str>>();
-        let block_height: usize = words[2].parse().expect("Could not parse block height as usize");
+        let block_height_result = words[2].parse::<usize>();
+        if block_height_result.is_err() {
+            return (None, ProofFileNotParseable)
+        }
+        let block_height = block_height_result.unwrap();
 
         let words  = header_lines[8].split_whitespace().collect::<Vec<&str>>();
-        let tx_hash = parse_hash_from_str(words[2]);
+        let (tx_hash, _) = parse_hash_from_str(words[2]);
+        if tx_hash.is_none() {
+            return (None, ProofFileNotParseable);
+        }
 
         let words  = header_lines[9].split_whitespace().collect::<Vec<&str>>();
-        let utc_timestamp: i64 = words[2].parse().expect("Could not parse block height as usize");
+        let utc_timestamp_result = words[2].parse::<i64>();
+        if utc_timestamp_result.is_err() {
+            return (None, ProofFileNotParseable)
+        }
+        let utc_timestamp = utc_timestamp_result.unwrap();
+        
 
         let words = header_lines[10].split_whitespace().collect::<Vec<&str>>();
         let _version: &str = words[5];
@@ -172,7 +202,8 @@ impl MerkleProof {
             proof_directions.push(direction);
         }
 
-        MerkleProof { root_hash: root_hash_bytes, proof_hashes, proof_directions, identifier: identifier.to_string(), num_leaves, explain_hash, block_height, utc_timestamp, tx_hash }
+        let proof = MerkleProof { root_hash: root_hash_bytes, proof_hashes, proof_directions, identifier: identifier.to_string(), num_leaves, explain_hash: explain_hash.unwrap(), block_height, utc_timestamp, tx_hash: tx_hash.unwrap() };
+        (Some(proof), Success)
     }
 
     // 
@@ -591,36 +622,73 @@ impl TimestampedMerkleTree {
         TimestampedMerkleTree::new(tree, identifier, utc_raw.timestamp(), block_height, tx_hash, explain_hash)
     }
 
-    pub fn new_from_fossilized_tree(fossil_filepath: &str) -> TimestampedMerkleTree {
-        let file = File::open(fossil_filepath).expect("couldn't open fossil tree file");
+    pub fn new_from_fossilized_tree(fossil_filepath: &str) -> (Option<TimestampedMerkleTree>, FailureReason) {
+        let file_result = File::open(fossil_filepath);
+        let file;
+        match file_result {
+            Ok(value) => {
+                file = value;
+            },
+            Err(_) => {
+                return (None, FailureReason::MerkleFileNotFound);
+            },
+        }
         let mut reader = BufReader::new(file);
 
         // need to read first few header lines!
         let mut header_lines: Vec<String> = vec!["".to_string(); 9];
         for i in 0..9 {
-            reader.read_line(&mut header_lines[i]).expect("Failed to read line");
+            let result = reader.read_line(&mut header_lines[i]);
+            if result.is_err() {
+                return (None, MerkleFileNotParseable)
+            }
         }
 
         let words  = header_lines[1].split_whitespace().collect::<Vec<&str>>();
-        let num_leaves: NodeHandle = words[4].parse().expect("Unable to parse num_leaves from line 2 of file");
+        let num_leaves_result = words[4].parse::<NodeHandle>();
+        if num_leaves_result.is_err() {
+            return (None, MerkleFileNotParseable)
+        }
+        let num_leaves = num_leaves_result.unwrap();
+
         let words = header_lines[2].split_whitespace().collect::<Vec<&str>>();
         let identifier = words[10];
         let words = header_lines[3].split_whitespace().collect::<Vec<&str>>();
-        let block_height: usize = words[3].parse().expect("Unable to parse num_leaves from line 2 of file");
+        let block_height_result = words[3].parse::<usize>();
+        if block_height_result.is_err() {
+            return(None, MerkleFileNotParseable)
+        }
+        let block_height = block_height_result.unwrap();
+
         let words = header_lines[4].split_whitespace().collect::<Vec<&str>>();
         let tx_hash_string = words[3];
-        let tx_hash = parse_hash_from_str(tx_hash_string);
+        let (tx_hash_result, reason) = parse_hash_from_str(tx_hash_string);
+        if tx_hash_result.is_none() {
+            return (None, reason);
+        }
+        let tx_hash = tx_hash_result.unwrap();
+
         let words = header_lines[5].split_whitespace().collect::<Vec<&str>>();
-        let utc_timestamp: i64 = words[3].parse().expect("Unable to parse utc timestamp from line 5 of file");
+        let utc_timestamp_result = words[3].parse::<i64>();
+        if utc_timestamp_result.is_err() {
+            return (None, MerkleFileNotParseable)
+        }
+        let utc_timestamp = utc_timestamp_result.unwrap();
+
         let words = header_lines[6].split_whitespace().collect::<Vec<&str>>();
         let explain_hash_string = words[3];
-        let explain_hash = parse_hash_from_str(explain_hash_string);
+        let (explain_hash_result, reason) = parse_hash_from_str(explain_hash_string);
+        if explain_hash_result.is_none() {
+            return (None, reason);
+        }
+        let explain_hash = explain_hash_result.unwrap();
+
         let words = header_lines[7].split_whitespace().collect::<Vec<&str>>();
         let _version: &str = words[3];
 
         let tree = MerkleTree::new_from_tree_file_suffix(reader, num_leaves, true);
         tree.verify_tree();
-        Self::new(tree, identifier, utc_timestamp, block_height, tx_hash, explain_hash) //note for tomorrow: read utctimestamp from fossil file and then add it to this call
+        (Some(Self::new(tree, identifier, utc_timestamp, block_height, tx_hash, explain_hash)), Success) //note for tomorrow: read utctimestamp from fossil file and then add it to this call
     }
 
     pub fn is_verified(&self) -> bool {
@@ -744,15 +812,23 @@ impl TimestampedMerkleTree {
         MerkleProof { root_hash, proof_hashes, proof_directions, identifier: self.identifier.clone(), num_leaves: self.tree.num_leaves, explain_hash: self.explain_hash, block_height: self.block_height, utc_timestamp: self. utc_timestamp, tx_hash: self.tx_hash}
     }
 
-    pub fn produce_proof_from_file(&self, filepath: &str) -> MerkleProof {
+    pub fn produce_proof_from_file(&self, filepath: &str) -> (Option<MerkleProof>, FailureReason) {
         let starting_hash = double_hash_from_file(filepath);
-        let index: NodeHandle = *self.tree.hash_lookup.get(&starting_hash).expect("File hash not found in Merkle tree.");
-        self.produce_proof(index)
+        let index_result = self.tree.hash_lookup.get(&starting_hash);
+        if index_result.is_none() {
+            return (None, FileNotInMerkleTree);
+        }
+        let index: NodeHandle = *index_result.unwrap();
+        (Some(self.produce_proof(index)), Success)
     }
 
-    pub fn produce_proof_from_data(&self, data: &[u8]) -> MerkleProof {
+    pub fn produce_proof_from_data(&self, data: &[u8]) -> (Option<MerkleProof>, FailureReason) {
         let starting_hash = double_hash(data);
-        let index: NodeHandle = *self.tree.hash_lookup.get(&starting_hash).expect("File hash not found in Merkle tree.");
-        self.produce_proof(index)
+        let index_result = self.tree.hash_lookup.get(&starting_hash);
+        if index_result.is_none() {
+            return (None, FileNotInMerkleTree);
+        }
+        let index: NodeHandle = *index_result.unwrap();
+        (Some(self.produce_proof(index)), Success)
     }
 }
