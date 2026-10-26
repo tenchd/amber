@@ -408,7 +408,13 @@ impl Session {
     }
 
     //corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, locktime: usize, identifier: &str
-    pub fn build_timestamp(&mut self, corpus_name: &str, locktime: usize, identifier: &str, hashes_source: bool, corpus_desc: String, corpus_motiv: String, user_desc: String) -> FailureReason {
+    pub fn build_timestamp(&mut self, corpus_name: &str, identifier: &str, hashes_source: bool, corpus_desc: String, corpus_motiv: String, user_desc: String) -> FailureReason {
+        let (locktime_result, locktime_reason) = Session::get_locktime();
+        if locktime_result.is_none() {
+            return locktime_reason
+        }
+        let locktime = locktime_result.unwrap();
+
         assert!(self.timestamp_output_path.is_some());
         let output_dir = self.timestamp_output_path.as_mut().unwrap();
         output_dir.push("merkle.txt");
@@ -474,4 +480,12 @@ impl Session {
         merkle::parse_hash_from_str(input_string)
     }
 
+    pub fn get_locktime() -> (Option<usize>, FailureReason) {
+        let (result, reason) = verify::get_current_latest_block();
+        if result.is_none() {
+            return (None, reason)
+        }
+        let block_height = result.unwrap();
+        (Some(block_height + 1), Success)
+    }
 }

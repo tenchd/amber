@@ -376,4 +376,9 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
 
         assert!(corpus_tree.get_root_hash() == leaf_hashes_tree.get_root_hash());
     }
+
+    #[test]
+    fn block_test() {
+        verify::get_current_latest_block().0.unwrap();
+    }
 }

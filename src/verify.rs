@@ -1,5 +1,5 @@
 use crate::{
-    FailureReason::{self, BlockHeightMismatchNonFatal, TimestampMismatchNonFatal}, merkle::{MerkleProof, MerkleTree}, tag
+    FailureReason::{self, BlockHeightMismatchNonFatal, NoBlockchainResponse, TimestampMismatchNonFatal}, merkle::{MerkleProof, MerkleTree}, tag
 };
 use hex_fmt::HexFmt;
 use std::str::from_utf8;
@@ -151,5 +151,28 @@ pub fn get_explain_utc_timestamp(explain_filepath: &str) -> i64 {
     line.pop();
     let uct_timestamp: i64 = line.parse().unwrap();
     uct_timestamp
+
+}
+
+#[tokio::main]
+pub async fn get_current_latest_block() -> (Option<usize>, FailureReason) {
+    let client = reqwest::Client::new();
+
+    let response_result = client
+        .post("https://api.blockchain.info/explorer-gateway-kt/btc/blocks")
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .json(&serde_json::json!({ "limit": 1 }))
+        .send()
+        .await;
+
+    if response_result.is_err() {
+        return (None, NoBlockchainResponse)
+    }
+    let response = response_result.unwrap();
+    let json_string = response.text().await.unwrap();
+    let v: Value = serde_json::from_str(&json_string).unwrap();
+    let block_height: usize = v["currentHeight"].as_u64().unwrap().try_into().unwrap();
+
+    (Some(block_height), FailureReason::Success)
 
 }
