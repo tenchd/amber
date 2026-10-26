@@ -116,7 +116,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
     #[test]
     fn build_tree_from_files() {
         let path = "testing/small_corpus";
-        let merkle_tree = build_merkle_tree_from_directory(path);
+        let merkle_tree = build_merkle_tree_from_directory(path).0.unwrap();
         println!("Merkle tree built from directory {} has root hash: {}... and contains {} leaves", path, HexFmt(&merkle_tree.get_root_hash()[..4]), merkle_tree.num_leaves);
         merkle_tree.verify_tree();
         assert!(merkle_tree.verify_from_file("testing/small_corpus/pg1.txt"), "tree should say yes to pg1.txt");
@@ -142,7 +142,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
         let expected_hash = hex!("788480f6d1312efdc351d804105641a8245a121a1bdcab8a7007abbc8b6ea115");
 
         let path = "testing/small_corpus/textfile.txt";
-        let hash = crate::merkle::double_hash_from_file(path);
+        let hash = crate::merkle::double_hash_from_file(path).0.unwrap();
         println!("Double hash for {}: {}", path, HexFmt(&hash));
         assert!(hash == expected_hash, "Hash does not match expected value");
         println!("Double hash for {}: {}", path, HexFmt(&hash[..4]));
@@ -156,11 +156,11 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
     #[test]
     fn tree_fossilization_stability() {
         let path = "testing/small_corpus";
-        let merkle_tree = build_merkle_tree_from_directory(path);
+        let merkle_tree = build_merkle_tree_from_directory(path).0.unwrap();
         let test_filename = "testing/custom_pg_test.txt";
         let date = "Christmas";
         merkle_tree.write_unfinished_tree_to_file(test_filename, date);
-        let unfossilized_tree = MerkleTree::new_from_unfinished_tree_file(test_filename);
+        let unfossilized_tree = MerkleTree::new_from_unfinished_tree_file(test_filename).0.unwrap();
         assert!(merkle_tree.get_root_hash() == unfossilized_tree.get_root_hash());
         fs::remove_file(test_filename).unwrap();
 
@@ -184,7 +184,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
     #[test]
     fn proof_fossilization_stability() {
         let path = "testing/small_corpus";
-        let merkle_tree = build_merkle_tree_from_directory(path);
+        let merkle_tree = build_merkle_tree_from_directory(path).0.unwrap();
         let temp_proof_filename = "testing/temp_proof.txt";
 
         let dummy_identifier = "TESTMRKL";
@@ -212,13 +212,13 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
     #[test]
     fn basic_tag() {
         let path = "testing/small_corpus";
-        let merkle_tree = build_merkle_tree_from_directory(path);
+        let merkle_tree = build_merkle_tree_from_directory(path).0.unwrap();
         let identifier = "XMPLMRKL";
         let merkle_root_hash = merkle_tree.get_root_hash();
         println!("{}", HexFmt(merkle_root_hash));
         let num_leaves: u32 = merkle_tree.num_leaves.try_into().expect("Too many leaves to write as u32");
         let explainer_file_path = "testing/dummy_explain.txt";
-        let explainer_hash = double_hash_from_file(explainer_file_path);
+        let explainer_hash = double_hash_from_file(explainer_file_path).0.unwrap();
         let tag = crate::tag::create_chain_tag(identifier, num_leaves, merkle_root_hash, explainer_hash); 
         let expected_tag = hex!("58 4d 50 4c 4d 52 4b 4c 00 00 00 0e ba 20 ce ff 80 d2 c9 fd ac f2 31 58 40 ec 11 a5 08 1c b6 3d a1 76 f4 9a b3 f5 81 a0 7e c3 91 8e a0 e5 8f 0d df 84 5d c1 ce 07 79 33 7c 91 89 c3 0b 91 6e 7d 62 94 96 ac 85 18 ac 6b c7 50 9e 61");
         println!("{}", HexFmt(&tag));
@@ -228,7 +228,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
     #[test]
     fn verify_altered_file(){
         let path = "testing/small_corpus";
-        let merkle_tree = build_merkle_tree_from_directory(path);
+        let merkle_tree = build_merkle_tree_from_directory(path).0.unwrap();
         let genuine_text = "testing/small_corpus/textfile.txt";
         assert!(merkle_tree.verify_from_file(genuine_text));
         // now try with an altered version I made.
@@ -309,8 +309,8 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
     #[test]
     fn build_tree_from_hashes_file() {
         let hashes_filename = "testing/hashes.txt";
-        let tree_from_hashes: MerkleTree = MerkleTree::new_from_hashes(hashes_filename);
-        let tree_from_files = build_merkle_tree_from_directory("testing/small_corpus");
+        let tree_from_hashes: MerkleTree = MerkleTree::new_from_hashes(hashes_filename).0.unwrap();
+        let tree_from_files = build_merkle_tree_from_directory("testing/small_corpus").0.unwrap();
         assert!(tree_from_files.get_root_hash() == tree_from_hashes.get_root_hash());
         assert!(tree_from_files.num_leaves == tree_from_hashes.num_leaves);
     }
@@ -358,7 +358,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
         println!("hi");
 
         let unfinished_tree_filename = format!("{}_unfinished.txt",generated_tree_filename);
-        let corpus_tree = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_filename);
+        let corpus_tree = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_filename).0.unwrap();
 
         println!("bye");
         
@@ -366,7 +366,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
 
         crate::build_timestamp(&corpus_path, &hashes_path, hash_source, &generated_tree_filename, generated_explain_filename, generated_tag_filename, &corpus_name, locktime, &identifier,None, None, None);
 
-        let leaf_hashes_tree = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_filename);
+        let leaf_hashes_tree = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_filename).0.unwrap();
 
         std::fs::remove_file(hashes_path).unwrap();
         std::fs::remove_file(unfinished_tree_filename).unwrap();
