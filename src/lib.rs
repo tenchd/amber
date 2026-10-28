@@ -8,7 +8,6 @@ use std::fs::File;
 use std::io::{Write};
 use std::path::PathBuf;
 use walkdir::WalkDir;
-use crate::FailureReason::{PathNotWriteable, Success};
 use crate::merkle::{double_hash_from_file};
 use crate::{
     merkle::{MerkleProof, MerkleTree, TimestampedMerkleTree}
@@ -70,16 +69,18 @@ pub fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: 
     let tag_string = format!("{}", HexFmt(&tag));
     let file_result = File::create(tag_filename);
     if file_result.is_err() {
-        return PathNotWriteable;
+        println!("Failed to write tag to location {}", tag_filename);
+        return FailureReason::PathNotWriteable;
     }
     let mut file = file_result.unwrap();
     let result = file.write_all(&tag_string.into_bytes());
     if result.is_err() {
-        return PathNotWriteable;
+        println!("Failed to write tag to location {}", tag_filename);
+        return FailureReason::PathNotWriteable;
     }
     println!("Wrote tag to file {}", tag_filename);
 
-    Success
+    FailureReason::Success
 }
 
 pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, locktime: usize, identifier: &str, corpus_desc: Option<String>, corpus_motiv: Option<String>, user_desc: Option<String>) -> (Option<MerkleTree>, FailureReason) {
@@ -99,7 +100,7 @@ pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool
         }
         tree = tree_result.unwrap();
         let reason = tree.write_leaf_hashes_to_file(hashes_path);
-        if reason != Success {
+        if reason != FailureReason::Success {
             return (None, reason)
         }
     }
@@ -113,7 +114,7 @@ pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool
     println!("wrote tree to file {}", tree_filename_unfinished);
 
     build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, explain_filename, tag_filename, corpus_name, utc_raw, locktime, identifier, corpus_desc, corpus_motiv, user_desc);
-    (Some(tree), Success)
+    (Some(tree), FailureReason::Success)
 }
 
 pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> (Option<TimestampedMerkleTree>, FailureReason) {
@@ -264,7 +265,7 @@ pub fn make_proof(input_path: &str, tree_filename: &str, explain_filename: &str,
         proof.fossilize_proof(&output_filename, corpus_name);
         proof.verify_proof_for_file(input_path, false, true);
         println!("{} Merkle proof written to file {}", input_path, output_filename);
-        return (true, Success);
+        return (true, FailureReason::Success);
     }
     //if the user provided the path to a directory, create a proof for every file in that directory (recursively including subdirectories).
     else {
@@ -292,7 +293,7 @@ pub fn make_proof(input_path: &str, tree_filename: &str, explain_filename: &str,
             }
         }
         println!("Done writing proofs. Proof of file 'name.txt' is 'name.txt_proof.txt.'");
-        return (true, Success);
+        return (true, FailureReason::Success);
     }
 }
 
@@ -408,10 +409,10 @@ impl Session {
     }
 
     //corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, locktime: usize, identifier: &str
-    pub fn build_timestamp(&mut self, corpus_name: &str, identifier: &str, hashes_source: bool, corpus_desc: String, corpus_motiv: String, user_desc: String) -> FailureReason {
+    pub fn build_timestamp(&mut self, corpus_name: &str, identifier: &str, hashes_source: bool, corpus_desc: String, corpus_motiv: String, user_desc: String) -> (bool, FailureReason) {
         let (locktime_result, locktime_reason) = Session::get_locktime();
         if locktime_result.is_none() {
-            return locktime_reason
+            return (false, locktime_reason)
         }
         let locktime = locktime_result.unwrap();
 
@@ -456,10 +457,10 @@ impl Session {
 
         let (result, reason) = build_timestamp(corpus_path, hashes_path, hashes_source, tree_filename, explain_filename, tag_filename, corpus_name, locktime, identifier, Some(corpus_desc), Some(corpus_motiv), Some(user_desc));
         if result.is_none() {
-            return reason;
+            return (false, reason);
         }
         self.uftree = result;
-        Success
+        (true, FailureReason::Success)
     }
 
     pub fn finalize_timestamp(&mut self, generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> (bool, FailureReason) {
@@ -486,6 +487,6 @@ impl Session {
             return (None, reason)
         }
         let block_height = result.unwrap();
-        (Some(block_height + 1), Success)
+        (Some(block_height + 1), FailureReason::Success)
     }
 }

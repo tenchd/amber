@@ -1,5 +1,5 @@
 use crate::{
-    FailureReason::{self, BlockHeightMismatchNonFatal, NoBlockchainResponse, TimestampMismatchNonFatal}, merkle::{MerkleProof, MerkleTree}, tag
+    FailureReason, merkle::{MerkleProof, MerkleTree}, tag
 };
 use hex_fmt::HexFmt;
 use std::str::from_utf8;
@@ -37,11 +37,15 @@ fn verify_tag(expected_tag: Vec<u8>, tx_hash: [u8; 32], verbose: bool) -> (Optio
     let json_get_response = get(json_url);
     match json_get_response {
         Ok(value) => json_response = value,
-        Err(_error) => return (None, FailureReason::NoBlockchainResponse),
+        Err(_error) => {
+            println!("Blockchain explorer website did not respond.");
+            return (None, FailureReason::NoBlockchainResponse);
+        }
     }    
     let json_string = json_response.text().unwrap();
     let v: Value = serde_json::from_str(&json_string).unwrap();
     if v["error"] == "not-found-or-invalid-arg" {
+        println!("Blockchain explorer reports tx hash {} does not exist on the chain.", HexFmt(tx_hash));
         return (None, FailureReason::TxNotFound)
     }
     let block_height: usize = v["block_height"].as_u64().unwrap().try_into().unwrap();
@@ -51,7 +55,10 @@ fn verify_tag(expected_tag: Vec<u8>, tx_hash: [u8; 32], verbose: bool) -> (Optio
     let block_get_response = get(block_url);
     match block_get_response {
         Ok(value) => block_response = value,
-        Err(_error) => return (None, FailureReason::NoBlockchainResponse),
+        Err(_error) => {
+            println!("Blockchain explorer website did not respond.");
+            return (None, FailureReason::NoBlockchainResponse);
+        }
     }
     let block_string = block_response.text().unwrap();
     let b: Value = serde_json::from_str(&block_string).unwrap();
@@ -65,7 +72,10 @@ fn verify_tag(expected_tag: Vec<u8>, tx_hash: [u8; 32], verbose: bool) -> (Optio
     let get_response= get(hex_url);
     match get_response {
         Ok(value) => response = value,
-        Err(_error) => return (None, FailureReason::NoBlockchainResponse),
+        Err(_error) => {
+            println!("Blockchain explorer website did not respond.");
+            return (None, FailureReason::NoBlockchainResponse);
+        }
     }
     let content = response.bytes().unwrap();
     let string_content: String = from_utf8(&content).unwrap().to_string();
@@ -97,6 +107,7 @@ fn verify_tag(expected_tag: Vec<u8>, tx_hash: [u8; 32], verbose: bool) -> (Optio
         }
     }
 
+    println!("Tag not found in specified transaction.");
     (None, FailureReason::TagNotFound)
 } 
 
@@ -125,13 +136,13 @@ pub fn verify_proof_timestamp(proof: &MerkleProof, verbose: bool) -> (bool, Fail
                 let expected_block_height = proof.block_height;
                 if chain_block_height != expected_block_height {
                     println!("WARNING: block height {} listed in proof file doesn't match the actual block height {} on the blockchain.", expected_block_height, chain_block_height);
-                    reason = BlockHeightMismatchNonFatal;
+                    reason = FailureReason::BlockHeightMismatchNonFatal;
                 }
                 return (true, reason);
             }   
             else {
                 println!("Timestamp in proof file {} does not match true (blockchain) timestamp {}.", expected_timestamp, chain_timestamp);
-                return (true, TimestampMismatchNonFatal);
+                return (true, FailureReason::TimestampMismatchNonFatal);
             }
         }
         _ => {
@@ -166,7 +177,8 @@ pub async fn get_current_latest_block() -> (Option<usize>, FailureReason) {
         .await;
 
     if response_result.is_err() {
-        return (None, NoBlockchainResponse)
+        println!("Blockchain explorer website did not respond.");
+        return (None, FailureReason::NoBlockchainResponse)
     }
     let response = response_result.unwrap();
     let json_string = response.text().await.unwrap();
