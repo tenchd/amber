@@ -1,6 +1,6 @@
 # building new merkle tree
 corpus_path="/path/to/corpus"
-hashes_path="/path/to/hashes/file"
+hashes_path="generated_timestamp/leaf_hashes.txt"
 corpus_name="your_corpus_name"
 locktime=0
 identifier="IEXAMPLE"

@@ -51,7 +51,6 @@ pub fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: 
     println!("Merkle tree has root hash: {}... and contains {} leaves", HexFmt(&unfossilized.get_root_hash()[..4]), unfossilized.num_leaves);
     unfossilized.verify_tree();
 
-
     let utc = utc_raw.duration_round(TimeDelta::try_minutes(15).unwrap()).unwrap();
     let date = format!("{}", utc.format("%B %e, %Y").to_string());
     let time = format!("{}", utc.format("%H:%M").to_string());
