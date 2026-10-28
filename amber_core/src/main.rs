@@ -2,7 +2,7 @@
 
 use config::Config;
 use clap::Parser;
-use amber::{build_timestamp, finalize_timestamp, verify_proof, verify_tree, verify_file, make_proof, parse_hash_from_string};
+use amber_core::{build_timestamp, finalize_timestamp, verify_proof, verify_tree, verify_file, make_proof, parse_hash_from_string};
 
 // command line parsing
 #[derive(Parser, Debug)]

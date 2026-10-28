@@ -1,0 +1,45 @@
+[package]
+name = "amber_gui"
+version = "0.1.0"
+authors = ["David Tench <dtench@pm.me>"]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
+rust-version = "1.95"
+
+[package.metadata.docs.rs]
+all-features = true
+targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+
+[dependencies]
+egui = "0.36.0"
+eframe = { version = "0.36.0", features = ["persistence"] }
+log = "0.4.27"
+amber_core = { path = "../amber_core" }
+
+# You only need serde if you want app persistence:
+serde = { version = "1.0.219", features = ["derive"] }
+egui-file-dialog = "0.15.0"
+chrono = "0.4.45"
+hex = "0.4.3"
+serde_json = "1.0.151"
+hex_fmt = "0.3.0"
+base64 = "0.23.1"
+sha2 = "0.11.0"
+walkdir = "2.5.0"
+text-template = "0.1.0"
+bitcoin = "0.32.102"
+reqwest = { version = "0.13.5", features = ["blocking"] }
+
+# native:
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+env_logger = "0.11.8"
+
+# web:
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures = "0.4.50"
+web-sys = "0.3.70"              # to access the DOM (to hide the loading text)
+
+
+
+
