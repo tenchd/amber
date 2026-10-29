@@ -491,3 +491,9 @@ pub fn verify_tree_async(tree_filename: PathBuf, explain_filename: PathBuf) -> (
 
     (result, tree, reason)
 }
+
+pub fn verify_proof_async(filepath: PathBuf, proof_filepath: PathBuf) -> (bool, FailureReason, i64, String, String, String, String, String) {
+    let path = filepath.to_str().unwrap();
+    let proof_path = proof_filepath.to_str().unwrap();
+    verify_proof(path, proof_path)
+}

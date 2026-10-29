@@ -1,7 +1,7 @@
 
 use std::fs::read_to_string;
 
-use amber_core::{FailureReason, Session, make_proof, verify_proof};
+use amber_core::{FailureReason, Session, make_proof};
 use crate::status::{AuthenticationStatus, BuildProofStatus, BuildTimestampStatus, Page, ProofStatus, VerificationStatus};
 use hex_fmt::HexFmt;
 use chrono;
@@ -128,26 +128,42 @@ impl TemplateApp {
         }
     }
 
-    fn verify_proof(&mut self) {
+    fn start_verify_proof(&mut self) {
         if self.proof_stat.provided_file.is_some() && self.proof_stat.provided_file.is_some() {
-            let proof_file_path_buf = self.proof_stat.provided_proof_file.clone().unwrap();
-            let proof_file_path = proof_file_path_buf.to_str().unwrap();
-            let file_path_buf = self.proof_stat.provided_file.clone().unwrap();
-            let file_path = file_path_buf.to_str().unwrap();
-            let (verified, reason, utc, tx_hash, block, date, time, identifier) = verify_proof(file_path, proof_file_path);
+
             self.proof_stat.proof_auth_attempted = true;
-            self.proof_stat.proof_authenticated = Some(verified);
-            self.proof_stat.proof_auth_reason = Some(reason);
-            self.proof_stat.proof_utc = Some(utc);
-            self.proof_stat.proof_tx_hash = Some(tx_hash);
-            self.proof_stat.proof_block = Some(block);
-            self.proof_stat.proof_date = Some(date);
-            self.proof_stat.proof_time = Some(time);
-            self.proof_stat.proof_id = Some(identifier);
-            self.proof_stat.proof_auth_status = Some("Proof verification complete.".to_string());
+            let (tx, rx) = mpsc::channel();
+            self.proof_stat.async_result_rx = Some(rx);
+            self.proof_stat.async_running = true;
+
+            let proof_file_path = self.proof_stat.provided_proof_file.clone().unwrap();
+            let file_path = self.proof_stat.provided_file.clone().unwrap();
+
+            thread::spawn(move || {
+                let result = amber_core::verify_proof_async(file_path, proof_file_path);
+                let _ = tx.send(result);
+            });
         }
         else {
             self.proof_stat.proof_auth_status = Some("You must specify a proof file and a file to verify.".to_string());
+        }
+    }
+
+    fn finish_verify_proof(&mut self) {
+        if let Some(rx) = &self.proof_stat.async_result_rx {
+            if let Ok((verified, reason, utc, tx_hash, block, date, time, identifier)) = rx.try_recv() {
+                self.proof_stat.async_result_rx = None;
+                self.proof_stat.async_running = false;
+                self.proof_stat.proof_authenticated = Some(verified);
+                self.proof_stat.proof_auth_reason = Some(reason);
+                self.proof_stat.proof_utc = Some(utc);
+                self.proof_stat.proof_tx_hash = Some(tx_hash);
+                self.proof_stat.proof_block = Some(block);
+                self.proof_stat.proof_date = Some(date);
+                self.proof_stat.proof_time = Some(time);
+                self.proof_stat.proof_id = Some(identifier);
+                self.proof_stat.proof_auth_status = Some("Proof verification complete.".to_string());
+            }
         }
     }
 
@@ -559,12 +575,15 @@ impl TemplateApp {
         }
 
 
-        if ui.button("Back").clicked() {
+        if ui.add_enabled(!self.ver_stat.async_running, egui::Button::new("Back")).clicked() {
             self.jump_to(Page::Functions);
         }
     }
 
     fn page_verify_proof(&mut self, ui: &mut egui::Ui) {
+        if self.proof_stat.async_running {
+            self.finish_verify_proof();
+        }
         ui.heading("Verify a Merkle proof");
 
         ui.label("Amber can produce small 'proofs' for single files that are part of a large timestamped corpus. The `proof` establishes that the corpus file existed at the time the secure timestamp was produced.");
@@ -611,9 +630,14 @@ impl TemplateApp {
         });
 
         if self.proof_stat.provided_file.is_some() && self.proof_stat.provided_proof_file.is_some() {
-            if ui.add_enabled(!self.proof_stat.proof_auth_attempted, egui::Button::new("Verify proof")).clicked() {
-                self.verify_proof();
+            if ui.add_enabled(!self.proof_stat.proof_auth_attempted && !self.proof_stat.async_running, egui::Button::new("Verify proof")).clicked() {
+                self.start_verify_proof();
             }
+        }
+
+        if self.proof_stat.async_running {
+            ui.spinner();
+            ui.label("Verifying proof on the blockchain...");
         }
 
         if self.proof_stat.proof_auth_status.is_some() {
@@ -655,7 +679,7 @@ impl TemplateApp {
 
         ui.separator();
 
-        if ui.button("Back").clicked() {
+        if ui.add_enabled(!self.proof_stat.async_running, egui::Button::new("Back")).clicked() {
             self.jump_to(Page::Functions);
         }
     }
