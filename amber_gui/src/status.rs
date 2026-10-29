@@ -31,6 +31,7 @@ pub struct VerificationStatus {
     pub async_running: bool,
     pub async_result_rx: Option<Receiver<(bool, Option<TimestampedMerkleTree>, FailureReason)>>,
     pub verified: Option<bool>,
+    pub tree: Option<TimestampedMerkleTree>,
     pub reason: Option<FailureReason>,
     pub show_more: bool, 
     pub tx_hash: Option<String>,
@@ -49,6 +50,7 @@ impl VerificationStatus {
             async_running: false,
             async_result_rx: None,
             verified: None,
+            tree: None,
             reason: None,
             show_more: false,
             tx_hash: None,
@@ -59,6 +61,9 @@ impl VerificationStatus {
 
     pub fn clear_verify_state(&mut self) {
         self.verified = None;
+        self.verify_attempted = false;
+        self.tree = None;
+        self.reason = None;
         self.tx_hash = None;
         self.block = None;
         self.utc = None;

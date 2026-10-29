@@ -99,11 +99,11 @@ impl TemplateApp {
                 self.ver_stat.async_running = false;
                 self.ver_stat.verified = Some(result);
                 self.ver_stat.reason = Some(reason);
-                self.session.tstree = tree;
+                self.ver_stat.tree = tree;
                 if self.ver_stat.verified.unwrap() {
-                    self.ver_stat.tx_hash = Some(format!("{}", HexFmt(self.session.tstree.as_ref().unwrap().tx_hash)));
-                    self.ver_stat.block = Some(self.session.tstree.as_ref().unwrap().block_height.to_string());
-                    self.ver_stat.utc = Some(self.session.tstree.as_ref().unwrap().utc_timestamp);
+                    self.ver_stat.tx_hash = Some(format!("{}", HexFmt(self.ver_stat.tree.as_ref().unwrap().tx_hash)));
+                    self.ver_stat.block = Some(self.ver_stat.tree.as_ref().unwrap().block_height.to_string());
+                    self.ver_stat.utc = Some(self.ver_stat.tree.as_ref().unwrap().utc_timestamp);
                 }
             }
         }
@@ -112,9 +112,9 @@ impl TemplateApp {
     fn authenticate_file(&mut self) {
         if self.ver_stat.verified.unwrap() {
             self.auth_stat.auth_attempted = true;
-            if self.ver_stat.provided_merkle_file.is_some() && self.auth_stat.provided_file.is_some() {
-                self.session.auth_filename = self.auth_stat.provided_file.clone();
-                let result = self.session.verify_file();
+            if self.ver_stat.tree.is_some() && self.auth_stat.provided_file.is_some() {
+                let auth_file = self.auth_stat.provided_file.as_ref().unwrap().to_str().unwrap();
+                let result = self.ver_stat.tree.as_ref().unwrap().tree.verify_from_file(auth_file);
                 self.auth_stat.file_authenticated = Some(result);
                 self.auth_stat.file_auth_status = Some("Done.".to_string());
             }
@@ -479,7 +479,7 @@ impl TemplateApp {
                     ui.label(format!("{}", self.ver_stat.reason.as_ref().unwrap()));
                 }
                 let (date, time) = convert_utc_to_datetime(self.ver_stat.utc.clone().unwrap());
-                ui.label(format!("Corpus identifier: {}", self.session.tstree.as_ref().unwrap().identifier));
+                ui.label(format!("Corpus identifier: {}", self.ver_stat.tree.as_ref().unwrap().identifier));
                 ui.label(format!("Date: {}", date));
                 ui.label(format!("Time: {} UTC", time));
                 if !self.ver_stat.show_more {
@@ -504,7 +504,7 @@ impl TemplateApp {
         }
 
         ui.label("");
-        if self.ver_stat.verify_attempted {
+        if self.ver_stat.verify_attempted && !self.ver_stat.async_running {
             if ui.button("Verify a different timestamp").clicked() {
                 self.ver_stat = VerificationStatus::new();
                 self.auth_stat = AuthenticationStatus::new();

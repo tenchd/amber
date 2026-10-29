@@ -401,24 +401,6 @@ impl Session {
         (self.tstree, self.uftree, self.tree_filename, self.explain_filename, self.auth_filename, self.timestamp_output_path, self.source_dir_path, self.hashes_path) = (None, None, None, None, None, None, None, None);
     }
 
-    pub fn verify_tree(&mut self) -> (bool, FailureReason) {
-        assert!(self.tree_filename.is_some());
-        assert!(self.explain_filename.is_some());
-        let tree_path = self.tree_filename.as_ref().unwrap().to_str().unwrap();
-        let explain_path = self.explain_filename.as_ref().unwrap().to_str().unwrap();
-        let (result, tree, reason) = verify_tree(tree_path, explain_path);
-        if result {
-            self.tstree = Some(tree.unwrap());
-        }
-        (result, reason)
-    }
-
-    pub fn verify_file(&mut self) -> bool {
-        assert!(self.auth_filename.is_some());
-        let auth_path = self.auth_filename.as_ref().unwrap().to_str().unwrap();
-        self.tstree.as_ref().unwrap().tree.verify_from_file(auth_path)
-    }
-
     //corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, locktime: usize, identifier: &str
     pub fn build_timestamp(&mut self, corpus_name: &str, identifier: &str, hashes_source: bool, corpus_desc: String, corpus_motiv: String, user_desc: String) -> (bool, FailureReason) {
         let (locktime_result, locktime_reason) = Session::get_locktime();
