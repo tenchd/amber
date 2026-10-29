@@ -5,3 +5,18 @@ test_example.txt
 timestamp/*
 config.toml
 /canonical_timestamp/pgmerkle.txt
+
+# below is default from eframe_template
+# Mac stuff:
+.DS_Store
+
+# trunk output folder
+dist
+
+# Rust compile target directories:
+target
+target_ra
+target_wasm
+
+# https://github.com/lycheeverse/lychee
+.lycheecache

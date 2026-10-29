@@ -8,7 +8,7 @@ It is based on the [reference implementation](https://github.com/tenchd/secure_t
 
 A **secure timestamp** is a digital artifact that can be used to prove with a high degree of certainty that texts from a corpus existed at a particular date (and therefore were not created after that date). This may be valuable in the future if new, hard-to-detect methods of altering or forging documents are invented, because the existence of such methods would cast doubt on the authenticity of genuine digital texts. Proving that a document existed before the forgery methods were created would help to prove the document's authenticity.
 
-For more about the motivation to produce and use secure timestamps, see this article I wrote here.
+For more about the motivation to produce and use secure timestamps, see [this article I wrote](https://www.davidtench.com/timestamp_overview).
 
 A secure timestamp consists of several components:
 - A Merkle tree built from all of the files in the corpus
@@ -22,10 +22,26 @@ Secure timestamps grow more useful the older they are. A primary design goal of 
 
 Merkle tree files may be large because they contain information about all files in the corpus. It is possible to create a Merkle proof file which only contains the information required to verify the timestamp for a single specific file in the corpus. This repo also supports the creation, verification and use of Merkle proofs.
 
-## Quick Start: Verifying and Using an Existing Secure Timestamp.
-This repo includes a secure timestamp of the Project Gutenberg corpus as it existed on June 26, 2026. The Merkle tree file and explanatory document for this timestamp can be found in `testing/reference_timestamp/`. In addition, a single file from the corpus and its corresponding Merkle proof file can be found in `testing/`.
+This repo includes a secure timestamp of the Project Gutenberg corpus as it existed on June 26, 2026. The Merkle tree file and explanatory document for this timestamp can be found in `amber_core/testing/reference_timestamp/`. In addition, a single file from the corpus and its corresponding Merkle proof file can be found in `amber_core/testing/`.
 
+# Using the code
+Currently, there are two ways to use this repo. You can use the GUI (more beginner-friendly, self-explanatory), or you can use the command line interface (supports more functionality, more carefully tested). The GUI is currently "correct-or-crash". This means that if it enters an incorrect state, it may handle the error gracefully, or it may crash. But it will not produce incorrect output.
+
+# Quick Start: GUI Mode
 1. Clone this repo and `cd` into the directory.
+2. If on Linux, `sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev`
+3. `cargo run -p amber_gui --release`
+
+The GUI will give you lots of information about secure timestamps and how to use them.
+
+The GUI has currently only been lightly tested on Linux, WSL, and Mac. It probably will not build on Windows yet, but you can try.
+
+# Command-line Mode
+
+## Quick Start: Verifying and Using an Existing Secure Timestamp.
+
+
+1. `cd amber_core`.  
 2. `cp example_config.toml config.toml`
 3. Edit the last two lines in config.toml to read:
 ```
@@ -66,6 +82,8 @@ which informs you that the file is not in the Merkle tree, and therefore we have
 Incidentally, if you would like to download the entire June 26, 2026 Project Gutenberg corpus, you can get it [here](https://drive.proton.me/urls/TREXY65MA8#ku23FKKn2Nbm). Each file in this corpus can be verified using the above steps.
 
 Now that you see how this procedure works, you can use this method to verify any Amber v0.1 secure timestamp you encounter - simply change the `provided_tree_path` and `provided_explain_path` config variables to the locations of the Merkle tree and explain files from the timestamp.
+
+Note that we will run all commands for the rest of this README from `amber/amber_core`. You can also run them from the top-level directory `amber` if you pass a package argument (`-p amber_core`) to cargo to tell it which package in the workspace to run. So for example the command in Step 4 would become `cargo run -p amber_core --release -- -v`.
 
 ### Verifying a Merkle Proof File
 You can use a Merkle proof file to verify a specific document in the corpus without requiring the whole Merkle tree file. Do so as follows:
@@ -151,7 +169,7 @@ and run `cargo run --release -- -v`. If your timestamp passes verification, you 
 You can create your own Merkle proof from an existing timestamp, given one of the files from the corresponding corpus, as follows:
 
 1. Ensure that `provided_tree_path` in `config.toml` is set to the location of the Merkle tree file you want to make a proof from.
-2. `cargo run --release -- -m <filepath>` where `<filepath>` is the path to the corpus file you wish to produce a proof for.
+2. `cargo run --release -- -m <filepath>` where `<path>` is the path to the corpus file you wish to produce a proof for. You can also provide a path to a directory and it will attempt to produce Merkle proof files for every file in the directory, verifying against the timestamp message on the blockchain.
 
-Note that the code will attempt to verify the proof on the blockchain and will not write the proof to file if verification fails.
+Note that the code will abort if it fails to produce a valid proof for one of the files (because the Merkle tree is invalid, or the file hash doesn't match a Merkle tree leaf, or the timestamp on the blockchain doesn't match, etc.).
 
