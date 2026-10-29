@@ -1,4 +1,4 @@
-mod merkle;
+pub mod merkle;
 mod tag;
 mod tests;
 mod verify;
@@ -13,6 +13,8 @@ use crate::{
     merkle::{MerkleProof, MerkleTree, TimestampedMerkleTree}
 };
 use chrono::{DurationRound, TimeDelta, prelude::*};
+extern crate rand;
+use rand::{RngExt};
 
 const AMBER_VERSION: &str = "0.1.0";
 const AMBER_VERSION_DATE: &str = "Sept 25, 2026";
@@ -304,6 +306,16 @@ pub fn get_version_and_date() -> (String, String) {
     (AMBER_VERSION.to_string(), AMBER_VERSION_DATE.to_string())
 }
 
+pub fn slow_function() -> i64 {
+    let mut sum = 0;
+    println!("hi");
+    for _ in 0..1000000000 {
+        sum += rand::rng().random_range(0..10);
+    }
+    println!("done");
+    sum
+}
+
 #[derive(PartialEq, Debug)]
 pub enum FailureReason {
     Success, // a true success. checked everything about the timestamp and it all was correct.
@@ -488,4 +500,12 @@ impl Session {
         let block_height = result.unwrap();
         (Some(block_height + 1), FailureReason::Success)
     }
+}
+
+pub fn verify_tree_async(tree_filename: PathBuf, explain_filename: PathBuf) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
+    let tree_path = tree_filename.to_str().unwrap();
+    let explain_path = explain_filename.to_str().unwrap();
+    let (result, tree, reason) = verify_tree(tree_path, explain_path);
+
+    (result, tree, reason)
 }

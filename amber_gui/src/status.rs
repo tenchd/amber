@@ -1,6 +1,7 @@
-use std::path::PathBuf;
+use std:: path::PathBuf;
 use egui_file_dialog::FileDialog;
-use amber_core::FailureReason;
+use amber_core::{FailureReason, merkle::TimestampedMerkleTree};
+use std::sync::mpsc::Receiver;
 
 #[derive(PartialEq)]
 pub enum Page {
@@ -26,8 +27,9 @@ pub struct VerificationStatus {
     pub provided_merkle_file: Option<PathBuf>,
     pub provided_explain_file_dialog: FileDialog,
     pub provided_explain_file: Option<PathBuf>,
-    pub verify_status: Option<String>,
     pub verify_attempted: bool,
+    pub async_running: bool,
+    pub async_result_rx: Option<Receiver<(bool, Option<TimestampedMerkleTree>, FailureReason)>>,
     pub verified: Option<bool>,
     pub reason: Option<FailureReason>,
     pub show_more: bool, 
@@ -43,8 +45,9 @@ impl VerificationStatus {
             provided_merkle_file: None,
             provided_explain_file_dialog: FileDialog::new(),
             provided_explain_file: None,
-            verify_status: None,
             verify_attempted: false,
+            async_running: false,
+            async_result_rx: None,
             verified: None,
             reason: None,
             show_more: false,
@@ -55,7 +58,6 @@ impl VerificationStatus {
     }
 
     pub fn clear_verify_state(&mut self) {
-        self.verify_status = None;
         self.verified = None;
         self.tx_hash = None;
         self.block = None;

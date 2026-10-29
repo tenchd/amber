@@ -5,6 +5,8 @@ use amber_core::{FailureReason, Session, make_proof, verify_proof};
 use crate::status::{AuthenticationStatus, BuildProofStatus, BuildTimestampStatus, Page, ProofStatus, VerificationStatus};
 use hex_fmt::HexFmt;
 use chrono;
+use std::sync::mpsc::self;
+use std::thread;
 
 pub fn convert_utc_to_datetime(utc_seconds: i64) -> (String, String) {
     let utc = chrono::DateTime::from_timestamp(utc_seconds, 0).unwrap();
@@ -75,23 +77,35 @@ impl TemplateApp {
         self.page = target;
     }
 
-    fn verify_timestamp(&mut self) {
-        if self.ver_stat.provided_merkle_file.is_some() && self.ver_stat.provided_explain_file.is_some() {
-            self.ver_stat.verify_attempted = true;
-            self.session.tree_filename = self.ver_stat.provided_merkle_file.clone();
-            self.session.explain_filename = self.ver_stat.provided_explain_file.clone();
-            let (result, reason) = self.session.verify_tree();
-            self.ver_stat.verified = Some(result);
-            self.ver_stat.reason = Some(reason);
-            if self.ver_stat.verified.unwrap() {
-                self.ver_stat.tx_hash = Some(format!("{}", HexFmt(self.session.tstree.as_ref().unwrap().tx_hash)));
-                self.ver_stat.block = Some(self.session.tstree.as_ref().unwrap().block_height.to_string());
-                self.ver_stat.utc = Some(self.session.tstree.as_ref().unwrap().utc_timestamp);
-                self.ver_stat.verify_status = Some("Verification complete".to_string());
+    fn start_verify(&mut self) {
+        self.ver_stat.verify_attempted = true;
+        let (tx, rx) = mpsc::channel();
+        self.ver_stat.async_result_rx = Some(rx);
+        self.ver_stat.async_running = true;
+
+        let tree_filepath = self.ver_stat.provided_merkle_file.clone();
+        let explain_filepath = self.ver_stat.provided_explain_file.clone();
+
+        thread::spawn(move || {
+            let result = amber_core::verify_tree_async(tree_filepath.unwrap(), explain_filepath.unwrap()); 
+            let _ = tx.send(result);
+        });
+    }
+
+    fn finish_verify(&mut self) {
+        if let Some(rx) = &self.ver_stat.async_result_rx {
+            if let Ok((result, tree, reason)) = rx.try_recv() {
+                self.ver_stat.async_result_rx = None;
+                self.ver_stat.async_running = false;
+                self.ver_stat.verified = Some(result);
+                self.ver_stat.reason = Some(reason);
+                self.session.tstree = tree;
+                if self.ver_stat.verified.unwrap() {
+                    self.ver_stat.tx_hash = Some(format!("{}", HexFmt(self.session.tstree.as_ref().unwrap().tx_hash)));
+                    self.ver_stat.block = Some(self.session.tstree.as_ref().unwrap().block_height.to_string());
+                    self.ver_stat.utc = Some(self.session.tstree.as_ref().unwrap().utc_timestamp);
+                }
             }
-        }
-        else {
-            self.ver_stat.verify_status = Some("You must specify a merkle file and explain file!".to_string());
         }
     }
 
@@ -385,6 +399,10 @@ impl TemplateApp {
     }
 
     fn page_verify_tree_and_file(&mut self, ui: &mut egui::Ui) {
+        if self.ver_stat.async_running {
+            self.finish_verify();
+        }
+
         ui.heading("Verify Files with a Secure Timestamp");
 
         ui.label("An Amber secure timestamp consists of");
@@ -441,17 +459,17 @@ impl TemplateApp {
                 }
             });
         });
-
         
-        if ui.add_enabled(!self.ver_stat.verify_attempted, egui::Button::new("Verify timestamp")).clicked() {
+        if ui.add_enabled(!self.ver_stat.verify_attempted && !self.ver_stat.async_running && self.ver_stat.provided_merkle_file.is_some() && self.ver_stat.provided_explain_file.is_some(), egui::Button::new("Verify timestamp")).clicked() {
             self.ver_stat.clear_verify_state();
-            self.ver_stat.verify_status = Some("Attempting to verify timestamp.".to_string());
-            ui.label(format!("{}", self.ver_stat.verify_status.clone().unwrap()));
-            self.verify_timestamp();
+            self.start_verify();
+        }        
+        
+        if self.ver_stat.async_running {
+            ui.spinner();
+            ui.label("Verifying timestamp on the blockchain...");
         }
-        if self.ver_stat.verify_status.is_some() {
-            ui.label(format!("{}", self.ver_stat.verify_status.clone().unwrap()));
-        }
+        
         if self.ver_stat.verified.is_some() {
             ui.label(format!("Verified: {}", self.ver_stat.verified.clone().unwrap()));
 
