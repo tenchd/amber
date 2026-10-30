@@ -1,7 +1,7 @@
 
 use std::fs::read_to_string;
 
-use amber_core::{FailureReason, Session};
+use amber_core::FailureReason;
 use crate::status::{AuthenticationStatus, BuildProofStatus, BuildTimestampStatus, Page, ProofStatus, VerificationStatus};
 use hex_fmt::HexFmt;
 use chrono;
@@ -22,8 +22,6 @@ pub struct TemplateApp {
     #[serde(skip)]
     page: Page,
     #[serde(skip)]
-    session: Session,
-    #[serde(skip)]
     ver_stat: VerificationStatus,
     #[serde(skip)]
     auth_stat: AuthenticationStatus,
@@ -39,7 +37,6 @@ impl Default for TemplateApp {
     fn default() -> Self {
         Self {
             page: Page::Welcome,
-            session: Session::new(),
             ver_stat: VerificationStatus::new(),
             auth_stat: AuthenticationStatus::new(),
             proof_stat: ProofStatus::new(),
@@ -67,7 +64,6 @@ impl TemplateApp {
     fn jump_to(&mut self, target: Page) {
         // if you're returning to the welcome page, clear all state.
         if target == Page::Welcome || target == Page::Functions {
-            self.session = Session::new();
             self.ver_stat = VerificationStatus::new();
             self.auth_stat = AuthenticationStatus::new();
             self.proof_stat = ProofStatus::new();
@@ -216,7 +212,6 @@ impl TemplateApp {
                 self.build_ts_stat.build_status = Some("You must select a hash file.".to_string());
             }
             else {
-                self.session.hashes_path = self.build_ts_stat.hash_file.clone();
                 corpus_valid = true;
             }
         }
@@ -225,7 +220,6 @@ impl TemplateApp {
                 self.build_ts_stat.build_status = Some("You must select a directory.".to_string());
             }
             else {
-                self.session.source_dir_path = self.build_ts_stat.directory.clone();
                 corpus_valid = true;
             }
         }
@@ -323,37 +317,6 @@ impl TemplateApp {
             });
     }
 
-    // fn finalize_timestamp(&mut self) {        
-    //     self.build_ts_stat.tree_file = self.session.tree_filename.clone();
-    //     self.build_ts_stat.explain_file = self.session.explain_filename.clone();
-    //     let tree_path_buf = self.build_ts_stat.tree_file.as_ref().unwrap();
-    //     let tree_path = tree_path_buf.to_str().unwrap();
-    //     let explain_path_buf = self.build_ts_stat.explain_file.as_ref().unwrap();
-    //     let explain_path = explain_path_buf.to_str().unwrap();
-
-    //     let (tx_hash_option, reason) = Session::parse_hash(&self.build_ts_stat.tx_hash_string);
-
-    //     if tx_hash_option.is_none() {
-    //         self.build_ts_stat.finalize_status = Some(format!("The process failed for the following reason: {}", reason));
-    //         self.build_ts_stat.tree_verified_reason = Some(reason);
-    //     }
-
-    //     else {
-    //         let tx_hash = tx_hash_option.unwrap();
-    //         let (result, tree, reason) = amber_core::finalize_timestamp_async(tree_path, explain_path, &self.build_ts_stat.corpus_name, &self.build_ts_stat.identifier, tx_hash);
-
-    //         self.build_ts_stat.tree_verified = result;
-    //         self.build_ts_stat.tree_verified_reason = Some(reason);
-
-    //         if result {
-    //             self.build_ts_stat.finalize_status = Some(format!("Timestamp verified on the blockchain! \nTimestamped merkle tree file written to {}", tree_path));
-    //         }
-    //         else {
-    //             self.build_ts_stat.finalize_status = Some("The timestamp failed to verify on the blockchain.".to_string());
-    //         }  
-    //     }
-    // }
-
     fn start_finalize_timestamp(&mut self) {
         let (tx, rx) = mpsc::channel();
         self.build_ts_stat.finalize_async_result_rx = Some(rx);
@@ -363,7 +326,7 @@ impl TemplateApp {
         let explain_file = self.build_ts_stat.explain_file.clone().unwrap();
         let corpus_name = self.build_ts_stat.corpus_name.clone();
         let identifier = self.build_ts_stat.identifier.clone();
-        let (tx_hash_option, reason) = Session::parse_hash(&self.build_ts_stat.tx_hash_string);
+        let (tx_hash_option, reason) = amber_core::parse_hash(&self.build_ts_stat.tx_hash_string);
 
         if tx_hash_option.is_none() {
             self.build_ts_stat.finalize_status = Some(format!("The process failed for the following reason: {}", reason));

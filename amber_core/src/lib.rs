@@ -370,59 +370,18 @@ impl std::fmt::Display for FailureReason {
     }
 }
 
-pub struct Session {
-    pub tstree: Option<TimestampedMerkleTree>,
-    pub uftree: Option<MerkleTree>,
-    pub tree_filename: Option<PathBuf>,
-    pub explain_filename: Option<PathBuf>,
-    pub tag_filename: Option<PathBuf>,
-    pub auth_filename: Option<PathBuf>,
-    pub timestamp_output_path: Option<PathBuf>,
-    pub source_dir_path: Option<PathBuf>,
-    pub hashes_path: Option<PathBuf>,
+pub fn parse_hash(input_string: &str) -> (Option<[u8; 32]>, FailureReason) {
+
+    merkle::parse_hash_from_str(input_string)
 }
 
-impl Session {
-    pub fn new() -> Self {
-        Self {
-            tstree: None,
-            uftree: None,
-            tree_filename: None,
-            explain_filename: None,
-            tag_filename: None,
-            auth_filename: None,
-            timestamp_output_path: None,
-            source_dir_path: None,
-            hashes_path: None,
-        }
+pub fn get_locktime() -> (Option<usize>, FailureReason) {
+    let (result, reason) = verify::get_current_latest_block();
+    if result.is_none() {
+        return (None, reason)
     }
-
-    pub fn finalize_timestamp(&mut self, generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> (bool, FailureReason) {
-        self.uftree = None;
-
-        let reason;
-        
-        (self.tstree, reason) = finalize_timestamp(generated_tree_filename, generated_explain_filename, corpus_name, identifier, tx_hash);
-
-        if self.tstree.is_some() {
-            return (true, reason);
-        }
-        (false, reason)
-    }
-
-    pub fn parse_hash(input_string: &str) -> (Option<[u8; 32]>, FailureReason) {
-
-        merkle::parse_hash_from_str(input_string)
-    }
-
-    pub fn get_locktime() -> (Option<usize>, FailureReason) {
-        let (result, reason) = verify::get_current_latest_block();
-        if result.is_none() {
-            return (None, reason)
-        }
-        let block_height = result.unwrap();
-        (Some(block_height + 1), FailureReason::Success)
-    }
+    let block_height = result.unwrap();
+    (Some(block_height + 1), FailureReason::Success)
 }
 
 pub fn verify_tree_async(tree_filename: PathBuf, explain_filename: PathBuf) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
@@ -447,7 +406,7 @@ pub fn build_proof_async(file_path: PathBuf, merkle_path: PathBuf, explain_path:
 }
 
 pub fn build_timestamp_async(corpus_name: String, identifier: String, hashes_source: bool, input_hashes_path: Option<PathBuf>, input_source_dir: Option<PathBuf>, corpus_desc: String, corpus_motiv: String, user_desc: String, timestamp_output_path: PathBuf) -> (bool, Option<MerkleTree>, FailureReason, Option<PathBuf>, Option<PathBuf>, Option<PathBuf>) {
-    let (locktime_result, locktime_reason) = Session::get_locktime();
+    let (locktime_result, locktime_reason) = get_locktime();
     if locktime_result.is_none() {
         return (false, None, locktime_reason, None, None, None)
     }
