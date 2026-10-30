@@ -2,8 +2,6 @@ use crate::{
     FailureReason, merkle::{MerkleProof, MerkleTree}, tag
 };
 use hex_fmt::HexFmt;
-use std::str::from_utf8;
-use reqwest::blocking::get;
 use bitcoin::{
     Transaction,
     blockdata::{
@@ -27,79 +25,130 @@ fn compute_tag(identifier: &str, num_leaves: u32, root_hash: [u8; 32], explain_h
     tag
 }
 
-fn verify_tag(expected_tag: Vec<u8>, tx_hash: [u8; 32], verbose: bool) -> (Option<TimestampBlockchainDetails>, FailureReason) {
+async fn verify_tag_async(
+    client: &reqwest::Client,
+    expected_tag: Vec<u8>,
+    tx_hash: [u8; 32],
+    verbose: bool,
+) -> (Option<TimestampBlockchainDetails>, FailureReason) {
     let tx_hash_string = format!("{}", HexFmt(tx_hash));
 
-    if verbose {println!("Looking up transaction with hash {} on Bitcoin blockchain. It should have an OP_RETURN output with the timestamp's tag in the data payload.", tx_hash_string);}
+    if verbose {
+        println!(
+            "Looking up transaction with hash {} on Bitcoin blockchain. \
+             It should have an OP_RETURN output with the timestamp's tag in the data payload.",
+            tx_hash_string
+        );
+    }
 
     let json_url = format!("https://blockchain.info/rawtx/{}", tx_hash_string);
-    let json_response; 
-    let json_get_response = get(json_url);
-    match json_get_response {
-        Ok(value) => json_response = value,
-        Err(_error) => {
-            println!("Blockchain explorer website did not respond.");
-            return (None, FailureReason::NoBlockchainResponse);
-        }
-    }    
-    let json_string = json_response.text().unwrap();
-    let v: Value = serde_json::from_str(&json_string).unwrap();
-    if v["error"] == "not-found-or-invalid-arg" {
-        println!("Blockchain explorer reports tx hash {} does not exist on the chain.", HexFmt(tx_hash));
-        return (None, FailureReason::TxNotFound)
-    }
-    let block_height: usize = v["block_height"].as_u64().unwrap().try_into().unwrap();
+    let hex_url = format!(
+        "https://blockchain.info/rawtx/{}?format=hex",
+        tx_hash_string
+    );
 
-    let block_url = format!("https://blockchain.info/block-height/{}?format=json", block_height);
-    let block_response;
-    let block_get_response = get(block_url);
-    match block_get_response {
-        Ok(value) => block_response = value,
-        Err(_error) => {
+    let (json_result, hex_result) = tokio::join!(
+        client.get(&json_url).send(),
+        client.get(&hex_url).send(),
+    );
+
+    let json_response = match json_result {
+        Ok(response) => response,
+        Err(_) => {
             println!("Blockchain explorer website did not respond.");
             return (None, FailureReason::NoBlockchainResponse);
         }
+    };
+
+    let hex_response = match hex_result {
+        Ok(response) => response,
+        Err(_) => {
+            println!("Blockchain explorer website did not respond.");
+            return (None, FailureReason::NoBlockchainResponse);
+        }
+    };
+
+    let json_string = match json_response.text().await {
+        Ok(text) => text,
+        Err(_) => {
+            println!("Blockchain explorer website did not respond.");
+            return (None, FailureReason::NoBlockchainResponse);
+        }
+    };
+
+    let v: Value = serde_json::from_str(&json_string).unwrap();
+
+    if v["error"] == "not-found-or-invalid-arg" {
+        println!(
+            "Blockchain explorer reports tx hash {} does not exist on the chain.",
+            HexFmt(tx_hash)
+        );
+        return (None, FailureReason::TxNotFound);
     }
-    let block_string = block_response.text().unwrap();
+
+    let block_height: usize = v["block_height"]
+        .as_u64()
+        .unwrap()
+        .try_into()
+        .unwrap();
+
+    let block_url = format!(
+        "https://blockchain.info/block-height/{}?format=json",
+        block_height
+    );
+
+    let block_response = match client.get(&block_url).send().await {
+        Ok(response) => response,
+        Err(_) => {
+            println!("Blockchain explorer website did not respond.");
+            return (None, FailureReason::NoBlockchainResponse);
+        }
+    };
+
+    let block_string = match block_response.text().await {
+        Ok(text) => text,
+        Err(_) => {
+            println!("Blockchain explorer website did not respond.");
+            return (None, FailureReason::NoBlockchainResponse);
+        }
+    };
+
     let b: Value = serde_json::from_str(&block_string).unwrap();
     let block = &b["blocks"][0];
     let time = block["time"].as_i64().unwrap();
 
-    //let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(DateTime::from_timestamp(time, 0).unwrap().naive_utc(), Utc);
-
-    let hex_url = format!("https://blockchain.info/rawtx/{}?format=hex", tx_hash_string);
-    let response;
-    let get_response= get(hex_url);
-    match get_response {
-        Ok(value) => response = value,
-        Err(_error) => {
+    let content = match hex_response.bytes().await {
+        Ok(bytes) => bytes,
+        Err(_) => {
             println!("Blockchain explorer website did not respond.");
             return (None, FailureReason::NoBlockchainResponse);
         }
-    }
-    let content = response.bytes().unwrap();
-    let string_content: String = from_utf8(&content).unwrap().to_string();
-    let bytes = hex::decode(string_content).unwrap();
-    let tx: Transaction = deserialize(&bytes).unwrap();
+    };
 
+    let string_content = std::str::from_utf8(&content).unwrap();
+    let bytes = hex::decode(string_content.trim()).unwrap();
+    let tx: Transaction = deserialize(&bytes).unwrap();
 
     for (_vout, output) in tx.output.iter().enumerate() {
         let mut instructions = output.script_pubkey.instructions();
+
         match instructions.next() {
             Some(Ok(Instruction::Op(op))) if op == OP_RETURN => {
                 for instruction in instructions {
                     match instruction {
                         Ok(Instruction::PushBytes(data)) => {
-                            //println!("Payload: {}", HexFmt(data.?format=hexas_bytes()));
                             if data.as_bytes() == expected_tag {
-                                //println!("Success! The transaction was found in block {} and contains the tag in its OP_RETURN data payload.", block_height);
-                                //println!("You have verified that the provided timestamp was written to the Bitcoin blockchain at date/time {}", datetime);
-                                //println!("This block height and date/time should roughly match those in explain.txt.");
-                                return (Some(TimestampBlockchainDetails{block_height: block_height, timestamp: time}), FailureReason::Success);
+                                return (
+                                    Some(TimestampBlockchainDetails {
+                                        block_height,
+                                        timestamp: time,
+                                    }),
+                                    FailureReason::Success,
+                                );
                             }
                         }
                         Ok(Instruction::Op(_op)) => {}
-                        Err(_) => unimplemented!()
+                        Err(_) => unimplemented!(),
                     }
                 }
             }
@@ -109,24 +158,28 @@ fn verify_tag(expected_tag: Vec<u8>, tx_hash: [u8; 32], verbose: bool) -> (Optio
 
     println!("Tag not found in specified transaction.");
     (None, FailureReason::TagNotFound)
-} 
+}
 
-pub fn verify_tree_timestamp(identifier: &str, tree: &MerkleTree, explain_hash: [u8; 32], tx_hash: [u8; 32]) -> (Option<TimestampBlockchainDetails>, FailureReason) {
+#[tokio::main]
+pub async fn verify_tree_timestamp(identifier: &str, tree: &MerkleTree, explain_hash: [u8; 32], tx_hash: [u8; 32]) -> (Option<TimestampBlockchainDetails>, FailureReason) {
     //println!("Computing tag based on provided identifier, merkle tree, and explain file.");
     let num_leaves: u32 = tree.num_leaves.try_into().unwrap();
     let root_hash = tree.get_root_hash();
     let expected_tag = compute_tag(identifier, num_leaves, root_hash, explain_hash);
     //println!("The tag should be {}", HexFmt(&expected_tag));
 
-    verify_tag(expected_tag, tx_hash, true)
+    let client = reqwest::Client::new();
+    verify_tag_async(&client, expected_tag, tx_hash, true).await
 }
 
-pub fn verify_proof_timestamp(proof: &MerkleProof, verbose: bool) -> (bool, FailureReason) {
+#[tokio::main]
+pub async fn verify_proof_timestamp(proof: &MerkleProof, verbose: bool) -> (bool, FailureReason) {
     //println!("Computing tag based on provided identifier, merkle tree, and explain file.");
     let expected_tag = compute_tag(&proof.identifier, proof.num_leaves.try_into().unwrap(), proof.root_hash, proof.explain_hash);
     if verbose {println!("The tag should be {}", HexFmt(&expected_tag));}
 
-    let (result, mut reason) = verify_tag(expected_tag, proof.tx_hash, verbose);
+    let client = reqwest::Client::new();
+    let (result, mut reason) = verify_tag_async(&client, expected_tag, proof.tx_hash, verbose).await;
     match result {
         Some(details) => {
             let chain_timestamp = details.timestamp;
