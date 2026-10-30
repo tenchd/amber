@@ -14,7 +14,6 @@ use crate::{
 };
 use chrono::{DurationRound, TimeDelta, prelude::*};
 extern crate rand;
-use rand::{RngExt};
 
 const AMBER_VERSION: &str = "0.1.0";
 const AMBER_VERSION_DATE: &str = "Sept 25, 2026";
@@ -304,16 +303,6 @@ pub fn parse_hash_from_string(input_string: &str) -> (Option<[u8; 32]>, FailureR
 
 pub fn get_version_and_date() -> (String, String) {
     (AMBER_VERSION.to_string(), AMBER_VERSION_DATE.to_string())
-}
-
-pub fn slow_function() -> i64 {
-    let mut sum = 0;
-    println!("hi");
-    for _ in 0..1000000000 {
-        sum += rand::rng().random_range(0..10);
-    }
-    println!("done");
-    sum
 }
 
 #[derive(PartialEq, Debug)]
