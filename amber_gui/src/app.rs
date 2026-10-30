@@ -1,7 +1,7 @@
 
 use std::fs::read_to_string;
 
-use amber_core::{FailureReason, Session, make_proof};
+use amber_core::{FailureReason, Session};
 use crate::status::{AuthenticationStatus, BuildProofStatus, BuildTimestampStatus, Page, ProofStatus, VerificationStatus};
 use hex_fmt::HexFmt;
 use chrono;
@@ -167,28 +167,43 @@ impl TemplateApp {
         }
     }
 
-    fn build_proof(&mut self) {
+    fn start_build_proof(&mut self) {
         if self.build_pf_stat.proven_file.is_some() && self.build_pf_stat.merkle_file.is_some() {
             self.build_pf_stat.proof_attempted = true;
-            let file_path_buf = self.build_pf_stat.proven_file.clone().unwrap();
-            let file_path = file_path_buf.to_str().unwrap();
-            let merkle_path_buf = self.build_pf_stat.merkle_file.clone().unwrap();
-            let merkle_path = merkle_path_buf.to_str().unwrap();
-            let explain_path_buf = self.build_pf_stat.explain_file.clone().unwrap();
-            let explain_path = explain_path_buf.to_str().unwrap();
-            let corpus_name = &self.build_pf_stat.corpus_name;
-            let (result, reason) = make_proof(file_path, merkle_path, explain_path, &corpus_name);
-            if result {
-                self.build_pf_stat.status = Some("Wrote proof to file.".to_string());
-                self.build_pf_stat.proof_verified = true;
-                let output_path = file_path.to_owned() + "_proof.txt";
-                println!("{}", output_path);
-                self.build_pf_stat.proof_string = read_to_string(output_path).unwrap();
-            }
-            else {
-                self.build_pf_stat.status = Some("Could not make proof file.".to_string());
-                self.build_pf_stat.proof_verified = false;
-                self.build_pf_stat.proof_reason = Some(reason);
+            let (tx, rx) = mpsc::channel();
+            self.build_pf_stat.async_result_rx = Some(rx);
+            self.build_pf_stat.async_running = true;
+
+            let file_path = self.build_pf_stat.proven_file.clone().unwrap();
+            let merkle_path = self.build_pf_stat.merkle_file.clone().unwrap();
+            let explain_path = self.build_pf_stat.explain_file.clone().unwrap();
+            let corpus_name = self.build_pf_stat.corpus_name.clone();
+
+            thread::spawn(move || {
+                let result = amber_core::build_proof_async(file_path, merkle_path, explain_path, &corpus_name);
+                let _ = tx.send(result);
+            });
+        }
+    }
+
+    fn finish_build_proof(&mut self) {
+        if let Some(rx) = &self.build_pf_stat.async_result_rx {
+            if let Ok((result, reason)) = rx.try_recv() {
+                self.build_pf_stat.async_result_rx = None;
+                self.build_pf_stat.async_running = false;
+                if result {
+                    self.build_pf_stat.status = Some("Wrote proof to file.".to_string());
+                    self.build_pf_stat.proof_verified = true;
+                    let file_path_buf = self.build_pf_stat.proven_file.clone().unwrap();
+                    let file_path = file_path_buf.to_str().unwrap();
+                    let output_path = file_path.to_owned() + "_proof.txt";
+                    self.build_pf_stat.proof_string = read_to_string(output_path).unwrap();
+                }
+                else {
+                    self.build_pf_stat.status = Some("Could not make proof file.".to_string());
+                    self.build_pf_stat.proof_verified = false;
+                    self.build_pf_stat.proof_reason = Some(reason);
+                }
             }
         }
     }
@@ -685,6 +700,9 @@ impl TemplateApp {
     }
 
     fn page_build_proof(&mut self, ui: &mut egui::Ui) {
+        if self.build_pf_stat.async_running {
+            self.finish_build_proof();
+        }
         ui.heading("Create a Merkle proof file");
 
         ui.label("Using an existing secure timestamp of a corpus, Amber can produce a small 'proof' of a single file in the corpus. The proof file serves as a secure timestamp for that specific corpus file only. The advantage of this is that the proof file is much smaller than the whole secure timestamp.");
@@ -752,15 +770,20 @@ impl TemplateApp {
         });
         
         ui.label("Enter the name of the timestamped corpus here:");
-        ui.add_enabled(!self.build_pf_stat.proof_attempted, egui::TextEdit::singleline(&mut self.build_pf_stat.corpus_name));
+        ui.add_enabled(!self.build_pf_stat.proof_attempted && !self.build_pf_stat.async_running, egui::TextEdit::singleline(&mut self.build_pf_stat.corpus_name));
         if self.build_pf_stat.corpus_name != "".to_string() {
             ui.label(format!("Corpus name will be listed as: \"{}\" in the proof file.", &self.build_pf_stat.corpus_name));
         }
 
         if self.build_pf_stat.corpus_name != "".to_string() && self.build_pf_stat.proven_file.is_some() && self.build_pf_stat.merkle_file.is_some() {
             if ui.add_enabled(!self.build_pf_stat.proof_attempted, egui::Button::new("Create proof")).clicked() {
-                self.build_proof();
+                self.start_build_proof();
             }
+        }
+
+        if self.build_pf_stat.async_running {
+            ui.spinner();
+            ui.label("Verifying timestamp on the blockchain, then creating proof file...");
         }
 
         if self.build_pf_stat.proof_verified {
@@ -787,7 +810,7 @@ impl TemplateApp {
         }
 
         else {
-            if self.build_pf_stat.proof_attempted {
+            if self.build_pf_stat.proof_attempted && !self.build_pf_stat.async_running {
                 ui.label(format!("The proof build did not succeed for the following reason: {}", self.build_pf_stat.proof_reason.as_ref().unwrap()));
                 if ui.button("Try again").clicked() {
                     self.build_pf_stat = BuildProofStatus::new();
@@ -797,7 +820,7 @@ impl TemplateApp {
 
         ui.separator();
         
-        if ui.button("Back").clicked() {
+        if ui.add_enabled(!self.build_pf_stat.async_running, egui::Button::new("Back")).clicked() {
             self.jump_to(Page::Functions);
         }
     }

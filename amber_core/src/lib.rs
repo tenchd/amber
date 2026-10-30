@@ -497,3 +497,10 @@ pub fn verify_proof_async(filepath: PathBuf, proof_filepath: PathBuf) -> (bool, 
     let proof_path = proof_filepath.to_str().unwrap();
     verify_proof(path, proof_path)
 }
+
+pub fn build_proof_async(file_path: PathBuf, merkle_path: PathBuf, explain_path: PathBuf, corpus_name: &str) -> (bool, FailureReason) {
+    let path = file_path.to_str().unwrap();
+    let merkle = merkle_path.to_str().unwrap();
+    let explain = explain_path.to_str().unwrap();
+    make_proof(path, merkle, explain, corpus_name)
+}
