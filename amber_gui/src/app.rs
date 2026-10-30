@@ -1,10 +1,12 @@
 
 use std::fs::read_to_string;
 
-use amber_core::{FailureReason, Session, make_proof, verify_proof};
+use amber_core::FailureReason;
 use crate::status::{AuthenticationStatus, BuildProofStatus, BuildTimestampStatus, Page, ProofStatus, VerificationStatus};
 use hex_fmt::HexFmt;
 use chrono;
+use std::sync::mpsc::self;
+use std::thread;
 
 pub fn convert_utc_to_datetime(utc_seconds: i64) -> (String, String) {
     let utc = chrono::DateTime::from_timestamp(utc_seconds, 0).unwrap();
@@ -19,8 +21,6 @@ pub fn convert_utc_to_datetime(utc_seconds: i64) -> (String, String) {
 pub struct TemplateApp {
     #[serde(skip)]
     page: Page,
-    #[serde(skip)]
-    session: Session,
     #[serde(skip)]
     ver_stat: VerificationStatus,
     #[serde(skip)]
@@ -37,7 +37,6 @@ impl Default for TemplateApp {
     fn default() -> Self {
         Self {
             page: Page::Welcome,
-            session: Session::new(),
             ver_stat: VerificationStatus::new(),
             auth_stat: AuthenticationStatus::new(),
             proof_stat: ProofStatus::new(),
@@ -65,7 +64,6 @@ impl TemplateApp {
     fn jump_to(&mut self, target: Page) {
         // if you're returning to the welcome page, clear all state.
         if target == Page::Welcome || target == Page::Functions {
-            self.session = Session::new();
             self.ver_stat = VerificationStatus::new();
             self.auth_stat = AuthenticationStatus::new();
             self.proof_stat = ProofStatus::new();
@@ -75,32 +73,44 @@ impl TemplateApp {
         self.page = target;
     }
 
-    fn verify_timestamp(&mut self) {
-        if self.ver_stat.provided_merkle_file.is_some() && self.ver_stat.provided_explain_file.is_some() {
-            self.ver_stat.verify_attempted = true;
-            self.session.tree_filename = self.ver_stat.provided_merkle_file.clone();
-            self.session.explain_filename = self.ver_stat.provided_explain_file.clone();
-            let (result, reason) = self.session.verify_tree();
-            self.ver_stat.verified = Some(result);
-            self.ver_stat.reason = Some(reason);
-            if self.ver_stat.verified.unwrap() {
-                self.ver_stat.tx_hash = Some(format!("{}", HexFmt(self.session.tstree.as_ref().unwrap().tx_hash)));
-                self.ver_stat.block = Some(self.session.tstree.as_ref().unwrap().block_height.to_string());
-                self.ver_stat.utc = Some(self.session.tstree.as_ref().unwrap().utc_timestamp);
-                self.ver_stat.verify_status = Some("Verification complete".to_string());
+    fn start_verify(&mut self) {
+        self.ver_stat.verify_attempted = true;
+        let (tx, rx) = mpsc::channel();
+        self.ver_stat.async_result_rx = Some(rx);
+        self.ver_stat.async_running = true;
+
+        let tree_filepath = self.ver_stat.provided_merkle_file.clone();
+        let explain_filepath = self.ver_stat.provided_explain_file.clone();
+
+        thread::spawn(move || {
+            let result = amber_core::verify_tree_async(tree_filepath.unwrap(), explain_filepath.unwrap()); 
+            let _ = tx.send(result);
+        });
+    }
+
+    fn finish_verify(&mut self) {
+        if let Some(rx) = &self.ver_stat.async_result_rx {
+            if let Ok((result, tree, reason)) = rx.try_recv() {
+                self.ver_stat.async_result_rx = None;
+                self.ver_stat.async_running = false;
+                self.ver_stat.verified = Some(result);
+                self.ver_stat.reason = Some(reason);
+                self.ver_stat.tree = tree;
+                if self.ver_stat.verified.unwrap() {
+                    self.ver_stat.tx_hash = Some(format!("{}", HexFmt(self.ver_stat.tree.as_ref().unwrap().tx_hash)));
+                    self.ver_stat.block = Some(self.ver_stat.tree.as_ref().unwrap().block_height.to_string());
+                    self.ver_stat.utc = Some(self.ver_stat.tree.as_ref().unwrap().utc_timestamp);
+                }
             }
-        }
-        else {
-            self.ver_stat.verify_status = Some("You must specify a merkle file and explain file!".to_string());
         }
     }
 
     fn authenticate_file(&mut self) {
         if self.ver_stat.verified.unwrap() {
             self.auth_stat.auth_attempted = true;
-            if self.ver_stat.provided_merkle_file.is_some() && self.auth_stat.provided_file.is_some() {
-                self.session.auth_filename = self.auth_stat.provided_file.clone();
-                let result = self.session.verify_file();
+            if self.ver_stat.tree.is_some() && self.auth_stat.provided_file.is_some() {
+                let auth_file = self.auth_stat.provided_file.as_ref().unwrap().to_str().unwrap();
+                let result = self.ver_stat.tree.as_ref().unwrap().tree.verify_from_file(auth_file);
                 self.auth_stat.file_authenticated = Some(result);
                 self.auth_stat.file_auth_status = Some("Done.".to_string());
             }
@@ -114,51 +124,82 @@ impl TemplateApp {
         }
     }
 
-    fn verify_proof(&mut self) {
+    fn start_verify_proof(&mut self) {
         if self.proof_stat.provided_file.is_some() && self.proof_stat.provided_file.is_some() {
-            let proof_file_path_buf = self.proof_stat.provided_proof_file.clone().unwrap();
-            let proof_file_path = proof_file_path_buf.to_str().unwrap();
-            let file_path_buf = self.proof_stat.provided_file.clone().unwrap();
-            let file_path = file_path_buf.to_str().unwrap();
-            let (verified, reason, utc, tx_hash, block, date, time, identifier) = verify_proof(file_path, proof_file_path);
+
             self.proof_stat.proof_auth_attempted = true;
-            self.proof_stat.proof_authenticated = Some(verified);
-            self.proof_stat.proof_auth_reason = Some(reason);
-            self.proof_stat.proof_utc = Some(utc);
-            self.proof_stat.proof_tx_hash = Some(tx_hash);
-            self.proof_stat.proof_block = Some(block);
-            self.proof_stat.proof_date = Some(date);
-            self.proof_stat.proof_time = Some(time);
-            self.proof_stat.proof_id = Some(identifier);
-            self.proof_stat.proof_auth_status = Some("Proof verification complete.".to_string());
+            let (tx, rx) = mpsc::channel();
+            self.proof_stat.async_result_rx = Some(rx);
+            self.proof_stat.async_running = true;
+
+            let proof_file_path = self.proof_stat.provided_proof_file.clone().unwrap();
+            let file_path = self.proof_stat.provided_file.clone().unwrap();
+
+            thread::spawn(move || {
+                let result = amber_core::verify_proof_async(file_path, proof_file_path);
+                let _ = tx.send(result);
+            });
         }
         else {
             self.proof_stat.proof_auth_status = Some("You must specify a proof file and a file to verify.".to_string());
         }
     }
 
-    fn build_proof(&mut self) {
+    fn finish_verify_proof(&mut self) {
+        if let Some(rx) = &self.proof_stat.async_result_rx {
+            if let Ok((verified, reason, utc, tx_hash, block, date, time, identifier)) = rx.try_recv() {
+                self.proof_stat.async_result_rx = None;
+                self.proof_stat.async_running = false;
+                self.proof_stat.proof_authenticated = Some(verified);
+                self.proof_stat.proof_auth_reason = Some(reason);
+                self.proof_stat.proof_utc = Some(utc);
+                self.proof_stat.proof_tx_hash = Some(tx_hash);
+                self.proof_stat.proof_block = Some(block);
+                self.proof_stat.proof_date = Some(date);
+                self.proof_stat.proof_time = Some(time);
+                self.proof_stat.proof_id = Some(identifier);
+                self.proof_stat.proof_auth_status = Some("Proof verification complete.".to_string());
+            }
+        }
+    }
+
+    fn start_build_proof(&mut self) {
         if self.build_pf_stat.proven_file.is_some() && self.build_pf_stat.merkle_file.is_some() {
             self.build_pf_stat.proof_attempted = true;
-            let file_path_buf = self.build_pf_stat.proven_file.clone().unwrap();
-            let file_path = file_path_buf.to_str().unwrap();
-            let merkle_path_buf = self.build_pf_stat.merkle_file.clone().unwrap();
-            let merkle_path = merkle_path_buf.to_str().unwrap();
-            let explain_path_buf = self.build_pf_stat.explain_file.clone().unwrap();
-            let explain_path = explain_path_buf.to_str().unwrap();
-            let corpus_name = &self.build_pf_stat.corpus_name;
-            let (result, reason) = make_proof(file_path, merkle_path, explain_path, &corpus_name);
-            if result {
-                self.build_pf_stat.status = Some("Wrote proof to file.".to_string());
-                self.build_pf_stat.proof_verified = true;
-                let output_path = file_path.to_owned() + "_proof.txt";
-                println!("{}", output_path);
-                self.build_pf_stat.proof_string = read_to_string(output_path).unwrap();
-            }
-            else {
-                self.build_pf_stat.status = Some("Could not make proof file.".to_string());
-                self.build_pf_stat.proof_verified = false;
-                self.build_pf_stat.proof_reason = Some(reason);
+            let (tx, rx) = mpsc::channel();
+            self.build_pf_stat.async_result_rx = Some(rx);
+            self.build_pf_stat.async_running = true;
+
+            let file_path = self.build_pf_stat.proven_file.clone().unwrap();
+            let merkle_path = self.build_pf_stat.merkle_file.clone().unwrap();
+            let explain_path = self.build_pf_stat.explain_file.clone().unwrap();
+            let corpus_name = self.build_pf_stat.corpus_name.clone();
+
+            thread::spawn(move || {
+                let result = amber_core::build_proof_async(file_path, merkle_path, explain_path, &corpus_name);
+                let _ = tx.send(result);
+            });
+        }
+    }
+
+    fn finish_build_proof(&mut self) {
+        if let Some(rx) = &self.build_pf_stat.async_result_rx {
+            if let Ok((result, reason)) = rx.try_recv() {
+                self.build_pf_stat.async_result_rx = None;
+                self.build_pf_stat.async_running = false;
+                if result {
+                    self.build_pf_stat.status = Some("Wrote proof to file.".to_string());
+                    self.build_pf_stat.proof_verified = true;
+                    let file_path_buf = self.build_pf_stat.proven_file.clone().unwrap();
+                    let file_path = file_path_buf.to_str().unwrap();
+                    let output_path = file_path.to_owned() + "_proof.txt";
+                    self.build_pf_stat.proof_string = read_to_string(output_path).unwrap();
+                }
+                else {
+                    self.build_pf_stat.status = Some("Could not make proof file.".to_string());
+                    self.build_pf_stat.proof_verified = false;
+                    self.build_pf_stat.proof_reason = Some(reason);
+                }
             }
         }
     }
@@ -171,7 +212,6 @@ impl TemplateApp {
                 self.build_ts_stat.build_status = Some("You must select a hash file.".to_string());
             }
             else {
-                self.session.hashes_path = self.build_ts_stat.hash_file.clone();
                 corpus_valid = true;
             }
         }
@@ -180,7 +220,6 @@ impl TemplateApp {
                 self.build_ts_stat.build_status = Some("You must select a directory.".to_string());
             }
             else {
-                self.session.source_dir_path = self.build_ts_stat.directory.clone();
                 corpus_valid = true;
             }
         }
@@ -192,14 +231,13 @@ impl TemplateApp {
         corpus_valid && inputs_valid
     }
 
-    fn build_timestamp(&mut self) {
+    fn start_build_timestamp(&mut self) {
         let mut valid = false;
         if self.build_ts_stat.hashes {
             if self.build_ts_stat.hash_file.is_none() {
                 self.build_ts_stat.build_status = Some("You must select a hash file.".to_string());
             }
             else {
-                self.session.hashes_path = self.build_ts_stat.hash_file.clone();
                 self.build_ts_stat.build_status = None;
                 valid = true;
             }
@@ -209,7 +247,6 @@ impl TemplateApp {
                 self.build_ts_stat.build_status = Some("You must select a directory.".to_string());
             }
             else {
-                self.session.source_dir_path = self.build_ts_stat.directory.clone();
                 self.build_ts_stat.build_status = None;
                 valid = true;
             }
@@ -217,22 +254,49 @@ impl TemplateApp {
 
         if valid {
             self.build_ts_stat.build_attempted = true;
-            self.session.timestamp_output_path = self.build_ts_stat.output_dir.clone();
-            let (succeeded, reason) = self.session.build_timestamp(&self.build_ts_stat.corpus_name, &self.build_ts_stat.identifier, self.build_ts_stat.hashes, self.build_ts_stat.corpus_desc.clone(), self.build_ts_stat.corpus_motiv.clone(), self.build_ts_stat.user_desc.clone());
-            if succeeded {
-                self.build_ts_stat.root_hash = Some(format!("{}", HexFmt(self.session.uftree.as_ref().unwrap().get_root_hash())));
-                self.build_ts_stat.num_leaves = Some(self.session.uftree.as_ref().unwrap().num_leaves);
-                self.build_ts_stat.tree_exists = true;
-                self.build_ts_stat.tree_file = self.session.tree_filename.clone();
-                self.build_ts_stat.explain_file = self.session.explain_filename.clone();
-                let explain_path = self.build_ts_stat.explain_file.as_ref().unwrap();
-                self.build_ts_stat.explain_string = std::fs::read_to_string(explain_path).unwrap();
-                let tag_path = self.session.tag_filename.as_ref().unwrap();
-                self.build_ts_stat.tag_string = std::fs::read_to_string(tag_path).unwrap();
-            }
-            else {
-                self.build_ts_stat.tree_exists = false;
-                self.build_ts_stat.build_status = Some(format!("The build failed for the following reason: {}", reason));
+
+            let (tx, rx) = mpsc::channel();
+            self.build_ts_stat.async_result_rx = Some(rx);
+            self.build_ts_stat.async_running = true;
+
+            let corpus_name=  self.build_ts_stat.corpus_name.clone();
+            let identifier =  self.build_ts_stat.identifier.clone();
+            let hashes_source= self.build_ts_stat.hashes.clone();
+            let hash_file = self.build_ts_stat.hash_file.clone();
+            let directory = self.build_ts_stat.directory.clone();
+            let corpus_desc = self.build_ts_stat.corpus_desc.clone();
+            let corpus_motiv = self.build_ts_stat.corpus_motiv.clone();
+            let user_desc = self.build_ts_stat.user_desc.clone();
+            let output_dir = self.build_ts_stat.output_dir.clone().unwrap();
+            
+            thread::spawn(move || {
+                let result = amber_core::build_timestamp_async(corpus_name, identifier, hashes_source, hash_file, directory, corpus_desc, corpus_motiv, user_desc, output_dir);
+                let _ = tx.send(result);
+            });
+            
+        }
+    }
+
+    fn finish_build_timestamp(&mut self) {
+        if let Some(rx) = &self.build_ts_stat.async_result_rx {
+            if let Ok((succeeded, tree, reason, tree_filename, explain_filename, tag_filename)) = rx.try_recv() {
+                self.build_ts_stat.async_running = false;
+                self.build_ts_stat.async_result_rx = None;
+                if succeeded {
+                    self.build_ts_stat.root_hash = Some(format!("{}", HexFmt(tree.as_ref().unwrap().get_root_hash())));
+                    self.build_ts_stat.num_leaves = Some(tree.as_ref().unwrap().num_leaves);
+                    self.build_ts_stat.tree_exists = true;
+                    self.build_ts_stat.tree_file = tree_filename;
+                    self.build_ts_stat.explain_file = explain_filename;
+                    let explain_path = self.build_ts_stat.explain_file.as_ref().unwrap();
+                    self.build_ts_stat.explain_string = std::fs::read_to_string(explain_path).unwrap();
+                    let tag_path = tag_filename.as_ref().unwrap();
+                    self.build_ts_stat.tag_string = std::fs::read_to_string(tag_path).unwrap();
+                }
+                else {
+                    self.build_ts_stat.tree_exists = false;
+                    self.build_ts_stat.build_status = Some(format!("The build failed for the following reason: {}", reason));
+                }
             }
         }
     }
@@ -253,37 +317,51 @@ impl TemplateApp {
             });
     }
 
-    fn finalize_timestamp(&mut self) {        
-        self.build_ts_stat.tree_file = self.session.tree_filename.clone();
-        self.build_ts_stat.explain_file = self.session.explain_filename.clone();
-        let tree_path_buf = self.build_ts_stat.tree_file.as_ref().unwrap();
-        let tree_path = tree_path_buf.to_str().unwrap();
-        let explain_path_buf = self.build_ts_stat.explain_file.as_ref().unwrap();
-        let explain_path = explain_path_buf.to_str().unwrap();
+    fn start_finalize_timestamp(&mut self) {
+        let (tx, rx) = mpsc::channel();
+        self.build_ts_stat.finalize_async_result_rx = Some(rx);
+        self.build_ts_stat.finalize_async_running = true;
 
-        let (tx_hash_option, reason) = Session::parse_hash(&self.build_ts_stat.tx_hash_string);
+        let tree_file = self.build_ts_stat.tree_file.clone().unwrap();
+        let explain_file = self.build_ts_stat.explain_file.clone().unwrap();
+        let corpus_name = self.build_ts_stat.corpus_name.clone();
+        let identifier = self.build_ts_stat.identifier.clone();
+        let (tx_hash_option, reason) = amber_core::parse_hash(&self.build_ts_stat.tx_hash_string);
 
         if tx_hash_option.is_none() {
             self.build_ts_stat.finalize_status = Some(format!("The process failed for the following reason: {}", reason));
             self.build_ts_stat.tree_verified_reason = Some(reason);
         }
-
         else {
             let tx_hash = tx_hash_option.unwrap();
-            let (result, reason) = self.session.finalize_timestamp(tree_path, explain_path, &self.build_ts_stat.corpus_name, &self.build_ts_stat.identifier, tx_hash);
-
-            self.build_ts_stat.tree_verified = result;
-            self.build_ts_stat.tree_verified_reason = Some(reason);
-
-            if result {
-                self.build_ts_stat.finalize_status = Some(format!("Timestamp verified on the blockchain! \nTimestamped merkle tree file written to {}", tree_path));
-            }
-            else {
-                self.build_ts_stat.finalize_status = Some("The timestamp failed to verify on the blockchain.".to_string());
-            }  
+            thread::spawn(move || {
+                let result = amber_core::finalize_timestamp_async(tree_file, explain_file, &corpus_name, &identifier, tx_hash);
+                let _ = tx.send(result);
+            });
         }
+    }
 
+    fn finish_finalize_timestamp(&mut self) {
+        if let Some(rx) = &self.build_ts_stat.finalize_async_result_rx {
+            if let Ok((result, tree, reason)) = rx.try_recv() {
+                self.build_ts_stat.tree_verified = result;
+                self.build_ts_stat.tree_verified_reason = Some(reason);
+                self.build_ts_stat.finalize_async_running = false;
+                self.build_ts_stat.finalize_async_result_rx = None;
 
+                let tree_path_buf = self.build_ts_stat.tree_file.clone().unwrap();
+                let tree_path = tree_path_buf.to_str().unwrap();
+                if result {
+                    self.build_ts_stat.finalize_status = Some(format!("Timestamp verified on the blockchain! \nTimestamped merkle tree file written to {}", tree_path));
+                    self.build_ts_stat.utc = tree.as_ref().unwrap().utc_timestamp;
+                    self.build_ts_stat.block_height = tree.as_ref().unwrap().block_height;
+                    self.build_ts_stat.tx_hash_string = format!("{}", HexFmt(tree.unwrap().tx_hash));
+                }
+                else {
+                    self.build_ts_stat.finalize_status = Some("The timestamp failed to verify on the blockchain.".to_string());
+                }
+            }
+        }
     }
 
     fn page_welcome(&mut self, ui: &mut egui::Ui) {
@@ -385,6 +463,10 @@ impl TemplateApp {
     }
 
     fn page_verify_tree_and_file(&mut self, ui: &mut egui::Ui) {
+        if self.ver_stat.async_running {
+            self.finish_verify();
+        }
+
         ui.heading("Verify Files with a Secure Timestamp");
 
         ui.label("An Amber secure timestamp consists of");
@@ -441,17 +523,17 @@ impl TemplateApp {
                 }
             });
         });
-
         
-        if ui.add_enabled(!self.ver_stat.verify_attempted, egui::Button::new("Verify timestamp")).clicked() {
+        if ui.add_enabled(!self.ver_stat.verify_attempted && !self.ver_stat.async_running && self.ver_stat.provided_merkle_file.is_some() && self.ver_stat.provided_explain_file.is_some(), egui::Button::new("Verify timestamp")).clicked() {
             self.ver_stat.clear_verify_state();
-            self.ver_stat.verify_status = Some("Attempting to verify timestamp.".to_string());
-            ui.label(format!("{}", self.ver_stat.verify_status.clone().unwrap()));
-            self.verify_timestamp();
+            self.start_verify();
+        }        
+        
+        if self.ver_stat.async_running {
+            ui.spinner();
+            ui.label("Verifying timestamp on the blockchain...");
         }
-        if self.ver_stat.verify_status.is_some() {
-            ui.label(format!("{}", self.ver_stat.verify_status.clone().unwrap()));
-        }
+        
         if self.ver_stat.verified.is_some() {
             ui.label(format!("Verified: {}", self.ver_stat.verified.clone().unwrap()));
 
@@ -461,7 +543,7 @@ impl TemplateApp {
                     ui.label(format!("{}", self.ver_stat.reason.as_ref().unwrap()));
                 }
                 let (date, time) = convert_utc_to_datetime(self.ver_stat.utc.clone().unwrap());
-                ui.label(format!("Corpus identifier: {}", self.session.tstree.as_ref().unwrap().identifier));
+                ui.label(format!("Corpus identifier: {}", self.ver_stat.tree.as_ref().unwrap().identifier));
                 ui.label(format!("Date: {}", date));
                 ui.label(format!("Time: {} UTC", time));
                 if !self.ver_stat.show_more {
@@ -486,7 +568,7 @@ impl TemplateApp {
         }
 
         ui.label("");
-        if self.ver_stat.verify_attempted {
+        if self.ver_stat.verify_attempted && !self.ver_stat.async_running {
             if ui.button("Verify a different timestamp").clicked() {
                 self.ver_stat = VerificationStatus::new();
                 self.auth_stat = AuthenticationStatus::new();
@@ -541,12 +623,15 @@ impl TemplateApp {
         }
 
 
-        if ui.button("Back").clicked() {
+        if ui.add_enabled(!self.ver_stat.async_running, egui::Button::new("Back")).clicked() {
             self.jump_to(Page::Functions);
         }
     }
 
     fn page_verify_proof(&mut self, ui: &mut egui::Ui) {
+        if self.proof_stat.async_running {
+            self.finish_verify_proof();
+        }
         ui.heading("Verify a Merkle proof");
 
         ui.label("Amber can produce small 'proofs' for single files that are part of a large timestamped corpus. The `proof` establishes that the corpus file existed at the time the secure timestamp was produced.");
@@ -593,9 +678,14 @@ impl TemplateApp {
         });
 
         if self.proof_stat.provided_file.is_some() && self.proof_stat.provided_proof_file.is_some() {
-            if ui.add_enabled(!self.proof_stat.proof_auth_attempted, egui::Button::new("Verify proof")).clicked() {
-                self.verify_proof();
+            if ui.add_enabled(!self.proof_stat.proof_auth_attempted && !self.proof_stat.async_running, egui::Button::new("Verify proof")).clicked() {
+                self.start_verify_proof();
             }
+        }
+
+        if self.proof_stat.async_running {
+            ui.spinner();
+            ui.label("Verifying proof on the blockchain...");
         }
 
         if self.proof_stat.proof_auth_status.is_some() {
@@ -637,12 +727,15 @@ impl TemplateApp {
 
         ui.separator();
 
-        if ui.button("Back").clicked() {
+        if ui.add_enabled(!self.proof_stat.async_running, egui::Button::new("Back")).clicked() {
             self.jump_to(Page::Functions);
         }
     }
 
     fn page_build_proof(&mut self, ui: &mut egui::Ui) {
+        if self.build_pf_stat.async_running {
+            self.finish_build_proof();
+        }
         ui.heading("Create a Merkle proof file");
 
         ui.label("Using an existing secure timestamp of a corpus, Amber can produce a small 'proof' of a single file in the corpus. The proof file serves as a secure timestamp for that specific corpus file only. The advantage of this is that the proof file is much smaller than the whole secure timestamp.");
@@ -710,15 +803,20 @@ impl TemplateApp {
         });
         
         ui.label("Enter the name of the timestamped corpus here:");
-        ui.add_enabled(!self.build_pf_stat.proof_attempted, egui::TextEdit::singleline(&mut self.build_pf_stat.corpus_name));
+        ui.add_enabled(!self.build_pf_stat.proof_attempted && !self.build_pf_stat.async_running, egui::TextEdit::singleline(&mut self.build_pf_stat.corpus_name));
         if self.build_pf_stat.corpus_name != "".to_string() {
             ui.label(format!("Corpus name will be listed as: \"{}\" in the proof file.", &self.build_pf_stat.corpus_name));
         }
 
         if self.build_pf_stat.corpus_name != "".to_string() && self.build_pf_stat.proven_file.is_some() && self.build_pf_stat.merkle_file.is_some() {
             if ui.add_enabled(!self.build_pf_stat.proof_attempted, egui::Button::new("Create proof")).clicked() {
-                self.build_proof();
+                self.start_build_proof();
             }
+        }
+
+        if self.build_pf_stat.async_running {
+            ui.spinner();
+            ui.label("Verifying timestamp on the blockchain, then creating proof file...");
         }
 
         if self.build_pf_stat.proof_verified {
@@ -745,7 +843,7 @@ impl TemplateApp {
         }
 
         else {
-            if self.build_pf_stat.proof_attempted {
+            if self.build_pf_stat.proof_attempted && !self.build_pf_stat.async_running {
                 ui.label(format!("The proof build did not succeed for the following reason: {}", self.build_pf_stat.proof_reason.as_ref().unwrap()));
                 if ui.button("Try again").clicked() {
                     self.build_pf_stat = BuildProofStatus::new();
@@ -755,7 +853,7 @@ impl TemplateApp {
 
         ui.separator();
         
-        if ui.button("Back").clicked() {
+        if ui.add_enabled(!self.build_pf_stat.async_running, egui::Button::new("Back")).clicked() {
             self.jump_to(Page::Functions);
         }
     }
@@ -1065,6 +1163,9 @@ impl TemplateApp {
     }
 
     fn page_build_timestamp(&mut self, ui: &mut egui::Ui) {
+        if self.build_ts_stat.async_running {
+            self.finish_build_timestamp();
+        }
 
         ui.heading("Step 1: Building a Preliminary Timestamp");
         ui.label("The next few pages will guide you through the process of building the Merkle tree and generating explain.txt.");
@@ -1148,15 +1249,20 @@ impl TemplateApp {
 
         ui.separator();
 
-        if ui.add_enabled(self.build_valid() && !self.build_ts_stat.build_attempted, egui::Button::new("Build the timestamp")).clicked() {
-            self.build_timestamp();
+        if ui.add_enabled(self.build_valid() && !self.build_ts_stat.build_attempted && !self.build_ts_stat.async_running, egui::Button::new("Build the timestamp")).clicked() {
+            self.start_build_timestamp();
+        }
+
+        if self.build_ts_stat.async_running {
+            ui.spinner();
+            ui.label("Building preliminary timestamp...");
         }
 
         if self.build_ts_stat.build_status.is_some() && self.build_ts_stat.build_attempted {
             ui.label(self.build_ts_stat.build_status.as_ref().unwrap());
         }
 
-        if self.build_ts_stat.build_attempted {
+        if self.build_ts_stat.build_attempted && !self.build_ts_stat.async_running {
             if ui.button("Undo build and try again.").clicked() {
                 self.build_ts_stat.reset_prelim_build_state();
             }
@@ -1173,7 +1279,7 @@ impl TemplateApp {
 
         ui.separator();
 
-        if ui.button("Back").clicked() {
+        if ui.add_enabled(!self.build_ts_stat.async_running, egui::Button::new("Back")).clicked() {
             self.jump_to(Page::UserDesc);
         }
 
@@ -1272,14 +1378,22 @@ impl TemplateApp {
     }
 
     fn page_finalize_timestamp(&mut self, ui: &mut egui::Ui) {
+        if self.build_ts_stat.finalize_async_running {
+            self.finish_finalize_timestamp();
+        }
         ui.heading("Step 3: Finalizing the Timestamp");
         ui.label("On the previous page you submitted a transaction to the Bitcoin blockchain. Enter the hash of that transaction below:");
         ui.add_enabled(self.build_ts_stat.tree_verified_reason.is_none(), egui::TextEdit::singleline(&mut self.build_ts_stat.tx_hash_string));
 
         ui.label("Clicking the \"Finalize Timestamp\" button will look up the Bitcoin transaction on the blockchain and confirm that it contains the correct timestamp information. If it does, it will add some data to the Merkle tree file to enable automatic verification in the future.");
 
-        if ui.add_enabled(self.build_ts_stat.tx_hash_string!="".to_string() && !self.build_ts_stat.tree_verified && self.build_ts_stat.tree_verified_reason.is_none(), egui::Button::new("Finalize timestamp")).clicked() {
-            self.finalize_timestamp();
+        if ui.add_enabled(self.build_ts_stat.tx_hash_string!="".to_string() && !self.build_ts_stat.tree_verified && self.build_ts_stat.tree_verified_reason.is_none() && !self.build_ts_stat.finalize_async_running, egui::Button::new("Finalize timestamp")).clicked() {
+            self.start_finalize_timestamp();
+        }
+
+        if self.build_ts_stat.finalize_async_running {
+            ui.spinner();
+            ui.label("Verifying timestamp on the blockchain...");
         }
 
         if self.build_ts_stat.finalize_status.is_some() {
@@ -1294,8 +1408,8 @@ impl TemplateApp {
         }
 
         if self.build_ts_stat.tree_verified {
-            ui.label(format!("Corpus identifier: {}", self.session.tstree.as_ref().unwrap().identifier));
-            let (date, time) = convert_utc_to_datetime(self.session.tstree.as_ref().unwrap().utc_timestamp);
+            ui.label(format!("Corpus identifier: {}", self.build_ts_stat.identifier));
+            let (date, time) = convert_utc_to_datetime(self.build_ts_stat.utc);
             ui.label(format!("Date: {}", date));
             ui.label(format!("Time: {} UTC", time));
 
@@ -1308,9 +1422,9 @@ impl TemplateApp {
                 if ui.button("Show less information").clicked() {
                     self.build_ts_stat.show_more = false;
                 }
-                ui.label(format!("tx hash: {}", HexFmt(self.session.tstree.as_ref().unwrap().tx_hash)));
-                ui.label(format!("block height: {}", self.session.tstree.as_ref().unwrap().block_height));
-                ui.label(format!("UTC epoch: {}", self.session.tstree.as_ref().unwrap().utc_timestamp));
+                ui.label(format!("tx hash: {}", self.build_ts_stat.tx_hash_string));
+                ui.label(format!("block height: {}", self.build_ts_stat.block_height));
+                ui.label(format!("UTC epoch: {}", self.build_ts_stat.utc));
             }
 
             ui.label("Click Continue for final instructions.");
@@ -1319,7 +1433,7 @@ impl TemplateApp {
                 self.jump_to(Page::Goodbye);
             }
         }
-        if ui.add_enabled(!self.build_ts_stat.tree_verified, egui::Button::new("Back")).clicked() {
+        if ui.add_enabled(!self.build_ts_stat.tree_verified && !self.build_ts_stat.finalize_async_running, egui::Button::new("Back")).clicked() {
             self.jump_to(Page::WriteBlockchainMessage);
         }
     }
@@ -1329,8 +1443,8 @@ impl TemplateApp {
 
         ui.label(format!("Congratulations! You have successfully created a secure timestamp of the {} corpus.",self.build_ts_stat.corpus_name));
         ui.label("It is important that you preserve the secure timestamp (merkle.txt and explain.txt), as well as the corpus files, exactly. Back them up in multiple locations and don't edit them in any way!");
-        ui.label(format!("Merkle tree file: \n{}", self.session.tree_filename.as_ref().unwrap().to_str().unwrap()));
-        ui.label(format!("Explanatory document: \n{}", self.session.explain_filename.as_ref().unwrap().to_str().unwrap()));
+        ui.label(format!("Merkle tree file: \n{}", self.build_ts_stat.tree_file.as_ref().unwrap().to_str().unwrap()));
+        ui.label(format!("Explanatory document: \n{}", self.build_ts_stat.explain_file.as_ref().unwrap().to_str().unwrap()));
 
         if ui.button("Back to main page").clicked() {
             self.jump_to(Page::Functions);

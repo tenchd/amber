@@ -1,4 +1,4 @@
-mod merkle;
+pub mod merkle;
 mod tag;
 mod tests;
 mod verify;
@@ -13,6 +13,7 @@ use crate::{
     merkle::{MerkleProof, MerkleTree, TimestampedMerkleTree}
 };
 use chrono::{DurationRound, TimeDelta, prelude::*};
+extern crate rand;
 
 const AMBER_VERSION: &str = "0.1.0";
 const AMBER_VERSION_DATE: &str = "Sept 25, 2026";
@@ -358,134 +359,97 @@ impl std::fmt::Display for FailureReason {
     }
 }
 
-pub struct Session {
-    pub tstree: Option<TimestampedMerkleTree>,
-    pub uftree: Option<MerkleTree>,
-    pub tree_filename: Option<PathBuf>,
-    pub explain_filename: Option<PathBuf>,
-    pub tag_filename: Option<PathBuf>,
-    pub auth_filename: Option<PathBuf>,
-    pub timestamp_output_path: Option<PathBuf>,
-    pub source_dir_path: Option<PathBuf>,
-    pub hashes_path: Option<PathBuf>,
+pub fn parse_hash(input_string: &str) -> (Option<[u8; 32]>, FailureReason) {
+
+    merkle::parse_hash_from_str(input_string)
 }
 
-impl Session {
-    pub fn new() -> Self {
-        Self {
-            tstree: None,
-            uftree: None,
-            tree_filename: None,
-            explain_filename: None,
-            tag_filename: None,
-            auth_filename: None,
-            timestamp_output_path: None,
-            source_dir_path: None,
-            hashes_path: None,
-        }
+pub fn get_locktime() -> (Option<usize>, FailureReason) {
+    let (result, reason) = verify::get_current_latest_block();
+    if result.is_none() {
+        return (None, reason)
+    }
+    let block_height = result.unwrap();
+    (Some(block_height + 1), FailureReason::Success)
+}
+
+pub fn verify_tree_async(tree_filename: PathBuf, explain_filename: PathBuf) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
+    let tree_path = tree_filename.to_str().unwrap();
+    let explain_path = explain_filename.to_str().unwrap();
+    let (result, tree, reason) = verify_tree(tree_path, explain_path);
+
+    (result, tree, reason)
+}
+
+pub fn verify_proof_async(filepath: PathBuf, proof_filepath: PathBuf) -> (bool, FailureReason, i64, String, String, String, String, String) {
+    let path = filepath.to_str().unwrap();
+    let proof_path = proof_filepath.to_str().unwrap();
+    verify_proof(path, proof_path)
+}
+
+pub fn build_proof_async(file_path: PathBuf, merkle_path: PathBuf, explain_path: PathBuf, corpus_name: &str) -> (bool, FailureReason) {
+    let path = file_path.to_str().unwrap();
+    let merkle = merkle_path.to_str().unwrap();
+    let explain = explain_path.to_str().unwrap();
+    make_proof(path, merkle, explain, corpus_name)
+}
+
+pub fn build_timestamp_async(corpus_name: String, identifier: String, hashes_source: bool, input_hashes_path: Option<PathBuf>, input_source_dir: Option<PathBuf>, corpus_desc: String, corpus_motiv: String, user_desc: String, timestamp_output_path: PathBuf) -> (bool, Option<MerkleTree>, FailureReason, Option<PathBuf>, Option<PathBuf>, Option<PathBuf>) {
+    let (locktime_result, locktime_reason) = get_locktime();
+    if locktime_result.is_none() {
+        return (false, None, locktime_reason, None, None, None)
+    }
+    let locktime = locktime_result.unwrap();
+
+    let mut output_dir = timestamp_output_path;
+    output_dir.push("merkle.txt");
+    let tree_filename_buf = output_dir.clone();
+    let tree_filename = tree_filename_buf.to_str().unwrap();
+    output_dir.pop();
+
+    output_dir.push("explain.txt");
+    let explain_filename_buf = output_dir.clone();
+    let explain_filename = explain_filename_buf.to_str().unwrap();
+    output_dir.pop();
+
+    output_dir.push("tag.txt");
+    let tag_filename_buf = output_dir.clone();
+    let tag_filename = tag_filename_buf.to_str().unwrap();
+    output_dir.pop();
+
+    output_dir.push("leaf_hashes.txt");
+    let leaf_hash_filename_buf = output_dir.clone();
+    let leaf_hash_filename = leaf_hash_filename_buf.to_str().unwrap();
+    output_dir.pop();
+
+    //let output_path = self.timestamp_output_path.as_ref().unwrap().to_str().unwrap();
+    let mut corpus_path = "";
+    let hashes_path;
+
+    if hashes_source {
+        hashes_path = input_hashes_path.as_ref().unwrap().to_str().unwrap();
+    }
+    else {
+        corpus_path = input_source_dir.as_ref().unwrap().to_str().unwrap();
+        hashes_path = leaf_hash_filename;
     }
 
-    pub fn clear_state(&mut self) {
-        (self.tstree, self.uftree, self.tree_filename, self.explain_filename, self.auth_filename, self.timestamp_output_path, self.source_dir_path, self.hashes_path) = (None, None, None, None, None, None, None, None);
+    let (result, reason) = build_timestamp(corpus_path, hashes_path, hashes_source, tree_filename, explain_filename, tag_filename, &corpus_name, locktime, &identifier, Some(corpus_desc), Some(corpus_motiv), Some(user_desc));
+    if result.is_none() {
+        return (false, None, reason, None, None, None);
     }
+    (true, result, FailureReason::Success, Some(PathBuf::from(tree_filename)), Some(PathBuf::from(explain_filename)), Some(PathBuf::from(tag_filename)))
+}
 
-    pub fn verify_tree(&mut self) -> (bool, FailureReason) {
-        assert!(self.tree_filename.is_some());
-        assert!(self.explain_filename.is_some());
-        let tree_path = self.tree_filename.as_ref().unwrap().to_str().unwrap();
-        let explain_path = self.explain_filename.as_ref().unwrap().to_str().unwrap();
-        let (result, tree, reason) = verify_tree(tree_path, explain_path);
-        if result {
-            self.tstree = Some(tree.unwrap());
-        }
-        (result, reason)
+pub fn finalize_timestamp_async(generated_tree_filename: PathBuf, generated_explain_filename: PathBuf, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
+
+    let tree_path = generated_tree_filename.to_str().unwrap();
+    let explain_path = generated_explain_filename.to_str().unwrap();
+    
+    let (tree, reason) = finalize_timestamp(tree_path, explain_path, corpus_name, identifier, tx_hash);
+
+    if tree.is_some() {
+        return (true, tree, reason);
     }
-
-    pub fn verify_file(&mut self) -> bool {
-        assert!(self.auth_filename.is_some());
-        let auth_path = self.auth_filename.as_ref().unwrap().to_str().unwrap();
-        self.tstree.as_ref().unwrap().tree.verify_from_file(auth_path)
-    }
-
-    //corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, locktime: usize, identifier: &str
-    pub fn build_timestamp(&mut self, corpus_name: &str, identifier: &str, hashes_source: bool, corpus_desc: String, corpus_motiv: String, user_desc: String) -> (bool, FailureReason) {
-        let (locktime_result, locktime_reason) = Session::get_locktime();
-        if locktime_result.is_none() {
-            return (false, locktime_reason)
-        }
-        let locktime = locktime_result.unwrap();
-
-        assert!(self.timestamp_output_path.is_some());
-        let output_dir = self.timestamp_output_path.as_mut().unwrap();
-        output_dir.push("merkle.txt");
-        self.tree_filename = Some(output_dir.clone());
-        let tree_filename_buf = output_dir.clone();
-        let tree_filename = tree_filename_buf.to_str().unwrap();
-        output_dir.pop();
-
-        output_dir.push("explain.txt");
-        self.explain_filename = Some(output_dir.clone());
-        let explain_filename_buf = output_dir.clone();
-        let explain_filename = explain_filename_buf.to_str().unwrap();
-        output_dir.pop();
-
-        output_dir.push("tag.txt");
-        self.tag_filename = Some(output_dir.clone());
-        let tag_filename_buf = output_dir.clone();
-        let tag_filename = tag_filename_buf.to_str().unwrap();
-        output_dir.pop();
-
-        output_dir.push("leaf_hashes.txt");
-        let leaf_hash_filename_buf = output_dir.clone();
-        let leaf_hash_filename = leaf_hash_filename_buf.to_str().unwrap();
-        output_dir.pop();
-
-        //let output_path = self.timestamp_output_path.as_ref().unwrap().to_str().unwrap();
-        let mut corpus_path = "";
-        let hashes_path;
-
-        if hashes_source {
-            assert!(self.hashes_path.is_some());
-            hashes_path = self.hashes_path.as_ref().unwrap().to_str().unwrap();
-        }
-        else {
-            assert!(self.source_dir_path.is_some());
-            corpus_path = self.source_dir_path.as_ref().unwrap().to_str().unwrap();
-            hashes_path = leaf_hash_filename;
-        }
-
-        let (result, reason) = build_timestamp(corpus_path, hashes_path, hashes_source, tree_filename, explain_filename, tag_filename, corpus_name, locktime, identifier, Some(corpus_desc), Some(corpus_motiv), Some(user_desc));
-        if result.is_none() {
-            return (false, reason);
-        }
-        self.uftree = result;
-        (true, FailureReason::Success)
-    }
-
-    pub fn finalize_timestamp(&mut self, generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> (bool, FailureReason) {
-        self.uftree = None;
-
-        let reason;
-        
-        (self.tstree, reason) = finalize_timestamp(generated_tree_filename, generated_explain_filename, corpus_name, identifier, tx_hash);
-
-        if self.tstree.is_some() {
-            return (true, reason);
-        }
-        (false, reason)
-    }
-
-    pub fn parse_hash(input_string: &str) -> (Option<[u8; 32]>, FailureReason) {
-
-        merkle::parse_hash_from_str(input_string)
-    }
-
-    pub fn get_locktime() -> (Option<usize>, FailureReason) {
-        let (result, reason) = verify::get_current_latest_block();
-        if result.is_none() {
-            return (None, reason)
-        }
-        let block_height = result.unwrap();
-        (Some(block_height + 1), FailureReason::Success)
-    }
+    (false, None, reason)
 }

@@ -1,6 +1,7 @@
-use std::path::PathBuf;
+use std:: path::PathBuf;
 use egui_file_dialog::FileDialog;
-use amber_core::FailureReason;
+use amber_core::{FailureReason, merkle::{MerkleTree, TimestampedMerkleTree}};
+use std::sync::mpsc::Receiver;
 
 #[derive(PartialEq)]
 pub enum Page {
@@ -26,9 +27,11 @@ pub struct VerificationStatus {
     pub provided_merkle_file: Option<PathBuf>,
     pub provided_explain_file_dialog: FileDialog,
     pub provided_explain_file: Option<PathBuf>,
-    pub verify_status: Option<String>,
     pub verify_attempted: bool,
+    pub async_running: bool,
+    pub async_result_rx: Option<Receiver<(bool, Option<TimestampedMerkleTree>, FailureReason)>>,
     pub verified: Option<bool>,
+    pub tree: Option<TimestampedMerkleTree>,
     pub reason: Option<FailureReason>,
     pub show_more: bool, 
     pub tx_hash: Option<String>,
@@ -43,9 +46,11 @@ impl VerificationStatus {
             provided_merkle_file: None,
             provided_explain_file_dialog: FileDialog::new(),
             provided_explain_file: None,
-            verify_status: None,
             verify_attempted: false,
+            async_running: false,
+            async_result_rx: None,
             verified: None,
+            tree: None,
             reason: None,
             show_more: false,
             tx_hash: None,
@@ -55,8 +60,10 @@ impl VerificationStatus {
     }
 
     pub fn clear_verify_state(&mut self) {
-        self.verify_status = None;
         self.verified = None;
+        self.verify_attempted = false;
+        self.tree = None;
+        self.reason = None;
         self.tx_hash = None;
         self.block = None;
         self.utc = None;
@@ -95,6 +102,8 @@ pub struct ProofStatus {
     pub provided_file: Option<PathBuf>,
     pub proof_auth_status: Option<String>,
     pub proof_auth_attempted: bool,
+    pub async_result_rx: Option<Receiver<(bool, FailureReason, i64, String, String, String, String, String)>>,
+    pub async_running: bool,
     pub proof_authenticated: Option<bool>,
     pub proof_auth_reason: Option<FailureReason>,
     pub proof_utc: Option<i64>,
@@ -115,6 +124,8 @@ impl ProofStatus {
             provided_file: None,
             proof_auth_status: None,
             proof_auth_attempted: false,
+            async_result_rx: None,
+            async_running: false,
             proof_authenticated: None,
             proof_auth_reason: None,
             proof_utc: None,
@@ -138,6 +149,8 @@ pub struct BuildProofStatus {
     pub proven_file: Option<PathBuf>,
     pub corpus_name: String,
     pub proof_attempted: bool,
+    pub async_result_rx: Option<Receiver<(bool, FailureReason)>>,
+    pub async_running: bool, 
     pub proof_verified: bool,
     pub proof_reason: Option<FailureReason>,
     pub proof_string: String,
@@ -155,6 +168,8 @@ impl BuildProofStatus {
             proven_file: None,
             corpus_name: "".to_string(),
             proof_attempted: false,
+            async_result_rx: None,
+            async_running: false,
             proof_verified: false,
             proof_reason: None,
             proof_string: "".to_string(),
@@ -188,6 +203,8 @@ pub struct BuildTimestampStatus {
     pub corpus_name: String,
     pub identifier: String,
     pub build_attempted: bool,
+    pub async_result_rx: Option<Receiver<(bool, Option<MerkleTree>, FailureReason, Option<PathBuf>, Option<PathBuf>, Option<PathBuf>)>>,
+    pub async_running: bool,
     pub build_status: Option<String>,
     pub tree_exists: bool,
     pub root_hash: Option<String>,
@@ -200,9 +217,13 @@ pub struct BuildTimestampStatus {
     pub tag_string: String,
     pub show_tag_explanation: bool,
     pub finalize_status: Option<String>,
+    pub finalize_async_result_rx: Option<Receiver<(bool, Option<TimestampedMerkleTree>, FailureReason)>>,
+    pub finalize_async_running: bool,
     pub tree_verified: bool,
     pub tree_verified_reason: Option<FailureReason>,
     pub tx_hash_string: String,
+    pub utc: i64,
+    pub block_height: usize,
     pub show_more: bool,
 }
 
@@ -234,6 +255,8 @@ impl BuildTimestampStatus {
             corpus_name: "".to_string(),
             identifier: "".to_string(),
             build_attempted: false,
+            async_result_rx: None,
+            async_running: false,
             build_status: None,
             tree_exists: false,
             tree_file: None,
@@ -246,9 +269,13 @@ impl BuildTimestampStatus {
             root_hash: None,
             num_leaves: None,
             finalize_status: None,
+            finalize_async_result_rx: None,
+            finalize_async_running: false,
             tree_verified: false,
             tree_verified_reason: None,
             tx_hash_string: "".to_string(),
+            utc: 0,
+            block_height: 0,
             show_more: false,
         }
     }
