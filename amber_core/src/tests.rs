@@ -129,7 +129,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
         let timestamped_tree = TimestampedMerkleTree::new_without_time(merkle_tree, dummy_identifier, dummy_tx_hash, dummy_explain_hash);
         let autoaccept = true;
 
-        let proof = timestamped_tree.produce_proof(1);
+        let proof = timestamped_tree.produce_proof(4);
         //below is brittle; relies on a specific ordering of the files in the merkle tree which my code doesn't explicitly enforce. fix this later when i rethink indices
         let (result, _reason) = proof.verify_proof_for_file("testing/small_corpus/pg6.txt", autoaccept, true);
         assert!(result, "proof should be valid for pg6.txt");
@@ -219,8 +219,8 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
         let num_leaves: u32 = merkle_tree.num_leaves.try_into().expect("Too many leaves to write as u32");
         let explainer_file_path = "testing/dummy_explain.txt";
         let explainer_hash = double_hash_from_file(explainer_file_path).0.unwrap();
-        let tag = crate::tag::create_chain_tag(identifier, num_leaves, merkle_root_hash, explainer_hash); 
-        let expected_tag = hex!("58 4d 50 4c 4d 52 4b 4c 00 00 00 0e ba 20 ce ff 80 d2 c9 fd ac f2 31 58 40 ec 11 a5 08 1c b6 3d a1 76 f4 9a b3 f5 81 a0 7e c3 91 8e a0 e5 8f 0d df 84 5d c1 ce 07 79 33 7c 91 89 c3 0b 91 6e 7d 62 94 96 ac 85 18 ac 6b c7 50 9e 61");
+        let tag = crate::tag::create_chain_tag(identifier, num_leaves, merkle_root_hash, explainer_hash);
+        let expected_tag = hex!("58 4d 50 4c 4d 52 4b 4c 00 00 00 0e 64 36 c0 aa 73 e4 93 fc f2 fb ba 2b 76 5f bd 98 a4 05 9f 58 21 e1 74 0f 64 86 6d 7a 1c 0a 42 16 a0 e5 8f 0d df 84 5d c1 ce 07 79 33 7c 91 89 c3 0b 91 6e 7d 62 94 96 ac 85 18 ac 6b c7 50 9e 61");
         println!("{}", HexFmt(&tag));
         assert_eq!(tag, expected_tag);
     }

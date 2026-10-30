@@ -39,9 +39,6 @@ pub fn get_filenames_from_directory(path: &str) -> Vec<String> {
 pub fn build_merkle_tree_from_directory(path: &str) -> (Option<MerkleTree>, FailureReason) {
     let filepaths = get_filenames_from_directory(path);
     println!("Building a Merkle tree from {} files. This may take a couple of minutes.", filepaths.len());
-    for path in &filepaths {
-        println!("{}", path);
-    }
     //println!("{}", filepaths.first().unwrap());
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
 }

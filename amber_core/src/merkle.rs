@@ -416,6 +416,10 @@ impl MerkleTree {
         for (index, filepath) in filepaths.iter().enumerate() {
             nodes.push(MerkleNode::new_leaf_from_file(filepath, index + 1));
         }
+        nodes.sort_by_key(|node| node.hash);
+        for (i, node) in nodes.iter_mut().enumerate() {
+            node.index = i;
+        }
         let root_index = MerkleTree::build_tree(&mut nodes, num_leaves, false);
         let hash_lookup = MerkleTree::build_hashmap(&nodes, num_leaves);
         (Some(MerkleTree { root_index, num_leaves, nodes, hash_lookup }), FailureReason::Success)
