@@ -1,6 +1,6 @@
 use std:: path::PathBuf;
 use egui_file_dialog::FileDialog;
-use amber_core::{FailureReason, merkle::TimestampedMerkleTree};
+use amber_core::{FailureReason, merkle::{MerkleTree, TimestampedMerkleTree}};
 use std::sync::mpsc::Receiver;
 
 #[derive(PartialEq)]
@@ -203,6 +203,8 @@ pub struct BuildTimestampStatus {
     pub corpus_name: String,
     pub identifier: String,
     pub build_attempted: bool,
+    pub async_result_rx: Option<Receiver<(bool, Option<MerkleTree>, FailureReason, Option<PathBuf>, Option<PathBuf>, Option<PathBuf>)>>,
+    pub async_running: bool,
     pub build_status: Option<String>,
     pub tree_exists: bool,
     pub root_hash: Option<String>,
@@ -215,9 +217,13 @@ pub struct BuildTimestampStatus {
     pub tag_string: String,
     pub show_tag_explanation: bool,
     pub finalize_status: Option<String>,
+    pub finalize_async_result_rx: Option<Receiver<(bool, Option<TimestampedMerkleTree>, FailureReason)>>,
+    pub finalize_async_running: bool,
     pub tree_verified: bool,
     pub tree_verified_reason: Option<FailureReason>,
     pub tx_hash_string: String,
+    pub utc: i64,
+    pub block_height: usize,
     pub show_more: bool,
 }
 
@@ -249,6 +255,8 @@ impl BuildTimestampStatus {
             corpus_name: "".to_string(),
             identifier: "".to_string(),
             build_attempted: false,
+            async_result_rx: None,
+            async_running: false,
             build_status: None,
             tree_exists: false,
             tree_file: None,
@@ -261,9 +269,13 @@ impl BuildTimestampStatus {
             root_hash: None,
             num_leaves: None,
             finalize_status: None,
+            finalize_async_result_rx: None,
+            finalize_async_running: false,
             tree_verified: false,
             tree_verified_reason: None,
             tx_hash_string: "".to_string(),
+            utc: 0,
+            block_height: 0,
             show_more: false,
         }
     }

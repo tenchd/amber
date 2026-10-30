@@ -237,14 +237,13 @@ impl TemplateApp {
         corpus_valid && inputs_valid
     }
 
-    fn build_timestamp(&mut self) {
+    fn start_build_timestamp(&mut self) {
         let mut valid = false;
         if self.build_ts_stat.hashes {
             if self.build_ts_stat.hash_file.is_none() {
                 self.build_ts_stat.build_status = Some("You must select a hash file.".to_string());
             }
             else {
-                self.session.hashes_path = self.build_ts_stat.hash_file.clone();
                 self.build_ts_stat.build_status = None;
                 valid = true;
             }
@@ -254,7 +253,6 @@ impl TemplateApp {
                 self.build_ts_stat.build_status = Some("You must select a directory.".to_string());
             }
             else {
-                self.session.source_dir_path = self.build_ts_stat.directory.clone();
                 self.build_ts_stat.build_status = None;
                 valid = true;
             }
@@ -262,22 +260,49 @@ impl TemplateApp {
 
         if valid {
             self.build_ts_stat.build_attempted = true;
-            self.session.timestamp_output_path = self.build_ts_stat.output_dir.clone();
-            let (succeeded, reason) = self.session.build_timestamp(&self.build_ts_stat.corpus_name, &self.build_ts_stat.identifier, self.build_ts_stat.hashes, self.build_ts_stat.corpus_desc.clone(), self.build_ts_stat.corpus_motiv.clone(), self.build_ts_stat.user_desc.clone());
-            if succeeded {
-                self.build_ts_stat.root_hash = Some(format!("{}", HexFmt(self.session.uftree.as_ref().unwrap().get_root_hash())));
-                self.build_ts_stat.num_leaves = Some(self.session.uftree.as_ref().unwrap().num_leaves);
-                self.build_ts_stat.tree_exists = true;
-                self.build_ts_stat.tree_file = self.session.tree_filename.clone();
-                self.build_ts_stat.explain_file = self.session.explain_filename.clone();
-                let explain_path = self.build_ts_stat.explain_file.as_ref().unwrap();
-                self.build_ts_stat.explain_string = std::fs::read_to_string(explain_path).unwrap();
-                let tag_path = self.session.tag_filename.as_ref().unwrap();
-                self.build_ts_stat.tag_string = std::fs::read_to_string(tag_path).unwrap();
-            }
-            else {
-                self.build_ts_stat.tree_exists = false;
-                self.build_ts_stat.build_status = Some(format!("The build failed for the following reason: {}", reason));
+
+            let (tx, rx) = mpsc::channel();
+            self.build_ts_stat.async_result_rx = Some(rx);
+            self.build_ts_stat.async_running = true;
+
+            let corpus_name=  self.build_ts_stat.corpus_name.clone();
+            let identifier =  self.build_ts_stat.identifier.clone();
+            let hashes_source= self.build_ts_stat.hashes.clone();
+            let hash_file = self.build_ts_stat.hash_file.clone();
+            let directory = self.build_ts_stat.directory.clone();
+            let corpus_desc = self.build_ts_stat.corpus_desc.clone();
+            let corpus_motiv = self.build_ts_stat.corpus_motiv.clone();
+            let user_desc = self.build_ts_stat.user_desc.clone();
+            let output_dir = self.build_ts_stat.output_dir.clone().unwrap();
+            
+            thread::spawn(move || {
+                let result = amber_core::build_timestamp_async(corpus_name, identifier, hashes_source, hash_file, directory, corpus_desc, corpus_motiv, user_desc, output_dir);
+                let _ = tx.send(result);
+            });
+            
+        }
+    }
+
+    fn finish_build_timestamp(&mut self) {
+        if let Some(rx) = &self.build_ts_stat.async_result_rx {
+            if let Ok((succeeded, tree, reason, tree_filename, explain_filename, tag_filename)) = rx.try_recv() {
+                self.build_ts_stat.async_running = false;
+                self.build_ts_stat.async_result_rx = None;
+                if succeeded {
+                    self.build_ts_stat.root_hash = Some(format!("{}", HexFmt(tree.as_ref().unwrap().get_root_hash())));
+                    self.build_ts_stat.num_leaves = Some(tree.as_ref().unwrap().num_leaves);
+                    self.build_ts_stat.tree_exists = true;
+                    self.build_ts_stat.tree_file = tree_filename;
+                    self.build_ts_stat.explain_file = explain_filename;
+                    let explain_path = self.build_ts_stat.explain_file.as_ref().unwrap();
+                    self.build_ts_stat.explain_string = std::fs::read_to_string(explain_path).unwrap();
+                    let tag_path = tag_filename.as_ref().unwrap();
+                    self.build_ts_stat.tag_string = std::fs::read_to_string(tag_path).unwrap();
+                }
+                else {
+                    self.build_ts_stat.tree_exists = false;
+                    self.build_ts_stat.build_status = Some(format!("The build failed for the following reason: {}", reason));
+                }
             }
         }
     }
@@ -298,37 +323,82 @@ impl TemplateApp {
             });
     }
 
-    fn finalize_timestamp(&mut self) {        
-        self.build_ts_stat.tree_file = self.session.tree_filename.clone();
-        self.build_ts_stat.explain_file = self.session.explain_filename.clone();
-        let tree_path_buf = self.build_ts_stat.tree_file.as_ref().unwrap();
-        let tree_path = tree_path_buf.to_str().unwrap();
-        let explain_path_buf = self.build_ts_stat.explain_file.as_ref().unwrap();
-        let explain_path = explain_path_buf.to_str().unwrap();
+    // fn finalize_timestamp(&mut self) {        
+    //     self.build_ts_stat.tree_file = self.session.tree_filename.clone();
+    //     self.build_ts_stat.explain_file = self.session.explain_filename.clone();
+    //     let tree_path_buf = self.build_ts_stat.tree_file.as_ref().unwrap();
+    //     let tree_path = tree_path_buf.to_str().unwrap();
+    //     let explain_path_buf = self.build_ts_stat.explain_file.as_ref().unwrap();
+    //     let explain_path = explain_path_buf.to_str().unwrap();
 
+    //     let (tx_hash_option, reason) = Session::parse_hash(&self.build_ts_stat.tx_hash_string);
+
+    //     if tx_hash_option.is_none() {
+    //         self.build_ts_stat.finalize_status = Some(format!("The process failed for the following reason: {}", reason));
+    //         self.build_ts_stat.tree_verified_reason = Some(reason);
+    //     }
+
+    //     else {
+    //         let tx_hash = tx_hash_option.unwrap();
+    //         let (result, tree, reason) = amber_core::finalize_timestamp_async(tree_path, explain_path, &self.build_ts_stat.corpus_name, &self.build_ts_stat.identifier, tx_hash);
+
+    //         self.build_ts_stat.tree_verified = result;
+    //         self.build_ts_stat.tree_verified_reason = Some(reason);
+
+    //         if result {
+    //             self.build_ts_stat.finalize_status = Some(format!("Timestamp verified on the blockchain! \nTimestamped merkle tree file written to {}", tree_path));
+    //         }
+    //         else {
+    //             self.build_ts_stat.finalize_status = Some("The timestamp failed to verify on the blockchain.".to_string());
+    //         }  
+    //     }
+    // }
+
+    fn start_finalize_timestamp(&mut self) {
+        let (tx, rx) = mpsc::channel();
+        self.build_ts_stat.finalize_async_result_rx = Some(rx);
+        self.build_ts_stat.finalize_async_running = true;
+
+        let tree_file = self.build_ts_stat.tree_file.clone().unwrap();
+        let explain_file = self.build_ts_stat.explain_file.clone().unwrap();
+        let corpus_name = self.build_ts_stat.corpus_name.clone();
+        let identifier = self.build_ts_stat.identifier.clone();
         let (tx_hash_option, reason) = Session::parse_hash(&self.build_ts_stat.tx_hash_string);
 
         if tx_hash_option.is_none() {
             self.build_ts_stat.finalize_status = Some(format!("The process failed for the following reason: {}", reason));
             self.build_ts_stat.tree_verified_reason = Some(reason);
         }
-
         else {
             let tx_hash = tx_hash_option.unwrap();
-            let (result, reason) = self.session.finalize_timestamp(tree_path, explain_path, &self.build_ts_stat.corpus_name, &self.build_ts_stat.identifier, tx_hash);
-
-            self.build_ts_stat.tree_verified = result;
-            self.build_ts_stat.tree_verified_reason = Some(reason);
-
-            if result {
-                self.build_ts_stat.finalize_status = Some(format!("Timestamp verified on the blockchain! \nTimestamped merkle tree file written to {}", tree_path));
-            }
-            else {
-                self.build_ts_stat.finalize_status = Some("The timestamp failed to verify on the blockchain.".to_string());
-            }  
+            thread::spawn(move || {
+                let result = amber_core::finalize_timestamp_async(tree_file, explain_file, &corpus_name, &identifier, tx_hash);
+                let _ = tx.send(result);
+            });
         }
+    }
 
+    fn finish_finalize_timestamp(&mut self) {
+        if let Some(rx) = &self.build_ts_stat.finalize_async_result_rx {
+            if let Ok((result, tree, reason)) = rx.try_recv() {
+                self.build_ts_stat.tree_verified = result;
+                self.build_ts_stat.tree_verified_reason = Some(reason);
+                self.build_ts_stat.finalize_async_running = false;
+                self.build_ts_stat.finalize_async_result_rx = None;
 
+                let tree_path_buf = self.build_ts_stat.tree_file.clone().unwrap();
+                let tree_path = tree_path_buf.to_str().unwrap();
+                if result {
+                    self.build_ts_stat.finalize_status = Some(format!("Timestamp verified on the blockchain! \nTimestamped merkle tree file written to {}", tree_path));
+                    self.build_ts_stat.utc = tree.as_ref().unwrap().utc_timestamp;
+                    self.build_ts_stat.block_height = tree.as_ref().unwrap().block_height;
+                    self.build_ts_stat.tx_hash_string = format!("{}", HexFmt(tree.unwrap().tx_hash));
+                }
+                else {
+                    self.build_ts_stat.finalize_status = Some("The timestamp failed to verify on the blockchain.".to_string());
+                }
+            }
+        }
     }
 
     fn page_welcome(&mut self, ui: &mut egui::Ui) {
@@ -1130,6 +1200,9 @@ impl TemplateApp {
     }
 
     fn page_build_timestamp(&mut self, ui: &mut egui::Ui) {
+        if self.build_ts_stat.async_running {
+            self.finish_build_timestamp();
+        }
 
         ui.heading("Step 1: Building a Preliminary Timestamp");
         ui.label("The next few pages will guide you through the process of building the Merkle tree and generating explain.txt.");
@@ -1213,15 +1286,20 @@ impl TemplateApp {
 
         ui.separator();
 
-        if ui.add_enabled(self.build_valid() && !self.build_ts_stat.build_attempted, egui::Button::new("Build the timestamp")).clicked() {
-            self.build_timestamp();
+        if ui.add_enabled(self.build_valid() && !self.build_ts_stat.build_attempted && !self.build_ts_stat.async_running, egui::Button::new("Build the timestamp")).clicked() {
+            self.start_build_timestamp();
+        }
+
+        if self.build_ts_stat.async_running {
+            ui.spinner();
+            ui.label("Building preliminary timestamp...");
         }
 
         if self.build_ts_stat.build_status.is_some() && self.build_ts_stat.build_attempted {
             ui.label(self.build_ts_stat.build_status.as_ref().unwrap());
         }
 
-        if self.build_ts_stat.build_attempted {
+        if self.build_ts_stat.build_attempted && !self.build_ts_stat.async_running {
             if ui.button("Undo build and try again.").clicked() {
                 self.build_ts_stat.reset_prelim_build_state();
             }
@@ -1238,7 +1316,7 @@ impl TemplateApp {
 
         ui.separator();
 
-        if ui.button("Back").clicked() {
+        if ui.add_enabled(!self.build_ts_stat.async_running, egui::Button::new("Back")).clicked() {
             self.jump_to(Page::UserDesc);
         }
 
@@ -1337,14 +1415,22 @@ impl TemplateApp {
     }
 
     fn page_finalize_timestamp(&mut self, ui: &mut egui::Ui) {
+        if self.build_ts_stat.finalize_async_running {
+            self.finish_finalize_timestamp();
+        }
         ui.heading("Step 3: Finalizing the Timestamp");
         ui.label("On the previous page you submitted a transaction to the Bitcoin blockchain. Enter the hash of that transaction below:");
         ui.add_enabled(self.build_ts_stat.tree_verified_reason.is_none(), egui::TextEdit::singleline(&mut self.build_ts_stat.tx_hash_string));
 
         ui.label("Clicking the \"Finalize Timestamp\" button will look up the Bitcoin transaction on the blockchain and confirm that it contains the correct timestamp information. If it does, it will add some data to the Merkle tree file to enable automatic verification in the future.");
 
-        if ui.add_enabled(self.build_ts_stat.tx_hash_string!="".to_string() && !self.build_ts_stat.tree_verified && self.build_ts_stat.tree_verified_reason.is_none(), egui::Button::new("Finalize timestamp")).clicked() {
-            self.finalize_timestamp();
+        if ui.add_enabled(self.build_ts_stat.tx_hash_string!="".to_string() && !self.build_ts_stat.tree_verified && self.build_ts_stat.tree_verified_reason.is_none() && !self.build_ts_stat.finalize_async_running, egui::Button::new("Finalize timestamp")).clicked() {
+            self.start_finalize_timestamp();
+        }
+
+        if self.build_ts_stat.finalize_async_running {
+            ui.spinner();
+            ui.label("Verifying timestamp on the blockchain...");
         }
 
         if self.build_ts_stat.finalize_status.is_some() {
@@ -1359,8 +1445,8 @@ impl TemplateApp {
         }
 
         if self.build_ts_stat.tree_verified {
-            ui.label(format!("Corpus identifier: {}", self.session.tstree.as_ref().unwrap().identifier));
-            let (date, time) = convert_utc_to_datetime(self.session.tstree.as_ref().unwrap().utc_timestamp);
+            ui.label(format!("Corpus identifier: {}", self.build_ts_stat.identifier));
+            let (date, time) = convert_utc_to_datetime(self.build_ts_stat.utc);
             ui.label(format!("Date: {}", date));
             ui.label(format!("Time: {} UTC", time));
 
@@ -1373,9 +1459,9 @@ impl TemplateApp {
                 if ui.button("Show less information").clicked() {
                     self.build_ts_stat.show_more = false;
                 }
-                ui.label(format!("tx hash: {}", HexFmt(self.session.tstree.as_ref().unwrap().tx_hash)));
-                ui.label(format!("block height: {}", self.session.tstree.as_ref().unwrap().block_height));
-                ui.label(format!("UTC epoch: {}", self.session.tstree.as_ref().unwrap().utc_timestamp));
+                ui.label(format!("tx hash: {}", self.build_ts_stat.tx_hash_string));
+                ui.label(format!("block height: {}", self.build_ts_stat.block_height));
+                ui.label(format!("UTC epoch: {}", self.build_ts_stat.utc));
             }
 
             ui.label("Click Continue for final instructions.");
@@ -1384,7 +1470,7 @@ impl TemplateApp {
                 self.jump_to(Page::Goodbye);
             }
         }
-        if ui.add_enabled(!self.build_ts_stat.tree_verified, egui::Button::new("Back")).clicked() {
+        if ui.add_enabled(!self.build_ts_stat.tree_verified && !self.build_ts_stat.finalize_async_running, egui::Button::new("Back")).clicked() {
             self.jump_to(Page::WriteBlockchainMessage);
         }
     }
@@ -1394,8 +1480,8 @@ impl TemplateApp {
 
         ui.label(format!("Congratulations! You have successfully created a secure timestamp of the {} corpus.",self.build_ts_stat.corpus_name));
         ui.label("It is important that you preserve the secure timestamp (merkle.txt and explain.txt), as well as the corpus files, exactly. Back them up in multiple locations and don't edit them in any way!");
-        ui.label(format!("Merkle tree file: \n{}", self.session.tree_filename.as_ref().unwrap().to_str().unwrap()));
-        ui.label(format!("Explanatory document: \n{}", self.session.explain_filename.as_ref().unwrap().to_str().unwrap()));
+        ui.label(format!("Merkle tree file: \n{}", self.build_ts_stat.tree_file.as_ref().unwrap().to_str().unwrap()));
+        ui.label(format!("Explanatory document: \n{}", self.build_ts_stat.explain_file.as_ref().unwrap().to_str().unwrap()));
 
         if ui.button("Back to main page").clicked() {
             self.jump_to(Page::Functions);
