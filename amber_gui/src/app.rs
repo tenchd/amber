@@ -279,12 +279,14 @@ impl TemplateApp {
 
     fn finish_build_timestamp(&mut self) {
         if let Some(rx) = &self.build_ts_stat.async_result_rx {
-            if let Ok((succeeded, tree, reason, tree_filename, explain_filename, tag_filename)) = rx.try_recv() {
+            if let Ok((succeeded, tree, reason, locktime, suggested_fee, tree_filename, explain_filename, tag_filename)) = rx.try_recv() {
                 self.build_ts_stat.async_running = false;
                 self.build_ts_stat.async_result_rx = None;
                 if succeeded {
                     self.build_ts_stat.root_hash = Some(format!("{}", HexFmt(tree.as_ref().unwrap().get_root_hash())));
                     self.build_ts_stat.num_leaves = Some(tree.as_ref().unwrap().num_leaves);
+                    self.build_ts_stat.locktime = locktime;
+                    self.build_ts_stat.suggested_fee = suggested_fee;
                     self.build_ts_stat.tree_exists = true;
                     self.build_ts_stat.tree_file = tree_filename;
                     self.build_ts_stat.explain_file = explain_filename;
@@ -1269,7 +1271,7 @@ impl TemplateApp {
         }
 
         if self.build_ts_stat.tree_exists {
-            ui.label(format!("Built merkle tree with {} leaves and root hash \n{}", self.build_ts_stat.num_leaves.unwrap(), self.build_ts_stat.root_hash.as_ref().unwrap()));
+            ui.label(format!("Built merkle tree with {} leaves and root hash \n{}.\nLocktime is set to {}.", self.build_ts_stat.num_leaves.unwrap(), self.build_ts_stat.root_hash.as_ref().unwrap(), self.build_ts_stat.locktime.unwrap()));
 
             if ui.button("Examine unfinalized timestamp").clicked() {
                 self.ver_stat.clear_verify_state();
@@ -1361,10 +1363,17 @@ impl TemplateApp {
 
         }
 
+        ui.label(format!("Locktime is set to {}", self.build_ts_stat.locktime.unwrap()));
+        ui.label(format!("Suggested fee is {}", self.build_ts_stat.suggested_fee.unwrap()));
+
 
         ui.label("");
         ui.label("By writing this string to the blockchain, you will prove that explain.txt and each file in the merkle tree existed today.");
         ui.label("Once you submit your blockchain transaction, wait for the network to confirm it. Once it is confirmed, note the transaction hash and click Continue below.");
+
+        ui.separator();
+
+
 
         ui.separator();
 

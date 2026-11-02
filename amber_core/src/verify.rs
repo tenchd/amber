@@ -241,3 +241,22 @@ pub async fn get_current_latest_block() -> (Option<usize>, FailureReason) {
     (Some(block_height), FailureReason::Success)
 
 }
+
+pub fn get_fee_estimate() -> (Option<f64>, FailureReason) {
+    let request_url = "https://mempool.space/api/v1/fees/precise";
+
+    let fee_response = match reqwest::blocking::get(request_url) {
+        Ok(response) => response,
+        Err(_) => {
+            println!("Blockchain explorer website did not respond.");
+            return (None, FailureReason::NoBlockchainResponse);
+        }
+    };
+
+    let fee_string = fee_response.text().unwrap();
+    let v: serde_json::Value = serde_json::from_str(&fee_string).unwrap();
+    //let fields = vec!["fastestFee", "halfHourFee", "hourFee", "economyFee", "minimumFee"];
+    let recommended_fast_fee = v["fastestFee"].as_f64().unwrap();
+    let safe_fee = recommended_fast_fee * 1.25;
+    (Some(safe_fee), FailureReason::Success)
+}

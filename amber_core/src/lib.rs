@@ -394,10 +394,10 @@ pub fn build_proof_async(file_path: PathBuf, merkle_path: PathBuf, explain_path:
     make_proof(path, merkle, explain, corpus_name)
 }
 
-pub fn build_timestamp_async(corpus_name: String, identifier: String, hashes_source: bool, input_hashes_path: Option<PathBuf>, input_source_dir: Option<PathBuf>, corpus_desc: String, corpus_motiv: String, user_desc: String, timestamp_output_path: PathBuf) -> (bool, Option<MerkleTree>, FailureReason, Option<PathBuf>, Option<PathBuf>, Option<PathBuf>) {
+pub fn build_timestamp_async(corpus_name: String, identifier: String, hashes_source: bool, input_hashes_path: Option<PathBuf>, input_source_dir: Option<PathBuf>, corpus_desc: String, corpus_motiv: String, user_desc: String, timestamp_output_path: PathBuf) -> (bool, Option<MerkleTree>, FailureReason, Option<usize>, Option<f64>, Option<PathBuf>, Option<PathBuf>, Option<PathBuf>) {
     let (locktime_result, locktime_reason) = get_locktime();
     if locktime_result.is_none() {
-        return (false, None, locktime_reason, None, None, None)
+        return (false, None, locktime_reason, None, None, None, None, None)
     }
     let locktime = locktime_result.unwrap();
 
@@ -436,9 +436,15 @@ pub fn build_timestamp_async(corpus_name: String, identifier: String, hashes_sou
 
     let (result, reason) = build_timestamp(corpus_path, hashes_path, hashes_source, tree_filename, explain_filename, tag_filename, &corpus_name, locktime, &identifier, Some(corpus_desc), Some(corpus_motiv), Some(user_desc));
     if result.is_none() {
-        return (false, None, reason, None, None, None);
+        return (false, None, reason, None, None, None, None, None);
     }
-    (true, result, FailureReason::Success, Some(PathBuf::from(tree_filename)), Some(PathBuf::from(explain_filename)), Some(PathBuf::from(tag_filename)))
+
+    let (suggested_fee, reason) = verify::get_fee_estimate();
+    if suggested_fee.is_none() {
+        return (false, None, reason, None, None, None, None, None);
+    }
+
+    (true, result, FailureReason::Success, Some(locktime), suggested_fee, Some(PathBuf::from(tree_filename)), Some(PathBuf::from(explain_filename)), Some(PathBuf::from(tag_filename)))
 }
 
 pub fn finalize_timestamp_async(generated_tree_filename: PathBuf, generated_explain_filename: PathBuf, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
