@@ -321,12 +321,14 @@ impl TemplateApp {
 
     fn compute_script(&mut self) {
         self.build_ts_stat.script_attempted = true;
+        self.build_ts_stat.script_status = Some("Looking up transaction on the blockchain...".to_string());
         let receiving_address = self.build_ts_stat.receiving_address.clone();
         let balance = self.build_ts_stat.balance.clone();
         let tag = self.build_ts_stat.tag_string.clone();
         let (result, fee, reason) = amber_core::generate_op_return_script(&receiving_address, balance, &tag);
         if result.is_some() && fee.is_some() {
             self.build_ts_stat.script = result.unwrap();
+            self.build_ts_stat.script_status = None;
         }
         else {
             if reason == FailureReason::BalanceTooLow {
@@ -1388,6 +1390,7 @@ impl TemplateApp {
         ui.separator();
 
         ui.heading("Generate the OP_RETURN script");
+        ui.label("First, we're going to generate the OP_RETURN script that will write the message to the blockchain.");
 
         ui.label("1. Open Electrum and unlock your wallet with your password. Go to the Addresses tab.");
         ui.label("2. Choose an address with a balance greater than 0. Right-click the address and choose Copy -> Address and paste it in the box below:");
@@ -1403,12 +1406,13 @@ impl TemplateApp {
             }
         }
 
-        ui.label("4. Click this button to compute the script:");
-        if ui.add_enabled(self.build_ts_stat.receiving_address != "".to_string() && self.build_ts_stat.balance != 0.0 && !self.build_ts_stat.script_attempted, egui::Button::new("Compute Script")).clicked() {
+        ui.label("4. Click this button to generate the script:");
+        if ui.add_enabled(self.build_ts_stat.receiving_address != "".to_string() && self.build_ts_stat.balance != 0.0 && !self.build_ts_stat.script_attempted, egui::Button::new("Generate script")).clicked() {
             self.compute_script();
         }
 
         if self.build_ts_stat.script != "".to_string() {
+            ui.label("Script:");
             let script_text = self.build_ts_stat.script.clone();
             ui.horizontal(|ui| {
 
@@ -1470,7 +1474,7 @@ impl TemplateApp {
 
         ui.label("Click the button below to find the transaction in the Bitcoin blockchain mempool.");
 
-        let find_tx_allowed = self.build_ts_stat.tx_hash_string != "".to_string() && !self.build_ts_stat.find_tx_attempted;
+        let find_tx_allowed = self.build_ts_stat.tx_hash_string != "".to_string() && !self.build_ts_stat.finalize_async_running && !self.build_ts_stat.tree_verified && self.build_ts_stat.finalize_status.is_none();
 
         if ui.add_enabled(find_tx_allowed, egui::Button::new("Find transaction")).clicked() {
             self.find_tx();
@@ -1478,11 +1482,20 @@ impl TemplateApp {
 
         if self.build_ts_stat.tx_confirmations.is_some() {
             if self.build_ts_stat.tx_confirmations.unwrap() == 0 {
-                ui.label("Transaction found, but it hasn't been confirmed yet. Wait a few minutes.");
+                ui.label("Transaction found, but it hasn't been confirmed yet. Click the Find Transaction button again in a few minutes.");
             }
             else {
-                ui.label(format!("Transaction found on the blockchain. Currently confirmed by {} blocks. You can finalize the timestamp after 3 confirmations.", self.build_ts_stat.tx_confirmations.unwrap()));
+                ui.label(format!("Transaction found on the blockchain. Currently confirmed by {} blocks.", self.build_ts_stat.tx_confirmations.unwrap()));
+
+                if self.build_ts_stat.tx_confirmations.unwrap() < 3 {
+                    ui.label("Once the transaction has been confirmed by 3 blocks, you can finalize the timestamp. On average, a block confirmation happens every ten minutes, so click Find Transaction again in a little while to see if it's been confirmed yet.");
+                }
+                else {
+                    ui.label("You can now finalize the timestamp.");
+                }
             }
+
+
         }
 
         if self.build_ts_stat.find_tx_status.is_some() {
@@ -1494,6 +1507,8 @@ impl TemplateApp {
                 self.build_ts_stat.reset_find_tx_state();
             }
         }
+
+        ui.separator();
 
         ui.label("Clicking the \"Finalize Timestamp\" button will look up the Bitcoin transaction on the blockchain and confirm that it contains the correct timestamp information. If it does, it will add some data to the Merkle tree file to enable automatic verification in the future.");
 

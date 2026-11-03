@@ -3,12 +3,10 @@ use crate::{
 };
 use hex_fmt::HexFmt;
 use bitcoin::{
-    Transaction,
-    blockdata::{
+    Transaction, blockdata::{
         opcodes::all::OP_RETURN,
         script::Instruction,
-    }, 
-    consensus::encode::deserialize
+    }, consensus::encode::deserialize
 };
 use serde_json::Value;
 use std::io::BufRead;
@@ -330,7 +328,7 @@ pub fn check_confirmations(tx_hash_string: &str) -> (Option<usize>, FailureReaso
         return (None, FailureReason::TxNotFound);
     }
 
-    let block_height: usize = match v.get("block_height") {
+    let block_height: i64 = match v.get("block_height") {
         None => return (None, FailureReason::NoBlockchainResponse),
         Some(value) => {
             // if block height is null, that means the transaction has 0 confirmations so far.
@@ -346,7 +344,13 @@ pub fn check_confirmations(tx_hash_string: &str) -> (Option<usize>, FailureReaso
     if current_height.is_none() {
         return (None, reason)
     }
+    let current_height: i64 = current_height.unwrap().try_into().unwrap();
 
-    let confirmations = current_height.unwrap() - block_height + 1;
+    let confirmations = current_height - block_height + 1;
+    // edge case handler, in case current height and block height results are out of sync. avoids usize underflow error.
+    if confirmations < 0 {
+        return (Some(0), FailureReason::Success);
+    }
+    let confirmations: usize = confirmations.try_into().unwrap();
     return (Some(confirmations), FailureReason::Success)
 }
