@@ -339,6 +339,18 @@ impl TemplateApp {
         }
     }
 
+    fn find_tx(&mut self) {
+        self.build_ts_stat.find_tx_attempted = true;
+        let tx_hash_string = self.build_ts_stat.tx_hash_string.clone();
+        let (result, reason) = amber_core::check_confirmations(&tx_hash_string);
+        if result.is_none() {
+            self.build_ts_stat.find_tx_status = Some(format!("Could not find the transaction for the following reason: {}", reason));
+        }
+        else {
+            self.build_ts_stat.tx_confirmations = result;
+        }
+    }
+
     fn start_finalize_timestamp(&mut self) {
         let (tx, rx) = mpsc::channel();
         self.build_ts_stat.finalize_async_result_rx = Some(rx);
@@ -1453,12 +1465,41 @@ impl TemplateApp {
             self.finish_finalize_timestamp();
         }
         ui.heading("Step 3: Finalizing the Timestamp");
-        ui.label("On the previous page you submitted a transaction to the Bitcoin blockchain. Enter the hash of that transaction below:");
-        ui.add_enabled(self.build_ts_stat.tree_verified_reason.is_none(), egui::TextEdit::singleline(&mut self.build_ts_stat.tx_hash_string));
+        ui.label("On the previous page you submitted a transaction to the Bitcoin blockchain. In Electrum, you should able able to see that transaction in the History tab. Right-click the transaction, select Copy -> Transaction ID, and paste it in the box below:");
+        ui.add_enabled(!self.build_ts_stat.find_tx_attempted, egui::TextEdit::singleline(&mut self.build_ts_stat.tx_hash_string));
+
+        ui.label("Click the button below to find the transaction in the Bitcoin blockchain mempool.");
+
+        let find_tx_allowed = self.build_ts_stat.tx_hash_string != "".to_string() && !self.build_ts_stat.find_tx_attempted;
+
+        if ui.add_enabled(find_tx_allowed, egui::Button::new("Find transaction")).clicked() {
+            self.find_tx();
+        } 
+
+        if self.build_ts_stat.tx_confirmations.is_some() {
+            if self.build_ts_stat.tx_confirmations.unwrap() == 0 {
+                ui.label("Transaction found, but it hasn't been confirmed yet. Wait a few minutes.");
+            }
+            else {
+                ui.label(format!("Transaction found on the blockchain. Currently confirmed by {} blocks. You can finalize the timestamp after 3 confirmations.", self.build_ts_stat.tx_confirmations.unwrap()));
+            }
+        }
+
+        if self.build_ts_stat.find_tx_status.is_some() {
+            ui.label(self.build_ts_stat.find_tx_status.as_ref().unwrap());
+        }
+
+        if self.build_ts_stat.find_tx_attempted {
+            if ui.add_enabled(!self.build_ts_stat.finalize_status.is_some() && !self.build_ts_stat.finalize_async_running, egui::Button::new("Reset transaction hash and try again")).clicked() {
+                self.build_ts_stat.reset_find_tx_state();
+            }
+        }
 
         ui.label("Clicking the \"Finalize Timestamp\" button will look up the Bitcoin transaction on the blockchain and confirm that it contains the correct timestamp information. If it does, it will add some data to the Merkle tree file to enable automatic verification in the future.");
 
-        if ui.add_enabled(self.build_ts_stat.tx_hash_string!="".to_string() && !self.build_ts_stat.tree_verified && self.build_ts_stat.tree_verified_reason.is_none() && !self.build_ts_stat.finalize_async_running, egui::Button::new("Finalize timestamp")).clicked() {
+        let finalize_allowed = self.build_ts_stat.tx_hash_string!="".to_string() && !self.build_ts_stat.tree_verified && self.build_ts_stat.tree_verified_reason.is_none() && !self.build_ts_stat.finalize_async_running && self.build_ts_stat.tx_confirmations.is_some() && self.build_ts_stat.tx_confirmations.unwrap() > 2;
+
+        if ui.add_enabled(finalize_allowed, egui::Button::new("Finalize timestamp")).clicked() {
             self.start_finalize_timestamp();
         }
 
@@ -1474,6 +1515,7 @@ impl TemplateApp {
                 ui.label("Something went wrong and the blockchain transaction could not be verified.");
                 if ui.button("Retry").clicked() {
                     self.build_ts_stat.reset_finalize_state();
+                    self.build_ts_stat.reset_find_tx_state();
                 }
             }
         }

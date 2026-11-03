@@ -478,3 +478,12 @@ pub fn generate_op_return_script(receiving_address: &str, balance: f64, tag: &st
     //CHANGE THIS: called function should return option<string> failrure reason because it might fail to look up fees, or the user's balance might be too low to pay the appropriate fee, or something.
     verify::generate_op_return_script(&address.to_string(), balance, tag)
 }
+
+pub fn check_confirmations(tx_hash_string: &str) -> (Option<usize>, FailureReason) {
+    // make sure it's a valid tx hash string
+    let (_, reason) = parse_hash_from_string(tx_hash_string);
+    if reason != FailureReason::Success {
+        return (None, reason)
+    }
+    verify::check_confirmations(tx_hash_string)
+}
