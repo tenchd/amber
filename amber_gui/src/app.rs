@@ -5,7 +5,7 @@ use amber_core::FailureReason;
 use crate::status::{AuthenticationStatus, BuildProofStatus, BuildTimestampStatus, Page, ProofStatus, VerificationStatus};
 use hex_fmt::HexFmt;
 use chrono;
-use std::sync::mpsc::self;
+use std::sync::mpsc;
 use std::thread;
 
 pub fn convert_utc_to_datetime(utc_seconds: i64) -> (String, String) {
@@ -59,6 +59,7 @@ impl TemplateApp {
         } else {
             Default::default()
         }
+
     }    
     
     fn jump_to(&mut self, target: Page) {
@@ -398,7 +399,6 @@ impl TemplateApp {
                 self.jump_to(Page::Functions);
             }
         });
-
     }
 
     fn page_explanations(&mut self, ui: &mut egui::Ui) {
@@ -1377,10 +1377,11 @@ impl TemplateApp {
 
         ui.heading("Generate the OP_RETURN script");
 
-        ui.label("Paste the receiving address from Electrum here:");
+        ui.label("1. Open Electrum and unlock your wallet with your password. Go to the Addresses tab.");
+        ui.label("2. Choose an address with a balance greater than 0. Right-click the address and choose Copy -> Address and paste it in the box below:");
         ui.add_enabled(!self.build_ts_stat.script_attempted, egui::TextEdit::singleline(&mut self.build_ts_stat.receiving_address));
 
-        ui.label("Copy the exact balance (in mBTC) of one of your Bitcoin wallet addresses below:");
+        ui.label("3. Next, right-click the same address and choose Copy -> Balance and paste the result in the box below:");
         ui.add_enabled(!self.build_ts_stat.script_attempted, egui::TextEdit::singleline(&mut self.build_ts_stat.balance_string));
 
         if self.build_ts_stat.balance_string != "".to_string(){
@@ -1390,7 +1391,8 @@ impl TemplateApp {
             }
         }
 
-        if ui.add_enabled(self.build_ts_stat.receiving_address != "".to_string() && self.build_ts_stat.balance != 0.0 && !self.build_ts_stat.script_attempted, egui::Button::new("compute script")).clicked() {
+        ui.label("4. Click this button to compute the script:");
+        if ui.add_enabled(self.build_ts_stat.receiving_address != "".to_string() && self.build_ts_stat.balance != 0.0 && !self.build_ts_stat.script_attempted, egui::Button::new("Compute Script")).clicked() {
             self.compute_script();
         }
 
@@ -1406,11 +1408,26 @@ impl TemplateApp {
                     ui.ctx().copy_text(script_text.to_string());
                 }
             });
-            ui.label(format!("Make sure to set the locktime to {}", self.build_ts_stat.locktime.unwrap()));
 
+            ui.label("If you made a mistake somehow, use this button to reset:");
             if ui.button("Erase script and try again").clicked() {
                 self.build_ts_stat.reset_script_state();
             }
+            ui.heading("Submit the transaction");
+            let locktime = self.build_ts_stat.locktime.unwrap();
+            ui.label("5. In Electrum, go to the Send tab. Copy the above script and paste it in the \"Pay to\" field. If you did this right, the text in the box should be highlighted green.");
+
+            ui.label("6. Click \"Pay...\". This will open up a popup window titled \"New Transaction\". Click \"Tools\" in the upper-right corner and check the \"Edit Locktime\" box. This will cause the following line to appear in the New Transaction popup window:");
+
+            ui.add_sized(
+            [300.0, 40.0],
+            egui::Image::new(egui::include_image!("../assets/locktime.png")),
+            );
+
+            ui.label(format!("Ensure that the LockTime number is EXACTLY {} (not the number in the example picture).", locktime));
+            ui.label("Don't change anything else on this screen.");
+            ui.label("7. In Electrum in the New Transaction popup, click Ok. This will submit your transaction to the blockchain.");
+            ui.label("8. Click Continue below to finalize your timestamp.");
         }
 
         if self.build_ts_stat.script_status.is_some() {
@@ -1419,8 +1436,6 @@ impl TemplateApp {
                 self.build_ts_stat.reset_script_state();
             }
         }
-
-
 
         ui.separator();
 
