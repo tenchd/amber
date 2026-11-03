@@ -378,7 +378,16 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
     }
 
     #[test]
-    fn block_test() {
-        verify::get_current_latest_block().0.unwrap();
+    fn script() {
+        let receiving_address = "bc1qfy2am9425zupl52a2fjsh2cjp09ar3g3ct6mgp";
+        let balance = 0.255;
+        let tag = "50474d45524b4c4500012d39e56bf7ee52b351da728a072dd6146450616de1e310d9243cf8428d777081dde1deb4859fb5f483d0251cbe9ebe9908e0591a53511311ee07b134354eac324e22";
+        println!("{}", crate::generate_op_return_script(receiving_address, balance, tag).0.unwrap());
+    }
+
+    #[test]
+    fn confirmations() {
+        let tx_hash_string = "d5f5811800e195cbd865f504bb8e9bd2277eba4c15b72856fab6de7da06f4662";
+        println!("number of confirmations: {}", verify::check_confirmations(tx_hash_string).0.unwrap());
     }
 }

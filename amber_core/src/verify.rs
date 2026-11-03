@@ -12,6 +12,8 @@ use bitcoin::{
 };
 use serde_json::Value;
 use std::io::BufRead;
+use text_template::Template;
+use std::collections::HashMap;
 
 pub struct TimestampBlockchainDetails {
     pub block_height: usize,
@@ -242,6 +244,7 @@ pub async fn get_current_latest_block() -> (Option<usize>, FailureReason) {
 
 }
 
+// returns an estimate of the satoshi/vbyte fee required to get mined in the next block.
 pub fn get_fee_estimate() -> (Option<f64>, FailureReason) {
     let request_url = "https://mempool.space/api/v1/fees/precise";
 
@@ -259,4 +262,84 @@ pub fn get_fee_estimate() -> (Option<f64>, FailureReason) {
     let recommended_fast_fee = v["fastestFee"].as_f64().unwrap();
     let safe_fee = recommended_fast_fee * 1.25;
     (Some(safe_fee), FailureReason::Success)
+}
+
+pub fn generate_op_return_script(receiving_address: &str, balance: f64, tag: &str) -> String {
+    let script_template_str = "${receiving_address},${change}\nscript(OP_RETURN ${tag}), 0";
+    let script_template = Template::from(script_template_str);
+    // fee ratio is in satoshis/vbyte. message will have 198 vbytes. convert to mBTC
+    let fee = get_fee_estimate().0.unwrap() * 229.0 * 0.00001;
+    //println!("balance: {}, fee: {}", balance, fee);
+    let mut change= balance - fee;
+    let round_factor = 100000.0;
+    change = (change * round_factor).round()/ round_factor;
+    let mut values: HashMap<&str, &str> = HashMap::new();
+    values.insert("receiving_address", receiving_address);
+    let change_str= &format!("{}", change);
+    values.insert("change", change_str);
+    values.insert("tag", tag);
+    let script = script_template.try_fill_in(&values);
+    script.unwrap().to_string()
+}
+
+pub fn tag_valid(tag: &str) -> bool {
+    // expect 76 bytes, which is 152 characters in hex
+    if tag.len() != 152 {
+        return false
+    }
+
+    match hex::decode(tag) {
+        Ok(_) => return true,
+        Err(_) => return false,
+    }
+}
+
+pub fn check_confirmations(tx_hash_string: &str) -> (Option<usize>, FailureReason) {
+    let json_url = format!("https://blockchain.info/rawtx/{}", tx_hash_string);
+    let json_result = reqwest::blocking::get(json_url);
+    let json_response = match json_result {
+        Ok(response) => response,
+        Err(_) => {
+            println!("Blockchain explorer website did not respond.");
+            return (None, FailureReason::NoBlockchainResponse);
+        }
+    };
+
+    let json_string = match json_response.text() {
+        Ok(text) => text,
+        Err(_) => {
+            println!("Blockchain explorer website did not respond.");
+            return (None, FailureReason::NoBlockchainResponse);
+        }
+    };
+
+    let v: Value = serde_json::from_str(&json_string).unwrap();
+
+    if v["error"] == "not-found-or-invalid-arg" {
+        println!(
+            "Blockchain explorer reports tx hash {} does not exist on the chain.",
+            tx_hash_string
+        );
+        return (None, FailureReason::TxNotFound);
+    }
+
+    let block_height: usize = match v.get("block_height") {
+        None => return (None, FailureReason::NoBlockchainResponse),
+        Some(value) => {
+            // if block height is null, that means the transaction has 0 confirmations so far.
+            if *value == Value::Null {
+                return (Some(0), FailureReason::Success)
+            }
+            value.as_u64().unwrap()
+            .try_into().unwrap()
+        },
+    };
+
+    let (current_height, reason) = get_current_latest_block();
+    if current_height.is_none() {
+        return (None, reason)
+    }
+
+    let confirmations = current_height.unwrap() - block_height + 1;
+    return (Some(confirmations), FailureReason::Success)
 }

@@ -14,6 +14,7 @@ use crate::{
 };
 use chrono::{DurationRound, TimeDelta, prelude::*};
 extern crate rand;
+use bitcoin::{Address, Network, address::NetworkUnchecked};
 
 const AMBER_VERSION: &str = "0.1.0";
 const AMBER_VERSION_DATE: &str = "Sept 25, 2026";
@@ -329,6 +330,8 @@ pub enum FailureReason {
     TimestampMismatchFatal, // the tag was found in the transaction, but the chain utc timestamp is more than 24 hours different that the timestamp listed in explain.txt.
     TagNotFound, // the blockchain transaction doesn't contain an OP_RETURN script with the expected tag.
     PathNotWriteable, // you tried to write to some filepath that wasn't writeable for some reason.
+    InvalidBitcoinAddress, // you gave a receiving address to the OP_RETURN script generator that isn't a valid Bitcoin address.
+    InvalidTag, // you provided an invalid tag to the OP_RETURN script generator.
 } 
 
 impl std::fmt::Display for FailureReason {
@@ -354,6 +357,8 @@ impl std::fmt::Display for FailureReason {
             FailureReason::TimestampMismatchFatal => write!(f, "The utc timestamp listed in explain.txt is > 24hrs different than utc timestamp on the blockchain."),
             FailureReason::TagNotFound => write!(f, "The expected timestamp message was not found in the blockchain transaction."),
             FailureReason::PathNotWriteable => write!(f, "Couldn't write output file at the specified location."),
+            FailureReason::InvalidBitcoinAddress => write!(f, "Receiving address isn't a valid Bitcoin address."),
+            FailureReason::InvalidTag => write!(f, "Specified tag is invalid."),
 
         }
     }
@@ -458,4 +463,22 @@ pub fn finalize_timestamp_async(generated_tree_filename: PathBuf, generated_expl
         return (true, tree, reason);
     }
     (false, None, reason)
+}
+
+pub fn generate_op_return_script(receiving_address: &str, balance: f64, tag: &str) -> (Option<String>, FailureReason) {
+    // make sure address is valid Bitcoin address
+    let address_unchecked: Address<NetworkUnchecked> = match receiving_address.parse() {
+        Ok(value) => value,
+        Err(_) => return (None, FailureReason::InvalidBitcoinAddress),
+    };
+    let address: Address = match address_unchecked.require_network(Network::Bitcoin) {
+        Ok(value) => value,
+        Err(_) => return (None, FailureReason::InvalidBitcoinAddress),
+    };
+    //make sure tag is 76 bytes in hex form
+    if !verify::tag_valid(tag) {
+        return (None, FailureReason::InvalidTag)
+    }
+    //CHANGE THIS: called function should return option<string> failrure reason because it might fail to look up fees, or the user's balance might be too low to pay the appropriate fee, or something.
+    (Some(verify::generate_op_return_script(&address.to_string(), balance, tag)), FailureReason::Success)
 }
