@@ -203,14 +203,13 @@ pub struct BuildTimestampStatus {
     pub corpus_name: String,
     pub identifier: String,
     pub build_attempted: bool,
-    pub async_result_rx: Option<Receiver<(bool, Option<MerkleTree>, FailureReason, Option<usize>, Option<f64>, Option<PathBuf>, Option<PathBuf>, Option<PathBuf>)>>,
+    pub async_result_rx: Option<Receiver<(bool, Option<MerkleTree>, FailureReason, Option<usize>, Option<PathBuf>, Option<PathBuf>, Option<PathBuf>)>>,
     pub async_running: bool,
     pub build_status: Option<String>,
     pub tree_exists: bool,
     pub root_hash: Option<String>,
     pub num_leaves: Option<usize>,
     pub locktime: Option<usize>,
-    pub suggested_fee: Option<f64>,
     pub tree_file: Option<PathBuf>,
     pub explain_file: Option<PathBuf>,
     pub explain_string: String,
@@ -218,6 +217,12 @@ pub struct BuildTimestampStatus {
     pub explain_shown: bool,
     pub tag_string: String,
     pub show_tag_explanation: bool,
+    pub balance_string: String,
+    pub balance: f64,
+    pub receiving_address: String,
+    pub script: String,
+    pub script_attempted: bool,
+    pub script_status: Option<String>,
     pub finalize_status: Option<String>,
     pub finalize_async_result_rx: Option<Receiver<(bool, Option<TimestampedMerkleTree>, FailureReason)>>,
     pub finalize_async_running: bool,
@@ -268,10 +273,15 @@ impl BuildTimestampStatus {
             explain_shown: false,
             tag_string: "".to_string(),
             show_tag_explanation: false,
+            balance_string: "".to_string(),
+            balance: 0.0,
+            receiving_address: "".to_string(),
+            script: "".to_string(),
+            script_attempted: false,
+            script_status: None,
             root_hash: None,
             num_leaves: None,
             locktime: None,
-            suggested_fee: None,
             finalize_status: None,
             finalize_async_result_rx: None,
             finalize_async_running: false,
@@ -306,6 +316,15 @@ impl BuildTimestampStatus {
         self.build_attempted = false;
         self.build_status = None;
         self.tree_exists = false;
+    }
+
+    pub fn reset_script_state(&mut self) {
+        self.script_attempted = false;
+        self.balance = 0.0;
+        self.balance_string = "".to_string();
+        self.receiving_address = "".to_string();
+        self.script = "".to_string();
+        self.script_status = None;
     }
 
     pub fn reset_finalize_state(&mut self) {

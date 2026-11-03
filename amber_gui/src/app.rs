@@ -279,14 +279,13 @@ impl TemplateApp {
 
     fn finish_build_timestamp(&mut self) {
         if let Some(rx) = &self.build_ts_stat.async_result_rx {
-            if let Ok((succeeded, tree, reason, locktime, suggested_fee, tree_filename, explain_filename, tag_filename)) = rx.try_recv() {
+            if let Ok((succeeded, tree, reason, locktime, tree_filename, explain_filename, tag_filename)) = rx.try_recv() {
                 self.build_ts_stat.async_running = false;
                 self.build_ts_stat.async_result_rx = None;
                 if succeeded {
                     self.build_ts_stat.root_hash = Some(format!("{}", HexFmt(tree.as_ref().unwrap().get_root_hash())));
                     self.build_ts_stat.num_leaves = Some(tree.as_ref().unwrap().num_leaves);
                     self.build_ts_stat.locktime = locktime;
-                    self.build_ts_stat.suggested_fee = suggested_fee;
                     self.build_ts_stat.tree_exists = true;
                     self.build_ts_stat.tree_file = tree_filename;
                     self.build_ts_stat.explain_file = explain_filename;
@@ -317,6 +316,26 @@ impl TemplateApp {
                         .interactive(false),
                 );
             });
+    }
+
+    fn compute_script(&mut self) {
+        self.build_ts_stat.script_attempted = true;
+        let receiving_address = self.build_ts_stat.receiving_address.clone();
+        let balance = self.build_ts_stat.balance.clone();
+        let tag = self.build_ts_stat.tag_string.clone();
+        let (result, fee, reason) = amber_core::generate_op_return_script(&receiving_address, balance, &tag);
+        if result.is_some() && fee.is_some() {
+            self.build_ts_stat.script = result.unwrap();
+        }
+        else {
+            if reason == FailureReason::BalanceTooLow {
+                let expected_fee = fee.unwrap();
+                self.build_ts_stat.script_status = Some(format!("Script generation failed because you entered a balance that was too low. Right now the cost of writing your message to the blockchain is about {} mBTC, so you need a balance that is at least that high.", expected_fee));
+            }
+            else {
+                self.build_ts_stat.script_status = Some(format!("Script generation failed for the following reason: {}", reason));
+            }
+        }
     }
 
     fn start_finalize_timestamp(&mut self) {
@@ -1328,25 +1347,9 @@ impl TemplateApp {
         ui.label("You have created the merkle tree, whose root hash serves as a witness of existence for each file in the corpus.");
         ui.label("Now we are going to write that root hash, the hash of explain.txt, and a few other pieces of metadata to the Bitcoin blockchain.");
         ui.label("Doing this will inherently timestamp the data, since each Bitcoin transaction is automatically timestamped.");
-        ui.label("");
-        ui.label("To write to the blockchain, follow the instructions in this guide:");
-        ui.hyperlink_to("OP_RETURN transaction guide",
-            "https://planb.academy/en/tutorials/wallet/desktop/electrum-opreturn-46cd3701-cb52-4dda-8251-9fd10e8f8542");
-        ui.label("In the above guide, use the following string as the hexadecimal message sent via OP_RETURN:");
-        let text = &self.build_ts_stat.tag_string.clone();
-        ui.horizontal(|ui| {
-
-            //ui.label(text);
-            let textbox_width = ui.available_width() - 30.0;
-            ui.add(egui::TextEdit::multiline(&mut self.build_ts_stat.tag_string.clone()).interactive(false).desired_width(textbox_width));
-
-            if ui.small_button("📋").on_hover_text("Copy to clipboard").clicked() {
-                ui.ctx().copy_text(text.to_string());
-            }
-        });
-
         if !self.build_ts_stat.show_tag_explanation {
-            if ui.button("What does this message mean?").clicked() {
+            
+            if ui.button("Blockchain message details").clicked() {
                 self.build_ts_stat.show_tag_explanation = true;
             }
         }
@@ -1354,6 +1357,13 @@ impl TemplateApp {
             if ui.button("Hide message explanation").clicked() {
                 self.build_ts_stat.show_tag_explanation = false;
             }
+            let text = &self.build_ts_stat.tag_string.clone();
+            ui.label("By following the instructions below, you will write the following message to the blockchain:");
+            ui.horizontal(|ui| {
+                let textbox_width = ui.available_width() - 30.0;
+                ui.add(egui::TextEdit::multiline(&mut self.build_ts_stat.tag_string.clone()).interactive(false).desired_width(textbox_width));
+            });
+
             ui.label("This message string consists of:");
 
             ui.label(format!("- The 8-character identifier of your corpus ({}) in hex: {}", self.build_ts_stat.identifier, &text[0..16]));
@@ -1363,15 +1373,52 @@ impl TemplateApp {
 
         }
 
-        ui.label(format!("Locktime is set to {}", self.build_ts_stat.locktime.unwrap()));
-        ui.label(format!("Suggested fee is {}", self.build_ts_stat.suggested_fee.unwrap()));
-
-
-        ui.label("");
-        ui.label("By writing this string to the blockchain, you will prove that explain.txt and each file in the merkle tree existed today.");
-        ui.label("Once you submit your blockchain transaction, wait for the network to confirm it. Once it is confirmed, note the transaction hash and click Continue below.");
-
         ui.separator();
+
+        ui.heading("Generate the OP_RETURN script");
+
+        ui.label("Paste the receiving address from Electrum here:");
+        ui.add_enabled(!self.build_ts_stat.script_attempted, egui::TextEdit::singleline(&mut self.build_ts_stat.receiving_address));
+
+        ui.label("Copy the exact balance (in mBTC) of one of your Bitcoin wallet addresses below:");
+        ui.add_enabled(!self.build_ts_stat.script_attempted, egui::TextEdit::singleline(&mut self.build_ts_stat.balance_string));
+
+        if self.build_ts_stat.balance_string != "".to_string(){
+            match self.build_ts_stat.balance_string.parse::<f64>() {
+                Ok(value) => self.build_ts_stat.balance = value,
+                Err(_) => {ui.label("You must input a valid float value.");}
+            }
+        }
+
+        if ui.add_enabled(self.build_ts_stat.receiving_address != "".to_string() && self.build_ts_stat.balance != 0.0 && !self.build_ts_stat.script_attempted, egui::Button::new("compute script")).clicked() {
+            self.compute_script();
+        }
+
+        if self.build_ts_stat.script != "".to_string() {
+            let script_text = self.build_ts_stat.script.clone();
+            ui.horizontal(|ui| {
+
+                //ui.label(text);
+                let textbox_width = ui.available_width() - 30.0;
+                ui.add(egui::TextEdit::multiline(&mut self.build_ts_stat.script.clone()).interactive(false).desired_width(textbox_width));
+
+                if ui.small_button("📋").on_hover_text("Copy to clipboard").clicked() {
+                    ui.ctx().copy_text(script_text.to_string());
+                }
+            });
+            ui.label(format!("Make sure to set the locktime to {}", self.build_ts_stat.locktime.unwrap()));
+
+            if ui.button("Erase script and try again").clicked() {
+                self.build_ts_stat.reset_script_state();
+            }
+        }
+
+        if self.build_ts_stat.script_status.is_some() {
+            ui.label(self.build_ts_stat.script_status.as_ref().unwrap());
+            if ui.button("Erase script and try again").clicked() {
+                self.build_ts_stat.reset_script_state();
+            }
+        }
 
 
 

@@ -1,5 +1,5 @@
 use crate::{
-    FailureReason, merkle::{MerkleProof, MerkleTree}, tag
+    FailureReason::{self, Success}, merkle::{MerkleProof, MerkleTree}, tag
 };
 use hex_fmt::HexFmt;
 use bitcoin::{
@@ -264,22 +264,29 @@ pub fn get_fee_estimate() -> (Option<f64>, FailureReason) {
     (Some(safe_fee), FailureReason::Success)
 }
 
-pub fn generate_op_return_script(receiving_address: &str, balance: f64, tag: &str) -> String {
+pub fn generate_op_return_script(receiving_address: &str, balance: f64, tag: &str) -> (Option<String>, Option<f64>, FailureReason) {
     let script_template_str = "${receiving_address},${change}\nscript(OP_RETURN ${tag}), 0";
     let script_template = Template::from(script_template_str);
     // fee ratio is in satoshis/vbyte. message will have 198 vbytes. convert to mBTC
-    let fee = get_fee_estimate().0.unwrap() * 229.0 * 0.00001;
-    //println!("balance: {}, fee: {}", balance, fee);
+    let (fee_estimate_result, reason) = get_fee_estimate();
+    let fee_rate = match fee_estimate_result {
+        Some(value) => value,
+        None => return (None, None, reason),
+    };
+    let fee = fee_rate * 229.0 * 0.00001;
     let mut change= balance - fee;
     let round_factor = 100000.0;
     change = (change * round_factor).round()/ round_factor;
+    if change <= 0.0 {
+        return (None, Some(fee), FailureReason::BalanceTooLow)
+    }
     let mut values: HashMap<&str, &str> = HashMap::new();
     values.insert("receiving_address", receiving_address);
     let change_str= &format!("{}", change);
     values.insert("change", change_str);
     values.insert("tag", tag);
     let script = script_template.try_fill_in(&values);
-    script.unwrap().to_string()
+    (Some(script.unwrap().to_string()), Some(fee), Success)
 }
 
 pub fn tag_valid(tag: &str) -> bool {
