@@ -475,7 +475,7 @@ pub fn generate_op_return_script(receiving_address: &str, balance: f64, tag: &st
     if !verify::tag_valid(tag) {
         return (None, None, FailureReason::InvalidTag)
     }
-    //CHANGE THIS: called function should return option<string> failrure reason because it might fail to look up fees, or the user's balance might be too low to pay the appropriate fee, or something.
+
     verify::generate_op_return_script(&address.to_string(), balance, tag)
 }
 

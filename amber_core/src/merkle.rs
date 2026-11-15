@@ -408,7 +408,7 @@ impl MerkleTree {
         MerkleTree { root_index, num_leaves, nodes, hash_lookup }
     }
 
-    // build tree from a collection of files. Intended to be used with get_filenames_from_directory to produce the vec of filepaths sorted by PG index, but of course you can write your own code to supply it with an arbitrary sequence of files if you wish.
+    // build tree from a collection of files.
     pub fn new_from_files(filepaths: Vec<&str>) -> (Option<Self>, FailureReason) {
         let num_leaves = filepaths.len();
         let mut nodes: Vec<MerkleNode> = vec![];
