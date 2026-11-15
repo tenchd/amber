@@ -54,7 +54,7 @@ pub fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: 
     unfossilized.verify_tree();
 
     let utc = utc_raw.duration_round(TimeDelta::try_minutes(15).unwrap()).unwrap();
-    let date = format!("{}", utc.format("%B %e, %Y").to_string());
+    let date = format!("{}", utc.format("%B %-d, %Y").to_string());
     let time = format!("{}", utc.format("%H:%M").to_string());
 
     let document_filename = explain_filename;
@@ -110,7 +110,7 @@ pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool
 
     let utc_raw = Utc::now();
     let utc = utc_raw.duration_round(TimeDelta::try_minutes(15).unwrap()).unwrap();
-    let date = format!("{}", utc.format("%B%e, %Y").to_string());
+    let date = format!("{}", utc.format("%B %-d, %Y").to_string());
     tree.write_unfinished_tree_to_file(&tree_filename_unfinished, &date);
     println!("wrote tree to file {}", tree_filename_unfinished);
 
@@ -235,7 +235,7 @@ pub fn verify_proof(filepath: &str, proof_file: &str) -> (bool, FailureReason, O
     let tx_hash = HexFmt(proof.tx_hash).to_string();
     if result {
         let utc = chrono::DateTime::from_timestamp(chain_timestamp.unwrap(), 0).unwrap();
-        let date = format!("{}", utc.format("%B %e, %Y").to_string());
+        let date = format!("{}", utc.format("%B %-d, %Y").to_string());
         let time = format!("{}", utc.format("%H:%M").to_string());
         println!("File {} was verified by proof file {} via the Bitcoin blockchain.\nIts Merkle root hash {} appears in the Bitcoin transaction identified by tx hash {}.", filepath, proof_file, HexFmt(proof.root_hash), HexFmt(proof.tx_hash));
 

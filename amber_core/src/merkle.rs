@@ -893,7 +893,7 @@ impl TimestampedMerkleTree {
                 self.utc_timestamp = timestamp_details.timestamp;
                 self.verified_timestamp = true;
                 let utc = chrono::DateTime::from_timestamp(timestamp_details.timestamp, 0).unwrap();
-                let date = format!("{}", utc.format("%B %e, %Y").to_string());
+                let date = format!("{}", utc.format("%B %-d, %Y").to_string());
                 let time = format!("{}", utc.format("%H:%M").to_string());
                 println!("Timestamp has been verified on the blockchain. Transaction found in block {} on {} at {}", timestamp_details.block_height, date, time);
                 return (true, success_reason);
@@ -918,7 +918,7 @@ impl TimestampedMerkleTree {
         let template = Template::from(template_string.as_str());
 
         let utc = chrono::DateTime::from_timestamp(self.utc_timestamp, 0).unwrap();
-        let date = format!("{}", utc.format("%B%e, %Y").to_string());
+        let date = format!("{}", utc.format("%B %-d, %Y").to_string());
 
         let utc_string = self.utc_timestamp.to_string();
 

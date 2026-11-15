@@ -10,7 +10,7 @@ use std::thread;
 
 pub fn convert_utc_to_datetime(utc_seconds: i64) -> (String, String) {
     let utc = chrono::DateTime::from_timestamp(utc_seconds, 0).unwrap();
-    let date = format!("{}", utc.format("%B %e, %Y").to_string());
+    let date = format!("{}", utc.format("%B %-d, %Y").to_string());
     let time = format!("{}", utc.format("%H:%M").to_string());
     (date, time)
 }
