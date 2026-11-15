@@ -129,7 +129,7 @@ impl fmt::Display for MerkleNode {
 pub struct MerkleProof {
     pub root_hash: [u8; 32],
     pub proof_hashes: Vec<[u8; 32]>,
-    pub proof_directions: Vec<bool>, // true for left, false for right
+    pub proof_directions: Vec<bool>, // true for right, false for left
     pub identifier: String,
     pub num_leaves: NodeHandle,
     pub explain_hash: [u8; 32],

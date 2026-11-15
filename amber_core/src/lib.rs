@@ -135,11 +135,17 @@ pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filen
     let autoaccept = false;
     let (result, reason) = timestamped_tree.verify_timestamp(generated_explain_filename, autoaccept);
     if result {
-        timestamped_tree.fossilize_tree(generated_tree_filename, &corpus_name);
+        let write_reason = timestamped_tree.fossilize_tree(generated_tree_filename, &corpus_name);
 
-        println!("Timestamp verified! Wrote the updated merkle tree file at {}. Deleting temporary untimestamped merkle tree file at {}", generated_tree_filename, unfinished_tree_file);
-        std::fs::remove_file(unfinished_tree_file).unwrap();
-        return (Some(timestamped_tree), reason);
+        if write_reason == FailureReason::Success {
+            println!("Timestamp verified! Wrote the updated merkle tree file at {}. Deleting temporary untimestamped merkle tree file at {}", generated_tree_filename, unfinished_tree_file);
+            std::fs::remove_file(unfinished_tree_file).unwrap();
+            return (Some(timestamped_tree), reason);
+        }
+
+        else {
+            return (None, write_reason)
+        }
     }
     if autoaccept{
         println!("WARNING: you set the autoaccept flag to true so we did not actually verify w.r.t. the blockchain. This was for testing purposes only.");
