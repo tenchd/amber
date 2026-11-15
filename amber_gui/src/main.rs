@@ -4,6 +4,7 @@
 mod app;
 mod status;
 pub use app::TemplateApp;
+use egui_extras;
 
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
@@ -26,7 +27,10 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Amber",
         native_options,
-        Box::new(|cc| Ok(Box::new(TemplateApp::new(cc)))),
+        Box::new(|cc| {
+        egui_extras::install_image_loaders(&cc.egui_ctx);
+        Ok(Box::new(TemplateApp::new(cc)))
+    }),
     )
 }
 

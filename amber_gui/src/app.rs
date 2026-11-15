@@ -5,7 +5,7 @@ use amber_core::FailureReason;
 use crate::status::{AuthenticationStatus, BuildProofStatus, BuildTimestampStatus, Page, ProofStatus, VerificationStatus};
 use hex_fmt::HexFmt;
 use chrono;
-use std::sync::mpsc::self;
+use std::sync::mpsc;
 use std::thread;
 
 pub fn convert_utc_to_datetime(utc_seconds: i64) -> (String, String) {
@@ -59,6 +59,7 @@ impl TemplateApp {
         } else {
             Default::default()
         }
+
     }    
     
     fn jump_to(&mut self, target: Page) {
@@ -279,12 +280,13 @@ impl TemplateApp {
 
     fn finish_build_timestamp(&mut self) {
         if let Some(rx) = &self.build_ts_stat.async_result_rx {
-            if let Ok((succeeded, tree, reason, tree_filename, explain_filename, tag_filename)) = rx.try_recv() {
+            if let Ok((succeeded, tree, reason, locktime, tree_filename, explain_filename, tag_filename)) = rx.try_recv() {
                 self.build_ts_stat.async_running = false;
                 self.build_ts_stat.async_result_rx = None;
                 if succeeded {
                     self.build_ts_stat.root_hash = Some(format!("{}", HexFmt(tree.as_ref().unwrap().get_root_hash())));
                     self.build_ts_stat.num_leaves = Some(tree.as_ref().unwrap().num_leaves);
+                    self.build_ts_stat.locktime = locktime;
                     self.build_ts_stat.tree_exists = true;
                     self.build_ts_stat.tree_file = tree_filename;
                     self.build_ts_stat.explain_file = explain_filename;
@@ -315,6 +317,40 @@ impl TemplateApp {
                         .interactive(false),
                 );
             });
+    }
+
+    fn compute_script(&mut self) {
+        self.build_ts_stat.script_attempted = true;
+        self.build_ts_stat.script_status = Some("Looking up transaction on the blockchain...".to_string());
+        let receiving_address = self.build_ts_stat.receiving_address.clone();
+        let balance = self.build_ts_stat.balance.clone();
+        let tag = self.build_ts_stat.tag_string.clone();
+        let (result, fee, reason) = amber_core::generate_op_return_script(&receiving_address, balance, &tag);
+        if result.is_some() && fee.is_some() {
+            self.build_ts_stat.script = result.unwrap();
+            self.build_ts_stat.script_status = None;
+        }
+        else {
+            if reason == FailureReason::BalanceTooLow {
+                let expected_fee = fee.unwrap();
+                self.build_ts_stat.script_status = Some(format!("Script generation failed because you entered a balance that was too low. Right now the cost of writing your message to the blockchain is about {} mBTC, so you need a balance that is at least that high.", expected_fee));
+            }
+            else {
+                self.build_ts_stat.script_status = Some(format!("Script generation failed for the following reason: {}", reason));
+            }
+        }
+    }
+
+    fn find_tx(&mut self) {
+        self.build_ts_stat.find_tx_attempted = true;
+        let tx_hash_string = self.build_ts_stat.tx_hash_string.clone();
+        let (result, reason) = amber_core::check_confirmations(&tx_hash_string);
+        if result.is_none() {
+            self.build_ts_stat.find_tx_status = Some(format!("Could not find the transaction for the following reason: {}", reason));
+        }
+        else {
+            self.build_ts_stat.tx_confirmations = result;
+        }
     }
 
     fn start_finalize_timestamp(&mut self) {
@@ -377,7 +413,6 @@ impl TemplateApp {
                 self.jump_to(Page::Functions);
             }
         });
-
     }
 
     fn page_explanations(&mut self, ui: &mut egui::Ui) {
@@ -1269,7 +1304,7 @@ impl TemplateApp {
         }
 
         if self.build_ts_stat.tree_exists {
-            ui.label(format!("Built merkle tree with {} leaves and root hash \n{}", self.build_ts_stat.num_leaves.unwrap(), self.build_ts_stat.root_hash.as_ref().unwrap()));
+            ui.label(format!("Built merkle tree with {} leaves and root hash \n{}.\nLocktime is set to {}.", self.build_ts_stat.num_leaves.unwrap(), self.build_ts_stat.root_hash.as_ref().unwrap(), self.build_ts_stat.locktime.unwrap()));
 
             if ui.button("Examine unfinalized timestamp").clicked() {
                 self.ver_stat.clear_verify_state();
@@ -1326,25 +1361,9 @@ impl TemplateApp {
         ui.label("You have created the merkle tree, whose root hash serves as a witness of existence for each file in the corpus.");
         ui.label("Now we are going to write that root hash, the hash of explain.txt, and a few other pieces of metadata to the Bitcoin blockchain.");
         ui.label("Doing this will inherently timestamp the data, since each Bitcoin transaction is automatically timestamped.");
-        ui.label("");
-        ui.label("To write to the blockchain, follow the instructions in this guide:");
-        ui.hyperlink_to("OP_RETURN transaction guide",
-            "https://planb.academy/en/tutorials/wallet/desktop/electrum-opreturn-46cd3701-cb52-4dda-8251-9fd10e8f8542");
-        ui.label("In the above guide, use the following string as the hexadecimal message sent via OP_RETURN:");
-        let text = &self.build_ts_stat.tag_string.clone();
-        ui.horizontal(|ui| {
-
-            //ui.label(text);
-            let textbox_width = ui.available_width() - 30.0;
-            ui.add(egui::TextEdit::multiline(&mut self.build_ts_stat.tag_string.clone()).interactive(false).desired_width(textbox_width));
-
-            if ui.small_button("📋").on_hover_text("Copy to clipboard").clicked() {
-                ui.ctx().copy_text(text.to_string());
-            }
-        });
-
         if !self.build_ts_stat.show_tag_explanation {
-            if ui.button("What does this message mean?").clicked() {
+            
+            if ui.button("Blockchain message details").clicked() {
                 self.build_ts_stat.show_tag_explanation = true;
             }
         }
@@ -1352,6 +1371,13 @@ impl TemplateApp {
             if ui.button("Hide message explanation").clicked() {
                 self.build_ts_stat.show_tag_explanation = false;
             }
+            let text = &self.build_ts_stat.tag_string.clone();
+            ui.label("By following the instructions below, you will write the following message to the blockchain:");
+            ui.horizontal(|ui| {
+                let textbox_width = ui.available_width() - 30.0;
+                ui.add(egui::TextEdit::multiline(&mut self.build_ts_stat.tag_string.clone()).interactive(false).desired_width(textbox_width));
+            });
+
             ui.label("This message string consists of:");
 
             ui.label(format!("- The 8-character identifier of your corpus ({}) in hex: {}", self.build_ts_stat.identifier, &text[0..16]));
@@ -1361,10 +1387,71 @@ impl TemplateApp {
 
         }
 
+        ui.separator();
 
-        ui.label("");
-        ui.label("By writing this string to the blockchain, you will prove that explain.txt and each file in the merkle tree existed today.");
-        ui.label("Once you submit your blockchain transaction, wait for the network to confirm it. Once it is confirmed, note the transaction hash and click Continue below.");
+        ui.heading("Generate the OP_RETURN script");
+        ui.label("First, we're going to generate the OP_RETURN script that will write the message to the blockchain.");
+
+        ui.label("1. Open Electrum and unlock your wallet with your password. Go to the Addresses tab.");
+        ui.label("2. Choose an address with a balance greater than 0. Right-click the address and choose Copy -> Address and paste it in the box below:");
+        ui.add_enabled(!self.build_ts_stat.script_attempted, egui::TextEdit::singleline(&mut self.build_ts_stat.receiving_address));
+
+        ui.label("3. Next, right-click the same address and choose Copy -> Balance and paste the result in the box below:");
+        ui.add_enabled(!self.build_ts_stat.script_attempted, egui::TextEdit::singleline(&mut self.build_ts_stat.balance_string));
+
+        if self.build_ts_stat.balance_string != "".to_string(){
+            match self.build_ts_stat.balance_string.parse::<f64>() {
+                Ok(value) => self.build_ts_stat.balance = value,
+                Err(_) => {ui.label("You must input a valid float value.");}
+            }
+        }
+
+        ui.label("4. Click this button to generate the script:");
+        if ui.add_enabled(self.build_ts_stat.receiving_address != "".to_string() && self.build_ts_stat.balance != 0.0 && !self.build_ts_stat.script_attempted, egui::Button::new("Generate script")).clicked() {
+            self.compute_script();
+        }
+
+        if self.build_ts_stat.script != "".to_string() {
+            ui.label("Script:");
+            let script_text = self.build_ts_stat.script.clone();
+            ui.horizontal(|ui| {
+
+                //ui.label(text);
+                let textbox_width = ui.available_width() - 30.0;
+                ui.add(egui::TextEdit::multiline(&mut self.build_ts_stat.script.clone()).interactive(false).desired_width(textbox_width));
+
+                if ui.small_button("📋").on_hover_text("Copy to clipboard").clicked() {
+                    ui.ctx().copy_text(script_text.to_string());
+                }
+            });
+
+            ui.label("If you made a mistake somehow, use this button to reset:");
+            if ui.button("Erase script and try again").clicked() {
+                self.build_ts_stat.reset_script_state();
+            }
+            ui.heading("Submit the transaction");
+            let locktime = self.build_ts_stat.locktime.unwrap();
+            ui.label("5. In Electrum, go to the Send tab. Copy the above script and paste it in the \"Pay to\" field. If you did this right, the text in the box should be highlighted green.");
+
+            ui.label("6. Click \"Pay...\". This will open up a popup window titled \"New Transaction\". Click \"Tools\" in the upper-right corner and check the \"Edit Locktime\" box. This will cause the following line to appear in the New Transaction popup window:");
+
+            ui.add_sized(
+            [300.0, 40.0],
+            egui::Image::new(egui::include_image!("../assets/locktime.png")),
+            );
+
+            ui.label(format!("Ensure that the LockTime number is EXACTLY {} (not the number in the example picture).", locktime));
+            ui.label("Don't change anything else on this screen.");
+            ui.label("7. In Electrum in the New Transaction popup, click Ok. This will submit your transaction to the blockchain.");
+            ui.label("8. Click Continue below to finalize your timestamp.");
+        }
+
+        if self.build_ts_stat.script_status.is_some() {
+            ui.label(self.build_ts_stat.script_status.as_ref().unwrap());
+            if ui.button("Erase script and try again").clicked() {
+                self.build_ts_stat.reset_script_state();
+            }
+        }
 
         ui.separator();
 
@@ -1382,12 +1469,52 @@ impl TemplateApp {
             self.finish_finalize_timestamp();
         }
         ui.heading("Step 3: Finalizing the Timestamp");
-        ui.label("On the previous page you submitted a transaction to the Bitcoin blockchain. Enter the hash of that transaction below:");
-        ui.add_enabled(self.build_ts_stat.tree_verified_reason.is_none(), egui::TextEdit::singleline(&mut self.build_ts_stat.tx_hash_string));
+        ui.label("On the previous page you submitted a transaction to the Bitcoin blockchain. In Electrum, you should able able to see that transaction in the History tab. Right-click the transaction, select Copy -> Transaction ID, and paste it in the box below:");
+        ui.add_enabled(!self.build_ts_stat.find_tx_attempted, egui::TextEdit::singleline(&mut self.build_ts_stat.tx_hash_string));
+
+        ui.label("Click the button below to find the transaction in the Bitcoin blockchain mempool.");
+
+        let find_tx_allowed = self.build_ts_stat.tx_hash_string != "".to_string() && !self.build_ts_stat.finalize_async_running && !self.build_ts_stat.tree_verified && self.build_ts_stat.finalize_status.is_none();
+
+        if ui.add_enabled(find_tx_allowed, egui::Button::new("Find transaction")).clicked() {
+            self.find_tx();
+        } 
+
+        if self.build_ts_stat.tx_confirmations.is_some() {
+            if self.build_ts_stat.tx_confirmations.unwrap() == 0 {
+                ui.label("Transaction found, but it hasn't been confirmed yet. Click the Find Transaction button again in a few minutes.");
+            }
+            else {
+                ui.label(format!("Transaction found on the blockchain. Currently confirmed by {} blocks.", self.build_ts_stat.tx_confirmations.unwrap()));
+
+                if self.build_ts_stat.tx_confirmations.unwrap() < 3 {
+                    ui.label("Once the transaction has been confirmed by 3 blocks, you can finalize the timestamp. On average, a block confirmation happens every ten minutes, so click Find Transaction again in a little while to see if it's been confirmed yet.");
+                }
+                else {
+                    ui.label("You can now finalize the timestamp.");
+                }
+            }
+
+
+        }
+
+        if self.build_ts_stat.find_tx_status.is_some() {
+            ui.label(self.build_ts_stat.find_tx_status.as_ref().unwrap());
+        }
+
+        if self.build_ts_stat.find_tx_attempted {
+            if ui.add_enabled(!self.build_ts_stat.finalize_status.is_some() && !self.build_ts_stat.finalize_async_running, egui::Button::new("Reset transaction hash and try again")).clicked() {
+                self.build_ts_stat.reset_find_tx_state();
+            }
+        }
+
+        ui.separator();
 
         ui.label("Clicking the \"Finalize Timestamp\" button will look up the Bitcoin transaction on the blockchain and confirm that it contains the correct timestamp information. If it does, it will add some data to the Merkle tree file to enable automatic verification in the future.");
 
-        if ui.add_enabled(self.build_ts_stat.tx_hash_string!="".to_string() && !self.build_ts_stat.tree_verified && self.build_ts_stat.tree_verified_reason.is_none() && !self.build_ts_stat.finalize_async_running, egui::Button::new("Finalize timestamp")).clicked() {
+        let finalize_allowed = self.build_ts_stat.tx_hash_string!="".to_string() && !self.build_ts_stat.tree_verified && self.build_ts_stat.tree_verified_reason.is_none() && !self.build_ts_stat.finalize_async_running && self.build_ts_stat.tx_confirmations.is_some() && self.build_ts_stat.tx_confirmations.unwrap() > 2;
+
+        if ui.add_enabled(finalize_allowed, egui::Button::new("Finalize timestamp")).clicked() {
             self.start_finalize_timestamp();
         }
 
@@ -1403,6 +1530,7 @@ impl TemplateApp {
                 ui.label("Something went wrong and the blockchain transaction could not be verified.");
                 if ui.button("Retry").clicked() {
                     self.build_ts_stat.reset_finalize_state();
+                    self.build_ts_stat.reset_find_tx_state();
                 }
             }
         }

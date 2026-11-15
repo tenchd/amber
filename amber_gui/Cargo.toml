@@ -30,6 +30,8 @@ walkdir = "2.5.0"
 text-template = "0.1.0"
 bitcoin = "0.32.102"
 reqwest = { version = "0.13.5", features = ["blocking"] }
+egui_extras = { version = "0.36.0", features = ["all_loaders", "image"] }
+image = { version = "0.25.10", features = ["png"] }
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
