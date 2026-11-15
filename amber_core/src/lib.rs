@@ -186,7 +186,7 @@ pub fn verify_tree(provided_tree_filename: &str, provided_explain_filename: &str
             explain_utc_timestamp = verify::get_explain_utc_timestamp(&provided_explain_filename);
 
         }
-        let difference = chain_utc_timestamp - explain_utc_timestamp;
+        let difference = (chain_utc_timestamp - explain_utc_timestamp).abs();
         println!("The estimated time listed in explain.txt and the exact timestamp recorded on the blockchain differ by {} seconds.", difference);
         let max_allowable_difference = 86400; // maximinum allowable difference between claimed timestamp and true timestamp is 24 hours.
         if difference > max_allowable_difference {
