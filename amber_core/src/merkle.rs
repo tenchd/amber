@@ -329,16 +329,16 @@ impl MerkleProof {
     }
 
     // verifies that some data is part of a merkle tree (represented by its root hash).
-    pub fn verify_proof_for_data(&self, data: &[u8], autoaccept: bool, verbose: bool) -> (bool, FailureReason) {
+    pub fn verify_proof_for_data(&self, data: &[u8], autoaccept: bool, verbose: bool) -> (bool, FailureReason, Option<i64>, Option<usize>) {
         let starting_hash = double_hash(data);
         if !self.verify_proof(starting_hash, verbose){
             println!("File hash does not match first hash in proof file");
-            (false, FailureReason::FileHashMismatch)
+            (false, FailureReason::FileHashMismatch, None, None)
         }
         else if autoaccept {
             println!("Input data properly hashes up the tree to the root.");
             println!("Autoaccepting the blockchain verification process for testing purposes. DO NOT TRUST THIS RESULT AS A SECURE TIMESTAMP.");
-            (true, FailureReason::AutoAccept)
+            (true, FailureReason::AutoAccept, None, None)
         }
         else {
             crate::verify::verify_proof_timestamp(&self, verbose)
@@ -346,22 +346,22 @@ impl MerkleProof {
     }
 
     // verifies that some file is part of a merkle tree (represented by its root hash).
-    pub fn verify_proof_for_file(&self, filepath: &str, autoaccept: bool, verbose: bool) -> (bool, FailureReason) {
+    pub fn verify_proof_for_file(&self, filepath: &str, autoaccept: bool, verbose: bool) -> (bool, FailureReason, Option<i64>, Option<usize>) {
         let (result, reason) = double_hash_from_file(filepath);
         if result.is_none() {
-            return (false, reason)
+            return (false, reason, None, None)
         }
         let starting_hash = result.unwrap();
         if !self.verify_proof(starting_hash, verbose) {
             println!("File hash does not match first hash in proof file");
-            (false, FailureReason::FileHashMismatch)
+            (false, FailureReason::FileHashMismatch, None, None)
         }
         else if autoaccept {
             if verbose {
                 println!("Input data properly hashes up the tree to the root.");
                 println!("Autoaccepting the blockchain verification process for testing purposes. DO NOT TRUST THIS RESULT AS A SECURE TIMESTAMP.");
             }
-            (true, FailureReason::AutoAccept)
+            (true, FailureReason::AutoAccept, None, None)
         }
         else {
             crate::verify::verify_proof_timestamp(&self, verbose)

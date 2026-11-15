@@ -73,7 +73,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
         for (i, d) in data.iter().enumerate() {
             println!("testing proof for leaf index {} (data: {:?})", i + 1, String::from_utf8_lossy(d));
             let proof = timestamped_tree.produce_proof(i + 1);
-            let (result, _reason) = proof.verify_proof_for_data(d, autoaccept, true);
+            let (result, _reason, _, _) = proof.verify_proof_for_data(d, autoaccept, true);
             assert!(result, "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
         }
     }
@@ -107,7 +107,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
             for (i, d) in data_refs.iter().enumerate() {
                 //println!("testing proof for leaf index {} (data: {:?})", i + 1, String::from_utf8_lossy(d));
                 let proof = timestamped_tree.produce_proof(i + 1);
-                let (result, _reason) = proof.verify_proof_for_data(d, autoaccept, true);
+                let (result, _reason, _, _) = proof.verify_proof_for_data(d, autoaccept, true);
                 assert!(result, "Proof should be valid for data: {:?}", String::from_utf8_lossy(d));
             }
         }
@@ -131,7 +131,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
 
         let proof = timestamped_tree.produce_proof(4);
         //below is brittle; relies on a specific ordering of the files in the merkle tree which my code doesn't explicitly enforce. fix this later when i rethink indices
-        let (result, _reason) = proof.verify_proof_for_file("testing/small_corpus/pg6.txt", autoaccept, true);
+        let (result, _reason, _, _) = proof.verify_proof_for_file("testing/small_corpus/pg6.txt", autoaccept, true);
         assert!(result, "proof should be valid for pg6.txt");
         println!("Proof for pg6.txt: {}", proof);
     }
@@ -294,14 +294,14 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
             let proof = timestamped_tree.produce_proof(index);
             let result = proof.verify_proof(starting_hash, true);
             assert!(result);
-            let (chain_result, _) = verify::verify_proof_timestamp(&proof, true);
+            let (chain_result, _, _, _) = verify::verify_proof_timestamp(&proof, true);
             assert!(chain_result);
         }
 
         println!("Testing proof generated from corpus file");
         let text_to_verify = "testing/pg996.txt";
         let proof = timestamped_tree.produce_proof_from_file(text_to_verify).0.unwrap();
-        let (result, _reason) = proof.verify_proof_for_file(text_to_verify, autoaccept, true);
+        let (result, _reason, _, _) = proof.verify_proof_for_file(text_to_verify, autoaccept, true);
         proof.fossilize_proof("testing/pg996_proof.txt", dummy_corpus_name);
         assert!(result);
     }

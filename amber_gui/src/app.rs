@@ -153,11 +153,11 @@ impl TemplateApp {
                 self.proof_stat.async_running = false;
                 self.proof_stat.proof_authenticated = Some(verified);
                 self.proof_stat.proof_auth_reason = Some(reason);
-                self.proof_stat.proof_utc = Some(utc);
+                self.proof_stat.proof_utc = utc;
                 self.proof_stat.proof_tx_hash = Some(tx_hash);
                 self.proof_stat.proof_block = Some(block);
-                self.proof_stat.proof_date = Some(date);
-                self.proof_stat.proof_time = Some(time);
+                self.proof_stat.proof_date = date;
+                self.proof_stat.proof_time = time;
                 self.proof_stat.proof_id = Some(identifier);
                 self.proof_stat.proof_auth_status = Some("Proof verification complete.".to_string());
             }

@@ -216,30 +216,35 @@ pub fn verify_file(tree_filename: &str, filepath: &str) -> bool {
     contains
 }
 
-pub fn verify_proof(filepath: &str, proof_file: &str) -> (bool, FailureReason, i64, String, String, String, String, String) {
+pub fn verify_proof(filepath: &str, proof_file: &str) -> (bool, FailureReason, Option<i64>, String, String, Option<String>, Option<String>, String) {
     let (proof, reason) = MerkleProof::new_from_file(proof_file);
     if proof.is_none() {
-        let n = 0; // placeholder int
-        let s = "".to_string(); // placeholder string
-        return (false, reason, n, s.clone(), s.clone(), s.clone(), s.clone(), s.clone());
+        let s = "".to_string(); 
+        return (false, reason, None, s.clone(), s.clone(), None, None, s.clone());
     }
     let proof = proof.unwrap();
-    let (result, reason) = proof.verify_proof_for_file(filepath, false, true);
-    let utc = chrono::DateTime::from_timestamp(proof.utc_timestamp, 0).unwrap();
-    let date = format!("{}", utc.format("%B %e, %Y").to_string());
-    let time = format!("{}", utc.format("%H:%M").to_string());
+    let (result, reason, chain_timestamp, chain_block_height) = proof.verify_proof_for_file(filepath, false, true);
     let identifier = proof.identifier;
+    let block;
+    let tx_hash = HexFmt(proof.tx_hash).to_string();
     if result {
+        let utc = chrono::DateTime::from_timestamp(chain_timestamp.unwrap(), 0).unwrap();
+        let date = format!("{}", utc.format("%B %e, %Y").to_string());
+        let time = format!("{}", utc.format("%H:%M").to_string());
         println!("File {} was verified by proof file {} via the Bitcoin blockchain.\nIts Merkle root hash {} appears in the Bitcoin transaction identified by tx hash {}.", filepath, proof_file, HexFmt(proof.root_hash), HexFmt(proof.tx_hash));
 
         println!("This proves that {} existed on {} at {}.", filepath, date, time);
+        block = chain_block_height.unwrap().to_string();
+        let utc_secs: i64 = utc.timestamp();
+        return (result, reason, Some(utc_secs), tx_hash, block, Some(date), Some(time), identifier);
     }
     else {
+        block = proof.block_height.to_string();
         println!("File {} failed to verify for proof file {}. It does NOT certify any timestamp for the file.", filepath, proof_file);
+
+        return (result, reason, Some(proof.utc_timestamp), tx_hash, block, None, None, identifier)
     }
-    let tx_hash = HexFmt(proof.tx_hash).to_string();
-    let block = proof.block_height.to_string();
-    (result, reason, proof.utc_timestamp, tx_hash, block, date, time, identifier)
+
 }
 
 pub fn make_proof(input_path: &str, tree_filename: &str, explain_filename: &str, corpus_name: &str) -> (bool, FailureReason) {
@@ -283,12 +288,12 @@ pub fn make_proof(input_path: &str, tree_filename: &str, explain_filename: &str,
             let proof = proof_result.unwrap();
             proof.fossilize_proof(&output_filename, corpus_name);
             if first {
-                let (blockchain_verified, _) = proof.verify_proof_for_file(&filepath, false, false);
+                let (blockchain_verified, _, _, _) = proof.verify_proof_for_file(&filepath, false, false);
                 assert!(blockchain_verified, "Couldn't verify proof on blockchain. Aborting.");
                 first = false;
             }
             else {
-                let (local_verified, reason) = proof.verify_proof_for_file(&filepath, true, false);
+                let (local_verified, reason, _, _) = proof.verify_proof_for_file(&filepath, true, false);
                 assert!(local_verified, "Proof file {} is invalid. Aborting.", filepath);
                 return (false, reason);
             }
@@ -387,7 +392,7 @@ pub fn verify_tree_async(tree_filename: PathBuf, explain_filename: PathBuf) -> (
     (result, tree, reason)
 }
 
-pub fn verify_proof_async(filepath: PathBuf, proof_filepath: PathBuf) -> (bool, FailureReason, i64, String, String, String, String, String) {
+pub fn verify_proof_async(filepath: PathBuf, proof_filepath: PathBuf) -> (bool, FailureReason, Option<i64>, String, String, Option<String>, Option<String>, String) {
     let path = filepath.to_str().unwrap();
     let proof_path = proof_filepath.to_str().unwrap();
     verify_proof(path, proof_path)

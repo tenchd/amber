@@ -102,7 +102,7 @@ pub struct ProofStatus {
     pub provided_file: Option<PathBuf>,
     pub proof_auth_status: Option<String>,
     pub proof_auth_attempted: bool,
-    pub async_result_rx: Option<Receiver<(bool, FailureReason, i64, String, String, String, String, String)>>,
+    pub async_result_rx: Option<Receiver<(bool, FailureReason, Option<i64>, String, String, Option<String>, Option<String>, String)>>,
     pub async_running: bool,
     pub proof_authenticated: Option<bool>,
     pub proof_auth_reason: Option<FailureReason>,

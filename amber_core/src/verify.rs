@@ -173,7 +173,7 @@ pub async fn verify_tree_timestamp(identifier: &str, tree: &MerkleTree, explain_
 }
 
 #[tokio::main]
-pub async fn verify_proof_timestamp(proof: &MerkleProof, verbose: bool) -> (bool, FailureReason) {
+pub async fn verify_proof_timestamp(proof: &MerkleProof, verbose: bool) -> (bool, FailureReason, Option<i64>,Option<usize>) {
     //println!("Computing tag based on provided identifier, merkle tree, and explain file.");
     let expected_tag = compute_tag(&proof.identifier, proof.num_leaves.try_into().unwrap(), proof.root_hash, proof.explain_hash);
     if verbose {println!("The tag should be {}", HexFmt(&expected_tag));}
@@ -183,24 +183,24 @@ pub async fn verify_proof_timestamp(proof: &MerkleProof, verbose: bool) -> (bool
     match result {
         Some(details) => {
             let chain_timestamp = details.timestamp;
-            let expected_timestamp = proof.utc_timestamp;
+        let expected_timestamp = proof.utc_timestamp;
+            let chain_block_height = details.block_height;
+            let expected_block_height = proof.block_height;
             if chain_timestamp == expected_timestamp {
-                let chain_block_height = details.block_height;
-                let expected_block_height = proof.block_height;
                 if chain_block_height != expected_block_height {
                     println!("WARNING: block height {} listed in proof file doesn't match the actual block height {} on the blockchain.", expected_block_height, chain_block_height);
                     reason = FailureReason::BlockHeightMismatchNonFatal;
                 }
-                return (true, reason);
+                return (true, reason, Some(chain_timestamp), Some(chain_block_height));
             }   
             else {
                 println!("Timestamp in proof file {} does not match true (blockchain) timestamp {}.", expected_timestamp, chain_timestamp);
-                return (true, FailureReason::TimestampMismatchNonFatal);
+                return (true, FailureReason::TimestampMismatchNonFatal, Some(chain_timestamp), Some(chain_block_height));
             }
         }
         _ => {
                 println!("Tag (identifier + num_leaves + merkle root hash + explain hash) failed to verify on the blockchain.");
-                return (false, reason)
+                return (false, reason, None, None)
             }
     }
 }
