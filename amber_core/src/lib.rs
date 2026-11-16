@@ -26,7 +26,7 @@ pub fn get_filenames_from_directory(path: &str) -> Vec<String> {
         //.expect("Failed to read directory")
         .filter_map(|entry| {
             let entry = entry.expect("Failed to read directory entry");
-            if !entry.file_type().is_dir() {
+            if entry.file_type().is_file() && !entry.path().to_string_lossy().ends_with("_proof.txt") {
                 Some(entry.path().to_str().unwrap().to_string())
             }
             else {
