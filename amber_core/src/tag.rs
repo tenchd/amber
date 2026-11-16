@@ -1,6 +1,5 @@
-use std::fs::{File, read_to_string};
+use std::fs::File;
 use std::io::Write;
-use std::path::{Path};
 use hex_fmt::HexFmt;
 use text_template::Template;
 use std::collections::HashMap;

@@ -133,10 +133,18 @@ pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool
     let utc_raw = Utc::now();
     let utc = utc_raw.duration_round(TimeDelta::try_minutes(15).unwrap()).unwrap();
     let date = format!("{}", utc.format("%B %-d, %Y").to_string());
-    tree.write_unfinished_tree_to_file(&tree_filename_unfinished, &date);
+    let tree_write_result = tree.write_unfinished_tree_to_file(&tree_filename_unfinished, &date);
+    if tree_write_result != FailureReason::Success {
+        println!("Couldn't write tree file to location {tree_filename_unfinished}. You must fix the problem and rebuild before continuing.");
+        return (None, tree_write_result)
+    }
     println!("wrote tree to file {}", tree_filename_unfinished);
 
-    build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, explain_filename, tag_filename, corpus_name, utc_raw, locktime, identifier, corpus_desc, corpus_motiv, user_desc);
+    let timestamp_write_result = build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, explain_filename, tag_filename, corpus_name, utc_raw, locktime, identifier, corpus_desc, corpus_motiv, user_desc);
+    if timestamp_write_result != FailureReason::Success {
+        println!("Couldn't write explain or tag file. You must fix the problem and rebuild before continuing.");
+        return (None, timestamp_write_result)
+    }
     (Some(tree), FailureReason::Success)
 }
 
