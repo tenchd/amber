@@ -314,8 +314,11 @@ pub fn make_proof(input_path: &str, tree_filename: &str, explain_filename: &str,
             }
             else {
                 let (local_verified, reason, _, _) = proof.verify_proof_for_file(&filepath, true, false);
-                assert!(local_verified, "Proof file {} is invalid. Aborting.", filepath);
-                return (false, reason);
+                //assert!(local_verified, "Proof file {} is invalid. Aborting.", filepath);
+                if !local_verified {
+                    println!("Proof for file {} failed to validate for the following reason: {}", filepath, reason);
+                    return (false, reason);
+                }
             }
         }
         println!("Done writing proofs. Proof of file 'name.txt' is 'name.txt_proof.txt.'");
