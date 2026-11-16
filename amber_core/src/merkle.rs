@@ -1,14 +1,13 @@
 use hex_fmt::HexFmt;
 use sha2::{Sha256, Digest};
 use std::{fmt, println};
-use std::path::Path;
-use std::fs::{File,read_to_string};
+use std::fs::File;
 use std::io::{Read,Write,BufReader, prelude::*,};
 use std::collections::HashMap;
 use base64::prelude::*;
 use text_template::Template;
 
-use crate::AMBER_VERSION;
+use crate::{AMBER_VERSION, MERKLE_TEMPLATE, PROOF_TEMPLATE, UNFINISHED_MERKLE_TEMPLATE};
 use crate::FailureReason;
 
 // apply SHA256 hash twice to input bytes.
@@ -272,9 +271,7 @@ impl MerkleProof {
 
     // 
     pub fn fossilize_proof(&self, filename: &str, corpus_name: &str) {
-        let proof_template_filepath = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixed_templates/proof_template.txt");
-        let template_string = read_to_string(&proof_template_filepath).expect(&format!("Tried to find {:?}", &proof_template_filepath));
-        let template = Template::from(template_string.as_str());
+        let template = Template::from(PROOF_TEMPLATE);
 
         // identifier: ${identifier}
         // # num_leaves: ${num_leaves}
@@ -716,9 +713,7 @@ impl MerkleTree {
 
     // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
     pub fn write_unfinished_tree_to_file(&self, tree_filename: &str, date: &str,) -> FailureReason {
-        let unfinished_merkle_template_filepath = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixed_templates/unfinished_merkle_template.txt");
-        let template_string = read_to_string(unfinished_merkle_template_filepath).unwrap();
-        let template = Template::from(template_string.as_str());
+        let template = Template::from(UNFINISHED_MERKLE_TEMPLATE);
 
         let mut values: HashMap<&str, &str> = HashMap::new();
         values.insert("date",date);
@@ -913,9 +908,7 @@ impl TimestampedMerkleTree {
             println!("WARNING: You are fossilizing an unverified timestamped merkle tree. You should only be doing this as a test. There is no guarantee that the resulting fossil file will verify on the blockchain.");
             println!("!!!!!!!!!!");
         }
-        let merkle_template_filepath = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixed_templates/merkle_template.txt");
-        let template_string = read_to_string(merkle_template_filepath).unwrap();
-        let template = Template::from(template_string.as_str());
+        let template = Template::from(MERKLE_TEMPLATE);
 
         let utc = chrono::DateTime::from_timestamp(self.utc_timestamp, 0).unwrap();
         let date = format!("{}", utc.format("%B %-d, %Y").to_string());

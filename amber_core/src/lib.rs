@@ -19,6 +19,14 @@ use bitcoin::{Address, Network, address::NetworkUnchecked};
 const AMBER_VERSION: &str = "0.1.0";
 const AMBER_VERSION_DATE: &str = "Sept 25, 2026";
 
+const EXPLAIN_TEMPLATE: &str = include_str!("../fixed_templates/explain_template.txt");
+const MERKLE_TEMPLATE: &str = include_str!("../fixed_templates/merkle_template.txt");
+const UNFINISHED_MERKLE_TEMPLATE: &str = include_str!("../fixed_templates/unfinished_merkle_template.txt");
+const PROOF_TEMPLATE: &str = include_str!("../fixed_templates/proof_template.txt");
+const CORPUS_DESCRIPTION: &str = include_str!("../editable_templates/corpus_description.txt");
+const CORPUS_MOTIVATION: &str = include_str!("../editable_templates/corpus_motivation.txt");
+const USER_DESCRIPTION: &str = include_str!("../editable_templates/user_description.txt");
+
 // Scans corpus top-level directory recursively to gather the files that will be put in the merkle tree.
 pub fn get_filenames_from_directory(path: &str) -> Vec<String> {
     let filepaths: Vec<String> = WalkDir::new(path)
