@@ -225,8 +225,21 @@ impl TemplateApp {
             }
         }
 
+        // ensure that the identifier string is entirely graphic ASCII characters
+        let mut identifier_graphic = true;
+        for character in self.build_ts_stat.identifier.chars() {
+            identifier_graphic = identifier_graphic && character.is_ascii_graphic();
+        }
+
+        // ensure identifier is exactly 8 characters long
+        let identifier_valid = self.build_ts_stat.identifier.len() == 8 && identifier_graphic;
+
+        if ! identifier_valid {
+            self.build_ts_stat.build_status = Some("Your identifier must be exactly 8 ASCII characters with no whitespace or control characters.".to_string());
+        }
+
         let inputs_valid = self.build_ts_stat.corpus_name != "".to_string() &&
-                                    self.build_ts_stat.identifier != "".to_string() &&
+                                    identifier_valid &&
                                     self.build_ts_stat.output_dir.is_some();
 
         corpus_valid && inputs_valid
