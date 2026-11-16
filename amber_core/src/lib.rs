@@ -86,6 +86,20 @@ pub fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: 
 
 pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, locktime: usize, identifier: &str, corpus_desc: Option<String>, corpus_motiv: Option<String>, user_desc: Option<String>) -> (Option<MerkleTree>, FailureReason) {
     let tree: MerkleTree;
+
+    // ensure that the identifier string is entirely graphic ASCII characters
+    let mut identifier_graphic = true;
+    for character in identifier.chars() {
+        identifier_graphic = identifier_graphic && character.is_ascii_graphic();
+    }
+
+    // ensure identifier is exactly 8 characters long
+    let identifier_valid = identifier.len() == 8 && identifier_graphic;
+
+    if !identifier_valid {
+        return (None, FailureReason::InvalidIdentifier);
+    }
+
     if hashes_source {
         println!("Building merkle tree from leaf hashes in {}", hashes_path);
         let (result, reason) = MerkleTree::new_from_hashes(hashes_path);
@@ -334,6 +348,7 @@ pub enum FailureReason {
     FileHashMismatch, // double SHA256 hash of file provided alongside proof doesn't match first hash in proof leaf-> root path
     FileNotInMerkleTree, // the provided file is not in the merkle tree.
     FileNotFound, // can't find corpus file
+    InvalidIdentifier, // provided identifier is not 8 (non-whitespace or control) ASCII characters
     TxHashNotParseable, // the provided tx hash is not parseable; it's not 32 characters or has invalid characters.
     NoBlockchainResponse, // didn't get a response from the blockchain website (could be connectivity issue, or incorrect tx hash) 
     // in the future if you don't get a blockchain response, ping blockchain.info to see if the main page is up.
@@ -363,6 +378,7 @@ impl std::fmt::Display for FailureReason {
             FailureReason::FileHashMismatch => write!(f, "The hash of the provided file does not match the expected hash in the proof file."),
             FailureReason::FileNotInMerkleTree => write!(f, "The provided file is not in the Merkle tree."),
             FailureReason::FileNotFound => write!(f, "The provided file could not be found."),
+            FailureReason::InvalidIdentifier => write!(f, "The provided identifier string must be exactly 8 ASCII characters, and no character may be a whitespace or control character."),
             FailureReason::TxHashNotParseable => write!(f, "The provided tx hash is invalid; it must contain only valid hex characters and be exactly 32 characters long."),
             FailureReason::NoBlockchainResponse => write!(f, "The blockchain lookup website did not respond to the request."),
             FailureReason::TxNotFound => write!(f, "The blockchain lookup website could not find a transaction with the specified tx hash."),
