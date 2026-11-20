@@ -183,14 +183,17 @@ pub struct BuildTimestampStatus {
     pub corpus_desc_dialog: FileDialog,
     pub corpus_desc_file: Option<PathBuf>,
     pub corpus_desc: String,
+    pub corpus_desc_status: Option<String>,
     pub corpus_motiv_source: bool,
     pub corpus_motiv_dialog: FileDialog,
     pub corpus_motiv_file: Option<PathBuf>,
     pub corpus_motiv: String,
+    pub corpus_motiv_status: Option<String>,
     pub user_desc_source: bool,
     pub user_desc_dialog: FileDialog,
     pub user_desc_file: Option<PathBuf>,
     pub user_desc: String,
+    pub user_desc_status: Option<String>,
     pub show_signing: bool,
     pub hashes: bool,
     pub hashes_explain: bool,
@@ -245,14 +248,17 @@ impl BuildTimestampStatus {
             corpus_desc_dialog: FileDialog::new(),
             corpus_desc_file: None,
             corpus_desc: "".to_string(),
+            corpus_desc_status: None,
             corpus_motiv_source: false,
             corpus_motiv_dialog: FileDialog::new(),
             corpus_motiv_file: None,
             corpus_motiv: "".to_string(),
+            corpus_motiv_status: None,
             user_desc_source: false,
             user_desc_dialog: FileDialog::new(),
             user_desc_file: None,
             user_desc: "".to_string(),
+            user_desc_status: None,
             show_signing: false,
             hashes: false,
             hashes_explain: false,
@@ -304,18 +310,21 @@ impl BuildTimestampStatus {
         self.corpus_desc_dialog = FileDialog::new();
         self.corpus_desc_file = None;
         self.corpus_desc = "".to_string();
+        self.corpus_desc_status = None;
     }
 
     pub fn reset_corpus_motiv_state(&mut self) {
         self.corpus_motiv_dialog = FileDialog::new();
         self.corpus_motiv_file = None;
         self.corpus_motiv = "".to_string();
+        self.corpus_motiv_status = None;
     }
 
     pub fn reset_user_desc_state(&mut self) {
         self.user_desc_dialog = FileDialog::new();
         self.user_desc_file = None;
         self.user_desc = "".to_string();
+        self.user_desc_status = None;
     }
 
     pub fn reset_prelim_build_state(&mut self) {

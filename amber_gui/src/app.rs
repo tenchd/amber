@@ -206,7 +206,7 @@ impl TemplateApp {
     }
 
     fn start_build_proof(&mut self) {
-        if self.build_pf_stat.proven_file.is_some() && self.build_pf_stat.merkle_file.is_some() {
+        if self.build_pf_stat.proven_file.is_some() && self.build_pf_stat.merkle_file.is_some() && self.build_pf_stat.explain_file.is_some() {
             self.build_pf_stat.proof_attempted = true;
             let (tx, rx) = mpsc::channel();
             self.build_pf_stat.async_result_rx = Some(rx);
@@ -927,7 +927,7 @@ impl TemplateApp {
             ui.label(format!("Corpus name will be listed as: \"{}\" in the proof file.", &self.build_pf_stat.corpus_name));
         }
 
-        if self.build_pf_stat.corpus_name != "".to_string() && self.build_pf_stat.proven_file.is_some() && self.build_pf_stat.merkle_file.is_some() {
+        if self.build_pf_stat.corpus_name != "".to_string() && self.build_pf_stat.proven_file.is_some() && self.build_pf_stat.merkle_file.is_some() && self.build_pf_stat.explain_file.is_some() {
             if ui.add_enabled(!self.build_pf_stat.proof_attempted, egui::Button::new("Create proof")).clicked() {
                 self.start_build_proof();
             }
@@ -1080,7 +1080,13 @@ impl TemplateApp {
             self.build_ts_stat.corpus_desc_dialog.update(ui);
             if let Some(path) = self.build_ts_stat.corpus_desc_dialog.take_picked() {
                 self.build_ts_stat.corpus_desc_file = Some(path.to_path_buf());
-                self.build_ts_stat.corpus_desc = read_to_string(self.build_ts_stat.corpus_desc_file.clone().unwrap()).unwrap();
+                self.build_ts_stat.corpus_desc = match read_to_string(self.build_ts_stat.corpus_desc_file.clone().unwrap()) {
+                    Ok(file_contents) => file_contents,
+                    Err(err) => {
+                        self.build_ts_stat.corpus_desc_status = Some(format!("Your corpus description file is not a UTF-8 encoded text file. Select another file.\nError: {err}"));
+                        "".to_string()
+                    },
+                };
             }
             if self.build_ts_stat.corpus_desc != "".to_string() {
 
@@ -1098,6 +1104,11 @@ impl TemplateApp {
                                 .interactive(false),
                         );
                     });
+            }
+            else {
+                if self.build_ts_stat.corpus_desc_status.is_some() {
+                    ui.label(self.build_ts_stat.corpus_desc_status.as_ref().unwrap());
+                }
             }
         }
 
@@ -1163,7 +1174,13 @@ impl TemplateApp {
             self.build_ts_stat.corpus_motiv_dialog.update(ui);
             if let Some(path) = self.build_ts_stat.corpus_motiv_dialog.take_picked() {
                 self.build_ts_stat.corpus_motiv_file = Some(path.to_path_buf());
-                self.build_ts_stat.corpus_motiv = read_to_string(self.build_ts_stat.corpus_motiv_file.clone().unwrap()).unwrap();
+                self.build_ts_stat.corpus_motiv = match read_to_string(self.build_ts_stat.corpus_motiv_file.clone().unwrap()) {
+                    Ok(file_contents) => file_contents,
+                    Err(err) => {
+                        self.build_ts_stat.corpus_motiv_status = Some(format!("Your corpus description file is not a UTF-8 encoded text file. Select another file.\nError: {err}"));
+                        "".to_string()
+                    },
+                };
             }
             if self.build_ts_stat.corpus_motiv != "".to_string() {
 
@@ -1181,6 +1198,11 @@ impl TemplateApp {
                                 .interactive(false),
                         );
                     });
+            }
+            else {
+                if self.build_ts_stat.corpus_motiv_status.is_some() {
+                    ui.label(self.build_ts_stat.corpus_motiv_status.as_ref().unwrap());
+                }
             }
         }
 
@@ -1251,7 +1273,13 @@ impl TemplateApp {
             self.build_ts_stat.user_desc_dialog.update(ui);
             if let Some(path) = self.build_ts_stat.user_desc_dialog.take_picked() {
                 self.build_ts_stat.user_desc_file = Some(path.to_path_buf());
-                self.build_ts_stat.user_desc = read_to_string(self.build_ts_stat.user_desc_file.clone().unwrap()).unwrap();
+                self.build_ts_stat.user_desc = match read_to_string(self.build_ts_stat.user_desc_file.clone().unwrap()){
+                    Ok(file_contents) => file_contents,
+                    Err(err) => {
+                        self.build_ts_stat.user_desc_status = Some(format!("Your corpus description file is not a UTF-8 encoded text file. Select another file.\nError: {err}"));
+                        "".to_string()
+                    },
+                };
             }
             if self.build_ts_stat.user_desc != "".to_string() {
 
@@ -1269,6 +1297,11 @@ impl TemplateApp {
                                 .interactive(false),
                         );
                     });
+            }
+            else {
+                if self.build_ts_stat.user_desc_status.is_some() {
+                    ui.label(self.build_ts_stat.user_desc_status.as_ref().unwrap());
+                }
             }
         }
 
