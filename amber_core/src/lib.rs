@@ -378,6 +378,7 @@ pub enum FailureReason {
     InvalidBitcoinAddress, // you gave a receiving address to the OP_RETURN script generator that isn't a valid Bitcoin address.
     InvalidTag, // you provided an invalid tag to the OP_RETURN script generator.
     BalanceTooLow, // can't generate a valid script because the balance is lower than the expected transaction fee.
+    Internal(String), // for assorted internal problems
 } 
 
 impl std::fmt::Display for FailureReason {
@@ -407,6 +408,7 @@ impl std::fmt::Display for FailureReason {
             FailureReason::InvalidBitcoinAddress => write!(f, "Receiving address isn't a valid Bitcoin address."),
             FailureReason::InvalidTag => write!(f, "Specified tag is invalid."),
             FailureReason::BalanceTooLow => write!(f, "Can't generate script because the balance you entered is lower than the expected fee."),
+            FailureReason::Internal(s) => write!(f, "Amber hit an internal error and could not finish. This is a bug, please report it. Details:  {s}"),
         }
     }
 }

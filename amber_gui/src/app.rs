@@ -1,5 +1,7 @@
 
 use std::fs::read_to_string;
+use std::sync::mpsc::TryRecvError;
+use std::panic::{self, AssertUnwindSafe};
 
 use amber_core::FailureReason;
 use crate::status::{AuthenticationStatus, BuildProofStatus, BuildTimestampStatus, Page, ProofStatus, VerificationStatus};
@@ -7,6 +9,21 @@ use hex_fmt::HexFmt;
 use chrono;
 use std::sync::mpsc;
 use std::thread;
+
+/// Runs `work`. If it panics, returns the panic message as FailureReason::Internal instead.
+fn catch_panic<T>(work: impl FnOnce() -> T) -> Result<T, FailureReason> {
+    panic::catch_unwind(AssertUnwindSafe(work)).map_err(|payload| {
+        // A panic's payload is usually a &'static str or a String, depending on how it was raised.
+        let msg = if let Some(s) = payload.downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = payload.downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "unknown panic".to_string()
+        };
+        FailureReason::Internal(msg)
+    })
+}
 
 pub fn convert_utc_to_datetime(utc_seconds: i64) -> (String, String) {
     let utc = chrono::DateTime::from_timestamp(utc_seconds, 0).unwrap();
@@ -84,25 +101,34 @@ impl TemplateApp {
         let explain_filepath = self.ver_stat.provided_explain_file.clone();
 
         thread::spawn(move || {
-            let result = amber_core::verify_tree_async(tree_filepath.unwrap(), explain_filepath.unwrap()); 
+            let result = catch_panic(|| {
+                amber_core::verify_tree_async(tree_filepath.unwrap(), explain_filepath.unwrap())
+            })
+            .unwrap_or_else(|reason| (false, None, reason));
             let _ = tx.send(result);
         });
     }
 
     fn finish_verify(&mut self) {
-        if let Some(rx) = &self.ver_stat.async_result_rx {
-            if let Ok((result, tree, reason)) = rx.try_recv() {
-                self.ver_stat.async_result_rx = None;
-                self.ver_stat.async_running = false;
-                self.ver_stat.verified = Some(result);
-                self.ver_stat.reason = Some(reason);
-                self.ver_stat.tree = tree;
-                if self.ver_stat.verified.unwrap() {
-                    self.ver_stat.tx_hash = Some(format!("{}", HexFmt(self.ver_stat.tree.as_ref().unwrap().tx_hash)));
-                    self.ver_stat.block = Some(self.ver_stat.tree.as_ref().unwrap().block_height.to_string());
-                    self.ver_stat.utc = Some(self.ver_stat.tree.as_ref().unwrap().utc_timestamp);
-                }
-            }
+        let Some(rx) = &self.ver_stat.async_result_rx else { return };
+        let (result, tree, reason) = match rx.try_recv() {
+            Ok(message) => message,
+            Err(TryRecvError::Empty) => return, // still running; check again next frame
+            Err(TryRecvError::Disconnected) => (
+                false,
+                None,
+                FailureReason::Internal("the background task stopped without reporting a result".to_string()),
+            ),
+        };
+        self.ver_stat.async_result_rx = None;
+        self.ver_stat.async_running = false;
+        self.ver_stat.verified = Some(result);
+        self.ver_stat.reason = Some(reason);
+        self.ver_stat.tree = tree;
+        if self.ver_stat.verified.unwrap() {
+            self.ver_stat.tx_hash = Some(format!("{}", HexFmt(self.ver_stat.tree.as_ref().unwrap().tx_hash)));
+            self.ver_stat.block = Some(self.ver_stat.tree.as_ref().unwrap().block_height.to_string());
+            self.ver_stat.utc = Some(self.ver_stat.tree.as_ref().unwrap().utc_timestamp);
         }
     }
 
@@ -137,7 +163,10 @@ impl TemplateApp {
             let file_path = self.proof_stat.provided_file.clone().unwrap();
 
             thread::spawn(move || {
-                let result = amber_core::verify_proof_async(file_path, proof_file_path);
+                let result = catch_panic(|| {
+                    amber_core::verify_proof_async(file_path, proof_file_path)
+                })
+                .unwrap_or_else(|reason| (false, reason, Some(0), String::new(), String::new(), Some(String::new()), Some(String::new()), String::new()));
                 let _ = tx.send(result);
             });
         }
@@ -147,21 +176,33 @@ impl TemplateApp {
     }
 
     fn finish_verify_proof(&mut self) {
-        if let Some(rx) = &self.proof_stat.async_result_rx {
-            if let Ok((verified, reason, utc, tx_hash, block, date, time, identifier)) = rx.try_recv() {
-                self.proof_stat.async_result_rx = None;
-                self.proof_stat.async_running = false;
-                self.proof_stat.proof_authenticated = Some(verified);
-                self.proof_stat.proof_auth_reason = Some(reason);
-                self.proof_stat.proof_utc = utc;
-                self.proof_stat.proof_tx_hash = Some(tx_hash);
-                self.proof_stat.proof_block = Some(block);
-                self.proof_stat.proof_date = date;
-                self.proof_stat.proof_time = time;
-                self.proof_stat.proof_id = Some(identifier);
-                self.proof_stat.proof_auth_status = Some("Proof verification complete.".to_string());
-            }
-        }
+        let Some(rx) = &self.proof_stat.async_result_rx else { return };
+        let (verified, reason, utc, tx_hash, block, date, time, identifier) = match rx.try_recv() {
+            Ok(message) => message,
+            Err(TryRecvError::Empty) => return, // still running; check again next frame
+            // (bool, FailureReason, Option<i64>, String, String, Option<String>, Option<String>, String)
+            Err(TryRecvError::Disconnected) => (
+                false,
+                FailureReason::Internal("the background task stopped without reporting a result".to_string()),
+                None,
+                "".to_string(),
+                "".to_string(),
+                None,
+                None,
+                "".to_string(),
+            ),
+        };
+        self.proof_stat.async_result_rx = None;
+        self.proof_stat.async_running = false;
+        self.proof_stat.proof_authenticated = Some(verified);
+        self.proof_stat.proof_auth_reason = Some(reason);
+        self.proof_stat.proof_utc = utc;
+        self.proof_stat.proof_tx_hash = Some(tx_hash);
+        self.proof_stat.proof_block = Some(block);
+        self.proof_stat.proof_date = date;
+        self.proof_stat.proof_time = time;
+        self.proof_stat.proof_id = Some(identifier);
+        self.proof_stat.proof_auth_status = Some("Proof verification complete.".to_string());
     }
 
     fn start_build_proof(&mut self) {
@@ -177,31 +218,39 @@ impl TemplateApp {
             let corpus_name = self.build_pf_stat.corpus_name.clone();
 
             thread::spawn(move || {
-                let result = amber_core::build_proof_async(file_path, merkle_path, explain_path, &corpus_name);
+                let result = catch_panic(|| {
+                    amber_core::build_proof_async(file_path, merkle_path, explain_path, &corpus_name)
+                })
+                .unwrap_or_else(|reason| (false, reason));
                 let _ = tx.send(result);
             });
         }
     }
 
     fn finish_build_proof(&mut self) {
-        if let Some(rx) = &self.build_pf_stat.async_result_rx {
-            if let Ok((result, reason)) = rx.try_recv() {
-                self.build_pf_stat.async_result_rx = None;
-                self.build_pf_stat.async_running = false;
-                if result {
-                    self.build_pf_stat.status = Some("Wrote proof to file.".to_string());
-                    self.build_pf_stat.proof_verified = true;
-                    let file_path_buf = self.build_pf_stat.proven_file.clone().unwrap();
-                    let file_path = file_path_buf.to_str().unwrap();
-                    let output_path = file_path.to_owned() + "_proof.txt";
-                    self.build_pf_stat.proof_string = read_to_string(output_path).unwrap();
-                }
-                else {
-                    self.build_pf_stat.status = Some("Could not make proof file.".to_string());
-                    self.build_pf_stat.proof_verified = false;
-                    self.build_pf_stat.proof_reason = Some(reason);
-                }
-            }
+        let Some(rx) = &self.build_pf_stat.async_result_rx else { return };
+        let (result, reason) = match rx.try_recv() {
+            Ok(message) => message,
+            Err(TryRecvError::Empty) => return, // still running; check again next frame
+            Err(TryRecvError::Disconnected) => (
+                false,
+                FailureReason::Internal("the background task stopped without reporting a result".to_string()),
+            ),
+        };
+        self.build_pf_stat.async_result_rx = None;
+        self.build_pf_stat.async_running = false;
+        if result {
+            self.build_pf_stat.status = Some("Wrote proof to file.".to_string());
+            self.build_pf_stat.proof_verified = true;
+            let file_path_buf = self.build_pf_stat.proven_file.clone().unwrap();
+            let file_path = file_path_buf.to_str().unwrap();
+            let output_path = file_path.to_owned() + "_proof.txt";
+            self.build_pf_stat.proof_string = read_to_string(output_path).unwrap();
+        }
+        else {
+            self.build_pf_stat.status = Some("Could not make proof file.".to_string());
+            self.build_pf_stat.proof_verified = false;
+            self.build_pf_stat.proof_reason = Some(reason);
         }
     }
 
@@ -284,7 +333,10 @@ impl TemplateApp {
             let output_dir = self.build_ts_stat.output_dir.clone().unwrap();
             
             thread::spawn(move || {
-                let result = amber_core::build_timestamp_async(corpus_name, identifier, hashes_source, hash_file, directory, corpus_desc, corpus_motiv, user_desc, output_dir);
+                let result = catch_panic(|| {
+                    amber_core::build_timestamp_async(corpus_name, identifier, hashes_source, hash_file, directory, corpus_desc, corpus_motiv, user_desc, output_dir)
+                })
+                .unwrap_or_else(|reason| (false, None, reason, None, None, None, None));
                 let _ = tx.send(result);
             });
             
@@ -292,27 +344,37 @@ impl TemplateApp {
     }
 
     fn finish_build_timestamp(&mut self) {
-        if let Some(rx) = &self.build_ts_stat.async_result_rx {
-            if let Ok((succeeded, tree, reason, locktime, tree_filename, explain_filename, tag_filename)) = rx.try_recv() {
-                self.build_ts_stat.async_running = false;
-                self.build_ts_stat.async_result_rx = None;
-                if succeeded {
-                    self.build_ts_stat.root_hash = Some(format!("{}", HexFmt(tree.as_ref().unwrap().get_root_hash())));
-                    self.build_ts_stat.num_leaves = Some(tree.as_ref().unwrap().num_leaves);
-                    self.build_ts_stat.locktime = locktime;
-                    self.build_ts_stat.tree_exists = true;
-                    self.build_ts_stat.tree_file = tree_filename;
-                    self.build_ts_stat.explain_file = explain_filename;
-                    let explain_path = self.build_ts_stat.explain_file.as_ref().unwrap();
-                    self.build_ts_stat.explain_string = std::fs::read_to_string(explain_path).unwrap();
-                    let tag_path = tag_filename.as_ref().unwrap();
-                    self.build_ts_stat.tag_string = std::fs::read_to_string(tag_path).unwrap();
-                }
-                else {
-                    self.build_ts_stat.tree_exists = false;
-                    self.build_ts_stat.build_status = Some(format!("The build failed for the following reason: {}", reason));
-                }
-            }
+        let Some(rx) = &self.build_ts_stat.async_result_rx else { return };
+        let (succeeded, tree, reason, locktime, tree_filename, explain_filename, tag_filename) = match rx.try_recv() {
+            Ok(message) => message,
+            Err(TryRecvError::Empty) => return, // still running; check again next frame
+            Err(TryRecvError::Disconnected) => (
+                false,
+                None,
+                FailureReason::Internal("the background task stopped without reporting a result".to_string()),
+                None,
+                None,
+                None,
+                None,
+            ),
+        };
+        self.build_ts_stat.async_running = false;
+        self.build_ts_stat.async_result_rx = None;
+        if succeeded {
+            self.build_ts_stat.root_hash = Some(format!("{}", HexFmt(tree.as_ref().unwrap().get_root_hash())));
+            self.build_ts_stat.num_leaves = Some(tree.as_ref().unwrap().num_leaves);
+            self.build_ts_stat.locktime = locktime;
+            self.build_ts_stat.tree_exists = true;
+            self.build_ts_stat.tree_file = tree_filename;
+            self.build_ts_stat.explain_file = explain_filename;
+            let explain_path = self.build_ts_stat.explain_file.as_ref().unwrap();
+            self.build_ts_stat.explain_string = std::fs::read_to_string(explain_path).unwrap();
+            let tag_path = tag_filename.as_ref().unwrap();
+            self.build_ts_stat.tag_string = std::fs::read_to_string(tag_path).unwrap();
+        }
+        else {
+            self.build_ts_stat.tree_exists = false;
+            self.build_ts_stat.build_status = Some(format!("The build failed for the following reason: {}", reason));
         }
     }
 
@@ -384,32 +446,41 @@ impl TemplateApp {
         else {
             let tx_hash = tx_hash_option.unwrap();
             thread::spawn(move || {
-                let result = amber_core::finalize_timestamp_async(tree_file, explain_file, &corpus_name, &identifier, tx_hash);
+                let result = catch_panic(|| {
+                    amber_core::finalize_timestamp_async(tree_file, explain_file, &corpus_name, &identifier, tx_hash)
+                })
+                .unwrap_or_else(|reason| (false, None, reason));
                 let _ = tx.send(result);
             });
         }
     }
 
     fn finish_finalize_timestamp(&mut self) {
-        if let Some(rx) = &self.build_ts_stat.finalize_async_result_rx {
-            if let Ok((result, tree, reason)) = rx.try_recv() {
-                self.build_ts_stat.tree_verified = result;
-                self.build_ts_stat.tree_verified_reason = Some(reason);
-                self.build_ts_stat.finalize_async_running = false;
-                self.build_ts_stat.finalize_async_result_rx = None;
+        let Some(rx) = &self.build_ts_stat.finalize_async_result_rx else { return };
+        let (result, tree, reason) = match rx.try_recv() {
+            Ok(message) => message,
+            Err(TryRecvError::Empty) => return, // still running; check again next frame
+            Err(TryRecvError::Disconnected) => (
+                false,
+                None,
+                FailureReason::Internal("the background task stopped without reporting a result".to_string()),
+            ),
+        };
+        self.build_ts_stat.tree_verified = result;
+        self.build_ts_stat.tree_verified_reason = Some(reason);
+        self.build_ts_stat.finalize_async_running = false;
+        self.build_ts_stat.finalize_async_result_rx = None;
 
-                let tree_path_buf = self.build_ts_stat.tree_file.clone().unwrap();
-                let tree_path = tree_path_buf.to_str().unwrap();
-                if result {
-                    self.build_ts_stat.finalize_status = Some(format!("Timestamp verified on the blockchain! \nTimestamped merkle tree file written to {}", tree_path));
-                    self.build_ts_stat.utc = tree.as_ref().unwrap().utc_timestamp;
-                    self.build_ts_stat.block_height = tree.as_ref().unwrap().block_height;
-                    self.build_ts_stat.tx_hash_string = format!("{}", HexFmt(tree.unwrap().tx_hash));
-                }
-                else {
-                    self.build_ts_stat.finalize_status = Some("The timestamp failed to verify on the blockchain.".to_string());
-                }
-            }
+        let tree_path_buf = self.build_ts_stat.tree_file.clone().unwrap();
+        let tree_path = tree_path_buf.to_str().unwrap();
+        if result {
+            self.build_ts_stat.finalize_status = Some(format!("Timestamp verified on the blockchain! \nTimestamped merkle tree file written to {}", tree_path));
+            self.build_ts_stat.utc = tree.as_ref().unwrap().utc_timestamp;
+            self.build_ts_stat.block_height = tree.as_ref().unwrap().block_height;
+            self.build_ts_stat.tx_hash_string = format!("{}", HexFmt(tree.unwrap().tx_hash));
+        }
+        else {
+            self.build_ts_stat.finalize_status = Some(format!("The build failed for the following reason: {}", self.build_ts_stat.tree_verified_reason.as_ref().unwrap()));
         }
     }
 
