@@ -403,7 +403,7 @@ impl std::fmt::Display for FailureReason {
             FailureReason::FileNotInMerkleTree => write!(f, "The provided file is not in the Merkle tree."),
             FailureReason::FileNotFound => write!(f, "The provided file could not be found."),
             FailureReason::InvalidIdentifier => write!(f, "The provided identifier string must be exactly 8 ASCII characters, and no character may be a whitespace or control character."),
-            FailureReason::TxHashNotParseable => write!(f, "The provided tx hash is invalid; it must contain only valid hex characters and be exactly 32 characters long."),
+            FailureReason::TxHashNotParseable => write!(f, "The provided tx hash is invalid; it must contain only valid hex characters and be exactly 64 characters long."),
             FailureReason::NoBlockchainResponse => write!(f, "The blockchain lookup website did not respond to the request."),
             FailureReason::TxNotFound => write!(f, "The blockchain lookup website could not find a transaction with the specified tx hash."),
             FailureReason::TimestampMismatchFatal => write!(f, "The utc timestamp listed in explain.txt is > 24hrs different than utc timestamp on the blockchain."),

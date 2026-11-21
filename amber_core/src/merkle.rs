@@ -492,7 +492,7 @@ impl MerkleTree {
             }
             nodes.push(MerkleNode::new_leaf(*hash, index + 1));
         }
-        if nodes.len() != num_leaves {
+        if nodes.len() < num_leaves {
             println!("The number of merkle nodes is inconsistent with num_leaves from the header line.");
             return (None, FailureReason::MerkleTreeInconsistent);
         } 
@@ -501,7 +501,9 @@ impl MerkleTree {
         
         // build the rest of the tree from the leaves
         let tree = MerkleTree { root_index, num_leaves, nodes, hash_lookup };
-        tree.verify_tree();
+        if !tree.verify_tree() {
+            return (None, FailureReason::MerkleTreeInconsistent)
+        }
 
         let mut nonfatal_mismatch = false;
         let mut mismatch_location: usize = 0;
@@ -704,37 +706,42 @@ impl MerkleTree {
     }
 
     // checks that each parent hash follows from its child hashes; i.e., the tree is a valid Merkle tree.
-    pub fn verify_tree(&self) {
+    pub fn verify_tree(&self) -> bool {
         for node in self.nodes.iter() {
             if self.is_a_leaf(&node) || node.index == 0 {
                 continue;
             }
 
-            assert!(node.left != 0, "node {:x?}", node);
+            //assert!(node.left != 0, "node {:x?}", node);
             let left_index = &self.nodes[node.left];
             let left_hash = left_index.hash;
             if node.right > 0 {
                 let right_index = &self.nodes[node.right];
                 let right_hash = right_index.hash;
                 let computed_hash = double_hash(&[left_hash, right_hash].concat());
-                assert!(node.hash == computed_hash, 
-                    "Merkle tree verification failed.\n 
+                if node.hash != computed_hash {
+                    println!("Merkle tree verification failed.\n 
                     Node {}'s hash does not match the double SHA256 hash of the concatenation of its children's hashes.\n
                     Left child has index {} and hash {}.\n
                     Right child has index {} and hash {}.\n
                     The double SHA256 hash of their concatenated hashes is {}, but parent node {}'s hash is {}.",
-                node.index, left_index, HexFmt(left_hash), right_index, HexFmt(right_hash), HexFmt(computed_hash), node.index, HexFmt(node.hash));
+                    node.index, left_index, HexFmt(left_hash), right_index, HexFmt(right_hash), HexFmt(computed_hash), node.index, HexFmt(node.hash));
+                    return false;
+                }
             }
             else {
                 let computed_hash = double_hash(&[left_hash, left_hash].concat());
-                assert!(node.hash == computed_hash, 
-                    "Merkle tree verification failed.\n
+                if node.hash != computed_hash {
+                    println!("Merkle tree verification failed.\n
                     Node {}'s hash does not match the double SHA256 hash of the self-concatenation of its child's hash.\n
                     Left (only) child has index {} and hash {}.\n
                     Concatenating it with itself and double SHA256 hashing gives {}, but parent node {}'s hash is {}.",
                     node.index, left_index, HexFmt(left_hash), HexFmt(computed_hash), node.index, HexFmt(node.hash));
+                    return false;
+                }
             }
         }
+        true
     }
 
     pub fn write_leaf_hashes_to_file(&self, leaf_hash_filename: &str) -> FailureReason {
@@ -916,7 +923,9 @@ impl TimestampedMerkleTree {
             return (None, tree_reason)
         }
         let tree = tree_result.unwrap();
-        tree.verify_tree();
+        if !tree.verify_tree() {
+            return (None, FailureReason::MerkleTreeInconsistent)
+        }
         (Some(Self::new(tree, identifier, utc_timestamp, block_height, tx_hash, explain_hash)), FailureReason::Success) //note for tomorrow: read utctimestamp from fossil file and then add it to this call
     }
 
