@@ -251,7 +251,12 @@ impl MerkleProof {
 
         let mut counter = 13;
         for line in reader.lines() {
-            let clean_line = line.expect("could not read line");
+            let clean_line = match line {
+                Ok(value) => value,
+                Err(_) => {
+                    return (None, FailureReason::ProofFileNotParseable(counter))
+                }
+            };
             let parts: Vec<&str> = clean_line.split(',').collect();
             if parts.len() != 2 {
                 println!("proof line {} does not have two parts separated by comma", counter);
@@ -448,7 +453,10 @@ impl MerkleTree {
         // read the fossilized sequence of merkle tree node hashes.
         let mut counter = 0;
         for line in reader.lines() {
-            let clean_line = line.expect("could not read line");
+            let clean_line = match line {
+                Ok(value) => value,
+                Err(_) => return (None, FailureReason::MerkleFileNotParseable(counter))
+            };
             let fossil_hash_result = BASE64_STANDARD.decode(clean_line);
             if fossil_hash_result.is_err() {
                 println!("Could not parse {}th hash line as base64", counter);
@@ -469,6 +477,10 @@ impl MerkleTree {
             fossil_hashes.push(hash);
             counter += 1;
         }
+        if fossil_hashes.len() == 0 {
+            println!("There were no leaf hash lines in the merkle file.");
+            return (None, FailureReason::MerkleTreeInconsistent);
+        }
 
         let mut nodes: Vec<MerkleNode> = vec![];
 
@@ -480,6 +492,10 @@ impl MerkleTree {
             }
             nodes.push(MerkleNode::new_leaf(*hash, index + 1));
         }
+        if nodes.len() != num_leaves {
+            println!("The number of merkle nodes is inconsistent with num_leaves from the header line.");
+            return (None, FailureReason::MerkleTreeInconsistent);
+        } 
         let root_index = MerkleTree::build_tree(&mut nodes, num_leaves, false);
         let hash_lookup = MerkleTree::build_hashmap(&nodes, num_leaves);
         
@@ -487,17 +503,29 @@ impl MerkleTree {
         let tree = MerkleTree { root_index, num_leaves, nodes, hash_lookup };
         tree.verify_tree();
 
+        let mut nonfatal_mismatch = false;
+        let mut mismatch_location: usize = 0;
+
         if full {
             // make sure all hashes match fossil
-            assert!(&tree.get_root_hash() == fossil_hashes.last().unwrap());
+            //assert!(&tree.get_root_hash() == fossil_hashes.last().unwrap());
+            if &tree.get_root_hash() != fossil_hashes.last().unwrap() {
+                println!("Computed root hash doesn't match the root hash listed in the merkle file.");
+                return (None, FailureReason::MerkleTreeInconsistent)
+            }
             for i in 0..fossil_hashes.len() {
                 let fossil_hash = fossil_hashes[i];
                 let tree_hash = tree.nodes[i+1].hash;
                 if fossil_hash != tree_hash {
                     println!("Warning: tree is valid but the hashes don't match those in the fossil file at position {}. That's very weird.", i);
+                    nonfatal_mismatch = true;
+                    mismatch_location = i;
                     break;
                 }
             }
+        }
+        if nonfatal_mismatch {
+            return (Some(tree), FailureReason::MerkleTreeInconsistentNonfatal(mismatch_location));
         }
         (Some(tree), FailureReason::Success)
     }

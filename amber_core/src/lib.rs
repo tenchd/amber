@@ -359,6 +359,8 @@ pub enum FailureReason {
     BlockHeightMismatchNonFatal,
     MerkleFileNotFound, // can't find merkle file
     MerkleFileNotParseable(usize), // code can't read/parse merkle tree file
+    MerkleTreeInconsistent, // merkle tree from file isn't valid
+    MerkleTreeInconsistentNonfatal(usize), // e.g., internal merkle node from file doesn't match computed, but the root still matches.
     ExplainFileNotParseable(usize), // code can't read/parse explain file
     ProofFileNotParseable(usize), // code can't read/parse merkle proof file
     ProofFileNotFound, // can't find proof file
@@ -390,6 +392,8 @@ impl std::fmt::Display for FailureReason {
             FailureReason::BlockHeightMismatchNonFatal => write!(f, "While the timestamp verified successfully on the blockchain, the block height in the fossil file does not match the true block height of the transaction containing the timestamp. This header value should be corrected."),
             FailureReason::MerkleFileNotFound => write!(f, "The provided merkle tree file path could not be found."),
             FailureReason::MerkleFileNotParseable(s) => write!(f, "The file containing the merkle tree could not be parsed. The problem is on line {s} of the file."),
+            FailureReason::MerkleTreeInconsistent => write!(f, "The provided merkle tree is inconsistent. Either the number of leaves is wrong, or the internal hashes don't line up."),
+            FailureReason::MerkleTreeInconsistentNonfatal(s) => write!(f, "An internal node from the computed merkle tree doesn't match the merkle file, but the root hashes still match. The mismatch is node {s}."),
             FailureReason::ExplainFileNotParseable(s) => write!(f, "Explain.txt could not be parsed. The problem is on line {s} of the file."),
             FailureReason::ExplainFileNotFound => write!(f, "Could not find explain.txt."),
             FailureReason::ProofFileNotParseable(s) => write!(f, "The provided proof file could not be parsed. The problem is on line {s} of the file."),
