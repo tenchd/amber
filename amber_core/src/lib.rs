@@ -358,9 +358,9 @@ pub enum FailureReason {
     // this is a success technically because the timestamp WAS found, but the time listed in the file header may be significantly wrong.
     BlockHeightMismatchNonFatal,
     MerkleFileNotFound, // can't find merkle file
-    MerkleFileNotParseable, // code can't read/parse merkle tree file
-    ExplainFileNotParseable, // code can't read/parse explain file
-    ProofFileNotParseable, // code can't read/parse merkle proof file
+    MerkleFileNotParseable(usize), // code can't read/parse merkle tree file
+    ExplainFileNotParseable(usize), // code can't read/parse explain file
+    ProofFileNotParseable(usize), // code can't read/parse merkle proof file
     ProofFileNotFound, // can't find proof file
     ExplainHashMismatch,  // double SHA256 hash of explain.txt doesn't match the header entry in merkle.txt
     ExplainFileNotFound, // can't find explain file
@@ -389,10 +389,10 @@ impl std::fmt::Display for FailureReason {
             FailureReason::TimestampMismatchNonFatal => write!(f, "While the timestamp verified successfully on the blockchain, the utc timestamp listed in the merkle tree file header is wrong; It does not match the true timestamp on the blockchain. This header value should be corrected."),
             FailureReason::BlockHeightMismatchNonFatal => write!(f, "While the timestamp verified successfully on the blockchain, the block height in the fossil file does not match the true block height of the transaction containing the timestamp. This header value should be corrected."),
             FailureReason::MerkleFileNotFound => write!(f, "The provided merkle tree file path could not be found."),
-            FailureReason::MerkleFileNotParseable => write!(f, "The file containing the merkle tree could not be parsed."),
-            FailureReason::ExplainFileNotParseable => write!(f, "Explain.txt could not be parsed."),
+            FailureReason::MerkleFileNotParseable(s) => write!(f, "The file containing the merkle tree could not be parsed. The problem is on line {s} of the file."),
+            FailureReason::ExplainFileNotParseable(s) => write!(f, "Explain.txt could not be parsed. The problem is on line {s} of the file."),
             FailureReason::ExplainFileNotFound => write!(f, "Could not find explain.txt."),
-            FailureReason::ProofFileNotParseable => write!(f, "The provided proof file could not be parsed."),
+            FailureReason::ProofFileNotParseable(s) => write!(f, "The provided proof file could not be parsed. The problem is on line {s} of the file."),
             FailureReason::ProofFileNotFound => write!(f, "The provided proof file could not be found."),
             FailureReason::ExplainHashMismatch => write!(f, "The hash of explain.txt does not match the hash listed in the merkle/proof file header."),
             FailureReason::FileHashMismatch => write!(f, "The hash of the provided file does not match the expected hash in the proof file."),
@@ -408,7 +408,7 @@ impl std::fmt::Display for FailureReason {
             FailureReason::InvalidBitcoinAddress => write!(f, "Receiving address isn't a valid Bitcoin address."),
             FailureReason::InvalidTag => write!(f, "Specified tag is invalid."),
             FailureReason::BalanceTooLow => write!(f, "Can't generate script because the balance you entered is lower than the expected fee."),
-            FailureReason::Internal(s) => write!(f, "Amber hit an internal error and could not finish. This is a bug, please report it. Details:  {s}"),
+            FailureReason::Internal(s) => write!(f, "Amber hit an internal error and could not finish. This is a bug, please report it. Details: {s}"),
         }
     }
 }

@@ -157,66 +157,66 @@ impl MerkleProof {
             let result = reader.read_line(&mut header_lines[i]);
             if result.is_ok_and(|value| value == 0) {
                 println!("Proof file has too few lines. Expected at least 11 header lines but only read {}", i);
-                return (None, FailureReason::ProofFileNotParseable)
+                return (None, FailureReason::ProofFileNotParseable(i))
             }
         }
 
         let words  = header_lines[4].split_whitespace().collect::<Vec<&str>>();
         let identifier: &str = match words.get(2){
             Some(value) => value,
-            None => return (None, FailureReason::ProofFileNotParseable),
+            None => return (None, FailureReason::ProofFileNotParseable(5)),
         };
 
         let words  = header_lines[5].split_whitespace().collect::<Vec<&str>>();
         let num_leaves_result = {match words.get(2) {
             Some(value) => value,
-            None => return (None, FailureReason::ProofFileNotParseable),
+            None => return (None, FailureReason::ProofFileNotParseable(6)),
         }}.parse::<NodeHandle>();
         if num_leaves_result.is_err() {
             println!("Could not parse number of leaves header line: {:?}", words);
-            return (None, FailureReason::ProofFileNotParseable)
+            return (None, FailureReason::ProofFileNotParseable(6))
         }
         let num_leaves = num_leaves_result.unwrap();
 
         let words  = header_lines[6].split_whitespace().collect::<Vec<&str>>();
         let (explain_hash, _) = parse_hash_from_str({match words.get(3) {
             Some(value) => value,
-            None => return (None, FailureReason::ProofFileNotParseable),
+            None => return (None, FailureReason::ProofFileNotParseable(7)),
         }});
         if explain_hash.is_none() {
             println!("Could not parse explain hash header line: {:?}", words);
-            return (None, FailureReason::ProofFileNotParseable);
+            return (None, FailureReason::ProofFileNotParseable(7));
         }
 
         let words  = header_lines[7].split_whitespace().collect::<Vec<&str>>();
         let block_height_result = {match words.get(2) {
             Some(value) => value,
-            None => return (None, FailureReason::ProofFileNotParseable),
+            None => return (None, FailureReason::ProofFileNotParseable(8)),
         }}.parse::<usize>();
         if block_height_result.is_err() {
             println!("Could not parse block height header line: {:?}", words);
-            return (None, FailureReason::ProofFileNotParseable)
+            return (None, FailureReason::ProofFileNotParseable(8))
         }
         let block_height = block_height_result.unwrap();
 
         let words  = header_lines[8].split_whitespace().collect::<Vec<&str>>();
         let (tx_hash, _) = parse_hash_from_str({match words.get(2) {
             Some(value) => value,
-            None => return (None, FailureReason::ProofFileNotParseable),
+            None => return (None, FailureReason::ProofFileNotParseable(9)),
         }});
         if tx_hash.is_none() {
             println!("Could not parse tx hash header line: {:?}", words);
-            return (None, FailureReason::ProofFileNotParseable);
+            return (None, FailureReason::ProofFileNotParseable(9));
         }
 
         let words  = header_lines[9].split_whitespace().collect::<Vec<&str>>();
         let utc_timestamp_result = {match words.get(2) {
             Some(value) => value,
-            None => return (None, FailureReason::ProofFileNotParseable),
+            None => return (None, FailureReason::ProofFileNotParseable(10)),
         }}.parse::<i64>();
         if utc_timestamp_result.is_err() {
             println!("Could not parse utc timestamp header line: {:?}", words);
-            return (None, FailureReason::ProofFileNotParseable)
+            return (None, FailureReason::ProofFileNotParseable(10))
         }
         let utc_timestamp = utc_timestamp_result.unwrap();
         
@@ -224,7 +224,7 @@ impl MerkleProof {
         let words = header_lines[10].split_whitespace().collect::<Vec<&str>>();
         let _version: &str = match words.get(5) {
             Some(value) => value,
-            None => return (None, FailureReason::ProofFileNotParseable),
+            None => return (None, FailureReason::ProofFileNotParseable(11)),
         };
 
 
@@ -232,20 +232,20 @@ impl MerkleProof {
         let result = reader.read_line(&mut root_hash_line);
         if result.is_err() {
             println!("Expected root hash line after headers");
-            return (None, FailureReason::ProofFileNotParseable)
+            return (None, FailureReason::ProofFileNotParseable(12))
         }
         root_hash_line = root_hash_line.trim_end().to_string();
         let root_hash_result = BASE64_STANDARD.decode(&root_hash_line);
         if root_hash_result.is_err() {
-            println!("Could not parse explain hash header line: {:?}", &root_hash_line);
-            return (None, FailureReason::ProofFileNotParseable)
+            println!("Could not parse root hash line: {:?}", &root_hash_line);
+            return (None, FailureReason::ProofFileNotParseable(12))
         }
         let root_hash = root_hash_result.unwrap();
         let root_hash_bytes: [u8; 32] = match root_hash.try_into() {
             Ok(bytes) => bytes,
             Err(_) => {
                 println!("Could not parse root hash into bytes");
-                return (None, FailureReason::ProofFileNotParseable);
+                return (None, FailureReason::ProofFileNotParseable(12));
             }
         };
 
@@ -255,23 +255,23 @@ impl MerkleProof {
             let parts: Vec<&str> = clean_line.split(',').collect();
             if parts.len() != 2 {
                 println!("proof line {} does not have two parts separated by comma", counter);
-                return (None, FailureReason::ProofFileNotParseable);
+                return (None, FailureReason::ProofFileNotParseable(counter));
             }
             let fossil_hash_result = BASE64_STANDARD.decode(parts[0]);
             if fossil_hash_result.is_err() {
                 println!("Failed to parse hash in proof line {}", counter);
-                return (None, FailureReason::ProofFileNotParseable);
+                return (None, FailureReason::ProofFileNotParseable(counter));
             }
             let fossil_hash = fossil_hash_result.unwrap();
             if fossil_hash.len() != 32 {
                 println!("fossil hash on line {} is incorrect length", counter);
-                return (None, FailureReason::ProofFileNotParseable);
+                return (None, FailureReason::ProofFileNotParseable(counter));
             }
             let bytes_result: [u8; 32] = match fossil_hash.try_into() {
                 Ok(bytes) => bytes,
                 Err(_) => {
                     println!("fossil hash on line {} failed to parse into bytes", counter);
-                    return (None, FailureReason::ProofFileNotParseable);
+                    return (None, FailureReason::ProofFileNotParseable(counter));
                 }
             };
             proof_hashes.push(bytes_result);
@@ -279,7 +279,7 @@ impl MerkleProof {
                 Ok(boolean) => boolean,
                 Err(_) => {
                     println!("bool on line {} is not parseable", counter);
-                    return (None, FailureReason::ProofFileNotParseable);
+                    return (None, FailureReason::ProofFileNotParseable(counter));
                 }
             };
             proof_directions.push(direction);
@@ -452,18 +452,18 @@ impl MerkleTree {
             let fossil_hash_result = BASE64_STANDARD.decode(clean_line);
             if fossil_hash_result.is_err() {
                 println!("Could not parse {}th hash line as base64", counter);
-                return (None, FailureReason::MerkleFileNotParseable)
+                return (None, FailureReason::MerkleFileNotParseable(counter))
             }
             let fossil_hash = fossil_hash_result.unwrap();
             if fossil_hash.len() != 32 {
                 println!("{}th fossil hash is incorrect length", counter);
-                return (None, FailureReason::MerkleFileNotParseable)
+                return (None, FailureReason::MerkleFileNotParseable(counter))
             }
             let hash: [u8; 32] = match fossil_hash.try_into() {
                 Ok(value) => value,
                 Err(_) => {
                     println!("couldn't parse {}th hash line as bytes", counter);
-                    return (None, FailureReason::MerkleFileNotParseable)
+                    return (None, FailureReason::MerkleFileNotParseable(counter))
                 }
             };
             fossil_hashes.push(hash);
@@ -518,7 +518,7 @@ impl MerkleTree {
             let result = reader.read_line(&mut header_lines[i]);
             if result.is_ok_and(|value| value == 0) {
                 println!("Unfinished merkle tree file at location {} has fewer than 3 lines", tree_filename);
-                return (None, FailureReason::MerkleFileNotParseable)
+                return (None, FailureReason::MerkleFileNotParseable(i))
             }
         }
 
@@ -527,11 +527,11 @@ impl MerkleTree {
         let words  = header_lines[1].split_whitespace().collect::<Vec<&str>>();
         let num_leaves_result = {match words.get(4) {
             Some(value) => value,
-            None => return (None, FailureReason::MerkleFileNotParseable),
+            None => return (None, FailureReason::MerkleFileNotParseable(4)),
         }}.parse::<NodeHandle>();
         if num_leaves_result.is_err() {
             println!("Couldn't parse num_leaves header line {:?} in unfinished merkle tree file", words);
-            return (None, FailureReason::MerkleFileNotParseable)
+            return (None, FailureReason::MerkleFileNotParseable(4))
         }
         let num_leaves = num_leaves_result.unwrap();
 
@@ -552,13 +552,13 @@ impl MerkleTree {
         let result = reader.read_line(&mut first_line);
         if result.is_err() {
             println!("Couldn't parse num_leaves header line {:?} in leaf hashes file", first_line);
-            return (None, FailureReason::MerkleFileNotParseable)
+            return (None, FailureReason::MerkleFileNotParseable(1))
         }
         first_line.pop();
         let num_leaves_result = first_line.parse::<usize>();
         if num_leaves_result.is_err() {
             println!("Couldn't parse num_leaves header line {:?} in leaf hashes file", first_line);
-            return (None, FailureReason::MerkleFileNotParseable)
+            return (None, FailureReason::MerkleFileNotParseable(1))
         }
         let num_leaves = num_leaves_result.unwrap();
 
@@ -813,7 +813,7 @@ impl TimestampedMerkleTree {
             let result = reader.read_line(&mut header_lines[i]);
             if result.is_ok_and(|value| value == 0) {
                 println!("Expected 9 header lines in merkle tree file but only read {}", i);
-                return (None, FailureReason::MerkleFileNotParseable)
+                return (None, FailureReason::MerkleFileNotParseable(i))
             }
         }
 
@@ -821,30 +821,30 @@ impl TimestampedMerkleTree {
         let num_leaves_result = words[4].parse::<NodeHandle>();
         if num_leaves_result.is_err() {
             println!("Could not parse num_leaves header line: {:?}", words);
-            return (None, FailureReason::MerkleFileNotParseable)
+            return (None, FailureReason::MerkleFileNotParseable(2))
         }
         let num_leaves = num_leaves_result.unwrap();
 
         let words = header_lines[2].split_whitespace().collect::<Vec<&str>>();
         let identifier = match words.get(10) {
             Some(value) => value,
-            None => return (None, FailureReason::MerkleFileNotParseable),
+            None => return (None, FailureReason::MerkleFileNotParseable(3)),
         };
         let words = header_lines[3].split_whitespace().collect::<Vec<&str>>();
         let block_height_result = {match words.get(3) {
             Some(value) => value,
-            None => return (None, FailureReason::MerkleFileNotParseable),
+            None => return (None, FailureReason::MerkleFileNotParseable(4)),
         }}.parse::<usize>();
         if block_height_result.is_err() {
             println!("Could not parse block height header line: {:?}", words);
-            return(None, FailureReason::MerkleFileNotParseable)
+            return(None, FailureReason::MerkleFileNotParseable(4))
         }
         let block_height = block_height_result.unwrap();
 
         let words = header_lines[4].split_whitespace().collect::<Vec<&str>>();
         let tx_hash_string = match words.get(3) {
             Some(value) => value,
-            None => return (None, FailureReason::MerkleFileNotParseable),
+            None => return (None, FailureReason::MerkleFileNotParseable(5)),
         };
         let (tx_hash_result, reason) = parse_hash_from_str(tx_hash_string);
         if tx_hash_result.is_none() {
@@ -855,18 +855,18 @@ impl TimestampedMerkleTree {
         let words = header_lines[5].split_whitespace().collect::<Vec<&str>>();
         let utc_timestamp_result = {match words.get(3){
             Some(value) => value,
-            None => return (None, FailureReason::MerkleFileNotParseable),
+            None => return (None, FailureReason::MerkleFileNotParseable(6)),
         }}.parse::<i64>();
         if utc_timestamp_result.is_err() {
             println!("Could not parse utc timestamp header line: {:?}", words);
-            return (None, FailureReason::MerkleFileNotParseable)
+            return (None, FailureReason::MerkleFileNotParseable(6))
         }
         let utc_timestamp = utc_timestamp_result.unwrap();
 
         let words = header_lines[6].split_whitespace().collect::<Vec<&str>>();
         let explain_hash_string = match words.get(3){
             Some(value) => value,
-            None => return (None, FailureReason::MerkleFileNotParseable),
+            None => return (None, FailureReason::MerkleFileNotParseable(7)),
         };
         let (explain_hash_result, reason) = parse_hash_from_str(explain_hash_string);
         if explain_hash_result.is_none() {
@@ -877,7 +877,7 @@ impl TimestampedMerkleTree {
         let words = header_lines[7].split_whitespace().collect::<Vec<&str>>();
         let _version: &str = match words.get(3){
             Some(value) => value,
-            None => return (None, FailureReason::MerkleFileNotParseable),
+            None => return (None, FailureReason::MerkleFileNotParseable(8)),
         };
 
         let (tree_result, tree_reason) = MerkleTree::new_from_tree_file_suffix(reader, num_leaves, true);
