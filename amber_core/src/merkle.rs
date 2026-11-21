@@ -818,7 +818,10 @@ impl TimestampedMerkleTree {
         }
 
         let words  = header_lines[1].split_whitespace().collect::<Vec<&str>>();
-        let num_leaves_result = words[4].parse::<NodeHandle>();
+        let num_leaves_result = {match words.get(4){
+            Some(value) => value,
+            None => return (None, FailureReason::MerkleFileNotParseable(3)),
+        }}.parse::<NodeHandle>();
         if num_leaves_result.is_err() {
             println!("Could not parse num_leaves header line: {:?}", words);
             return (None, FailureReason::MerkleFileNotParseable(2))
