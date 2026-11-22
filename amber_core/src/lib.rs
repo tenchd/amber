@@ -372,18 +372,20 @@ pub enum FailureReason {
     // this is a success technically because the timestamp WAS found, but the time listed in the file header may be significantly wrong.
     BlockHeightMismatchNonFatal,
     EmptyCorpus, // provided directory has no timestampable files
-    MerkleFileNotFound, // can't find merkle file
+    MerkleFileNotFound(String), // can't find merkle file
     MerkleFileNotParseable(usize), // code can't read/parse merkle tree file
     MerkleTreeInconsistent, // merkle tree from file isn't valid
     MerkleTreeInconsistentNonfatal(usize), // e.g., internal merkle node from file doesn't match computed, but the root still matches.
+    LeafHashesFileNotFound(String), // can't find leaf hashes file
     ExplainFileNotParseable(usize), // code can't read/parse explain file
     ProofFileNotParseable(usize), // code can't read/parse merkle proof file
-    ProofFileNotFound, // can't find proof file
+    ProofFileNotFound(String), // can't find proof file
     ExplainHashMismatch,  // double SHA256 hash of explain.txt doesn't match the header entry in merkle.txt
-    ExplainFileNotFound, // can't find explain file
+    ExplainFileNotFound(String), // can't find explain file
     FileHashMismatch, // double SHA256 hash of file provided alongside proof doesn't match first hash in proof leaf-> root path
     FileNotInMerkleTree, // the provided file is not in the merkle tree.
     FileNotFound, // can't find corpus file
+    FileReadError(String), // error when reading file
     InvalidIdentifier, // provided identifier is not 8 (non-whitespace or control) ASCII characters
     TxHashNotParseable, // the provided tx hash is not parseable; it's not 32 characters or has invalid characters.
     NoBlockchainResponse, // didn't get a response from the blockchain website (could be connectivity issue, or incorrect tx hash) 
@@ -408,18 +410,20 @@ impl std::fmt::Display for FailureReason {
             FailureReason::TimestampMismatchNonFatal => write!(f, "While the timestamp verified successfully on the blockchain, the utc timestamp listed in the merkle tree file header is wrong; It does not match the true timestamp on the blockchain. This header value should be corrected."),
             FailureReason::BlockHeightMismatchNonFatal => write!(f, "While the timestamp verified successfully on the blockchain, the block height in the fossil file does not match the true block height of the transaction containing the timestamp. This header value should be corrected."),
             FailureReason::EmptyCorpus=> write!(f, "The provided directory has no timestampable files."),
-            FailureReason::MerkleFileNotFound => write!(f, "The provided merkle tree file path could not be found."),
+            FailureReason::MerkleFileNotFound(s) => write!(f, "The provided merkle tree file path {s} could not be found."),
             FailureReason::MerkleFileNotParseable(s) => write!(f, "The file containing the merkle tree could not be parsed. The problem is on line {s} of the file."),
             FailureReason::MerkleTreeInconsistent => write!(f, "The provided merkle tree is inconsistent. Either the number of leaves is wrong, or the internal hashes don't line up."),
             FailureReason::MerkleTreeInconsistentNonfatal(s) => write!(f, "An internal node from the computed merkle tree doesn't match the merkle file, but the root hashes still match. The mismatch is node {s}."),
+            FailureReason::LeafHashesFileNotFound(s) => write!(f, "The provided leaf hashes file path {s} could not be found."),
             FailureReason::ExplainFileNotParseable(s) => write!(f, "Explain.txt could not be parsed. The problem is on line {s} of the file."),
-            FailureReason::ExplainFileNotFound => write!(f, "Could not find explain.txt."),
+            FailureReason::ExplainFileNotFound(s) => write!(f, "Could not find explain file at location {s}."),
             FailureReason::ProofFileNotParseable(s) => write!(f, "The provided proof file could not be parsed. The problem is on line {s} of the file."),
-            FailureReason::ProofFileNotFound => write!(f, "The provided proof file could not be found."),
+            FailureReason::ProofFileNotFound(s) => write!(f, "The provided proof file path {s} could not be found."),
             FailureReason::ExplainHashMismatch => write!(f, "The hash of explain.txt does not match the hash listed in the merkle/proof file header."),
             FailureReason::FileHashMismatch => write!(f, "The hash of the provided file does not match the expected hash in the proof file."),
             FailureReason::FileNotInMerkleTree => write!(f, "The provided file is not in the Merkle tree."),
             FailureReason::FileNotFound => write!(f, "The provided file could not be found."),
+            FailureReason::FileReadError(s) => write!(f, "Error reading file at path {s}."),
             FailureReason::InvalidIdentifier => write!(f, "The provided identifier string must be exactly 8 ASCII characters, and no character may be a whitespace or control character."),
             FailureReason::TxHashNotParseable => write!(f, "The provided tx hash is invalid; it must contain only valid hex characters and be exactly 64 characters long."),
             FailureReason::NoBlockchainResponse => write!(f, "The blockchain lookup website did not respond to the request."),

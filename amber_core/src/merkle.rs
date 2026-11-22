@@ -38,7 +38,7 @@ pub fn double_hash_from_file(filepath: &str) -> (Option<[u8; 32]>, FailureReason
             let bytes_read_result = file.read(&mut buffer);
             if bytes_read_result.is_err() {
                 println!("Could not read file to hash at location {}", filepath);
-                return (None, FailureReason::FileNotFound)
+                return (None, FailureReason::FileReadError(filepath.to_string()))
             }
             let bytes_read = bytes_read_result.unwrap();
             if bytes_read == 0 {
@@ -151,7 +151,7 @@ impl MerkleProof {
         let file_result = File::open(proof_filepath);
         if file_result.is_err() {
             println!("Couldn't find proof file at location {}", proof_filepath);
-            return (None, FailureReason::ProofFileNotFound);
+            return (None, FailureReason::ProofFileNotFound(proof_filepath.to_string()));
         }
         let file = file_result.unwrap();
         let mut reader = BufReader::new(file);
@@ -554,7 +554,7 @@ impl MerkleTree {
         let file_result = File::open(tree_filename);
         if file_result.is_err() {
             println!("Couldn't open unfinished merkle tree file at location {}", tree_filename);
-            return (None, FailureReason::MerkleFileNotFound)
+            return (None, FailureReason::MerkleFileNotFound(tree_filename.to_string()))
         }
         let file = file_result.unwrap();
         let mut reader = BufReader::new(file);
@@ -590,7 +590,7 @@ impl MerkleTree {
         let file_result = File::open(hashes_filepath);
         if file_result.is_err() {
             println!("Couldn't open leaf hashes file at location {}", hashes_filepath);
-            return (None, FailureReason::MerkleFileNotFound)
+            return (None, FailureReason::LeafHashesFileNotFound(hashes_filepath.to_string()))
         }
         let file = file_result.unwrap();
         let mut reader = BufReader::new(file);
@@ -854,7 +854,7 @@ impl TimestampedMerkleTree {
             },
             Err(_) => {
             println!("Could not find merkle tree file at location {}", fossil_filepath);
-                return (None, FailureReason::MerkleFileNotFound);
+                return (None, FailureReason::MerkleFileNotFound(fossil_filepath.to_string()));
             },
         }
         let mut reader = BufReader::new(file);

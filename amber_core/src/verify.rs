@@ -237,7 +237,7 @@ pub async fn verify_proof_timestamp(proof: &MerkleProof, verbose: bool) -> (bool
 pub fn get_explain_utc_timestamp(explain_filepath: &str) -> (Option<i64>, FailureReason) {
     let file = match std::fs::File::open(explain_filepath) {
         Ok(value) => value,
-        Err(_) => return (None, FailureReason::ExplainFileNotFound),
+        Err(_) => return (None, FailureReason::ExplainFileNotFound(explain_filepath.to_string())),
     };
     let mut reader = std::io::BufReader::new(file);
     let mut line = "".to_string();
