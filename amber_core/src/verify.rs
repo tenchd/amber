@@ -9,7 +9,7 @@ use bitcoin::{
     }, consensus::encode::deserialize
 };
 use serde_json::Value;
-use std::io::BufRead;
+use std::{io::BufRead, time::Duration};
 use text_template::Template;
 use std::collections::HashMap;
 
@@ -23,6 +23,19 @@ fn compute_tag(identifier: &str, num_leaves: u32, root_hash: [u8; 32], explain_h
     let tag = tag::create_chain_tag(identifier, num_leaves, root_hash, explain_hash);
 
     tag
+}
+
+fn check_http_status(
+    response: reqwest::Response,
+) -> Result<reqwest::Response, FailureReason> {
+    let status = response.status();
+
+    if status.is_success() {
+        Ok(response)
+    } else {
+        println!("Blockchain explorer returned HTTP status {}.", status);
+        Err(FailureReason::UnexpectedBlockchainResponse)
+    }
 }
 
 async fn verify_tag_async(
@@ -53,7 +66,10 @@ async fn verify_tag_async(
     );
 
     let json_response = match json_result {
-        Ok(response) => response,
+        Ok(response) => match check_http_status(response) {
+            Ok(response) => response,
+            Err(reason) => return (None, reason),
+        },
         Err(_) => {
             println!("Blockchain explorer website did not respond.");
             return (None, FailureReason::NoBlockchainResponse);
@@ -61,7 +77,10 @@ async fn verify_tag_async(
     };
 
     let hex_response = match hex_result {
-        Ok(response) => response,
+        Ok(response) => match check_http_status(response) {
+            Ok(response) => response,
+            Err(reason) => return (None, reason),
+        },
         Err(_) => {
             println!("Blockchain explorer website did not respond.");
             return (None, FailureReason::NoBlockchainResponse);
@@ -76,7 +95,10 @@ async fn verify_tag_async(
         }
     };
 
-    let v: Value = serde_json::from_str(&json_string).unwrap();
+    let v: Value = match serde_json::from_str(&json_string){
+        Ok(value) => value,
+        Err(_) => return (None, FailureReason::UnexpectedBlockchainResponse),
+    };
 
     if v["error"] == "not-found-or-invalid-arg" {
         println!(
@@ -86,11 +108,12 @@ async fn verify_tag_async(
         return (None, FailureReason::TxNotFound);
     }
 
-    let block_height: usize = v["block_height"]
-        .as_u64()
-        .unwrap()
-        .try_into()
-        .unwrap();
+    let block_height: usize = {match v["block_height"]
+        .as_u64() {
+            Some(value) => value,
+            None => return (None, FailureReason::TxUnconfirmed)
+        }}
+        .try_into().unwrap();
 
     let block_url = format!(
         "https://blockchain.info/block-height/{}?format=json",
@@ -98,7 +121,10 @@ async fn verify_tag_async(
     );
 
     let block_response = match client.get(&block_url).send().await {
-        Ok(response) => response,
+        Ok(response) => match check_http_status(response) {
+            Ok(response) => response,
+            Err(reason) => return (None, reason),
+        },
         Err(_) => {
             println!("Blockchain explorer website did not respond.");
             return (None, FailureReason::NoBlockchainResponse);
@@ -113,7 +139,10 @@ async fn verify_tag_async(
         }
     };
 
-    let b: Value = serde_json::from_str(&block_string).unwrap();
+    let b: Value = match serde_json::from_str(&block_string){
+        Ok(value) => value,
+        Err(_) => return (None, FailureReason::UnexpectedBlockchainResponse),
+    };
     let block = &b["blocks"][0];
     let time = block["time"].as_i64().unwrap();
 
@@ -148,7 +177,7 @@ async fn verify_tag_async(
                             }
                         }
                         Ok(Instruction::Op(_op)) => {}
-                        Err(_) => unimplemented!(),
+                        Err(_) => return (None, FailureReason::UnexpectedBlockchainResponse),
                     }
                 }
             }
@@ -168,7 +197,7 @@ pub async fn verify_tree_timestamp(identifier: &str, tree: &MerkleTree, explain_
     let expected_tag = compute_tag(identifier, num_leaves, root_hash, explain_hash);
     //println!("The tag should be {}", HexFmt(&expected_tag));
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(30)).build().unwrap();
     verify_tag_async(&client, expected_tag, tx_hash, true).await
 }
 
@@ -178,7 +207,7 @@ pub async fn verify_proof_timestamp(proof: &MerkleProof, verbose: bool) -> (bool
     let expected_tag = compute_tag(&proof.identifier, proof.num_leaves.try_into().unwrap(), proof.root_hash, proof.explain_hash);
     if verbose {println!("The tag should be {}", HexFmt(&expected_tag));}
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(30)).build().unwrap();
     let (result, mut reason) = verify_tag_async(&client, expected_tag, proof.tx_hash, verbose).await;
     match result {
         Some(details) => {
@@ -232,7 +261,7 @@ pub fn get_explain_utc_timestamp(explain_filepath: &str) -> (Option<i64>, Failur
 
 #[tokio::main]
 pub async fn get_current_latest_block() -> (Option<usize>, FailureReason) {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(30)).build().unwrap();
 
     let response_result = client
         .post("https://api.blockchain.info/explorer-gateway-kt/btc/blocks")

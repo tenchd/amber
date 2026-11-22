@@ -271,7 +271,10 @@ pub fn verify_proof(filepath: &str, proof_file: &str) -> (bool, FailureReason, O
     let block;
     let tx_hash = HexFmt(proof.tx_hash).to_string();
     if result {
-        let utc = chrono::DateTime::from_timestamp(chain_timestamp.unwrap(), 0).unwrap();
+        let utc = match chrono::DateTime::from_timestamp(chain_timestamp.unwrap(), 0) {
+            Some(value) => value,
+            None => return (false, FailureReason::UnexpectedBlockchainResponse, None, "".to_string(), "".to_string(), None, None, "".to_string()),
+        };
         let date = format!("{}", utc.format("%B %-d, %Y").to_string());
         let time = format!("{}", utc.format("%H:%M").to_string());
         println!("File {} was verified by proof file {} via the Bitcoin blockchain.\nIts Merkle root hash {} appears in the Bitcoin transaction identified by tx hash {}.", filepath, proof_file, HexFmt(proof.root_hash), HexFmt(proof.tx_hash));
@@ -334,13 +337,14 @@ pub fn make_proof(input_path: &str, tree_filename: &str, explain_filename: &str,
             let proof = proof_result.unwrap();
             proof.fossilize_proof(&output_filename, corpus_name);
             if first {
-                let (blockchain_verified, _, _, _) = proof.verify_proof_for_file(&filepath, false, false);
-                assert!(blockchain_verified, "Couldn't verify proof on blockchain. Aborting.");
+                let (blockchain_verified, reason, _, _) = proof.verify_proof_for_file(&filepath, false, false);
+                if !blockchain_verified {
+                    return (false, reason);
+                }
                 first = false;
             }
             else {
                 let (local_verified, reason, _, _) = proof.verify_proof_for_file(&filepath, true, false);
-                //assert!(local_verified, "Proof file {} is invalid. Aborting.", filepath);
                 if !local_verified {
                     println!("Proof for file {} failed to validate for the following reason: {}", filepath, reason);
                     return (false, reason);
@@ -385,7 +389,9 @@ pub enum FailureReason {
     NoBlockchainResponse, // didn't get a response from the blockchain website (could be connectivity issue, or incorrect tx hash) 
     // in the future if you don't get a blockchain response, ping blockchain.info to see if the main page is up.
     TxNotFound, // the blockchain website didn't find a transaction with the supplied tx hash.
+    TxUnconfirmed, // the blockchain transaction hasn't been mined into a block yet.
     TimestampMismatchFatal, // the tag was found in the transaction, but the chain utc timestamp is more than 24 hours different that the timestamp listed in explain.txt.
+    UnexpectedBlockchainResponse, // the blockchain's response is weird in some way that the other failures don't address.
     TagNotFound, // the blockchain transaction doesn't contain an OP_RETURN script with the expected tag.
     PathNotWriteable, // you tried to write to some filepath that wasn't writeable for some reason.
     InvalidBitcoinAddress, // you gave a receiving address to the OP_RETURN script generator that isn't a valid Bitcoin address.
@@ -418,8 +424,10 @@ impl std::fmt::Display for FailureReason {
             FailureReason::TxHashNotParseable => write!(f, "The provided tx hash is invalid; it must contain only valid hex characters and be exactly 64 characters long."),
             FailureReason::NoBlockchainResponse => write!(f, "The blockchain lookup website did not respond to the request."),
             FailureReason::TxNotFound => write!(f, "The blockchain lookup website could not find a transaction with the specified tx hash."),
+            FailureReason::TxUnconfirmed => write!(f, "The transaction has been submitted to the blockchain but hasn't been confirmed (mined) yet."),
             FailureReason::TimestampMismatchFatal => write!(f, "The utc timestamp listed in explain.txt is > 24hrs different than utc timestamp on the blockchain."),
             FailureReason::TagNotFound => write!(f, "The expected timestamp message was not found in the blockchain transaction."),
+            FailureReason::UnexpectedBlockchainResponse => write!(f, "The blockchain response is malformed and the timestamp can't be verified. Try again."),
             FailureReason::PathNotWriteable => write!(f, "Couldn't write output file at the specified location."),
             FailureReason::InvalidBitcoinAddress => write!(f, "Receiving address isn't a valid Bitcoin address."),
             FailureReason::InvalidTag => write!(f, "Specified tag is invalid."),
