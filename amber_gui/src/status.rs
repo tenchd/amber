@@ -228,6 +228,8 @@ pub struct BuildTimestampStatus {
     pub script_status: Option<String>,
     pub find_tx_status: Option<String>,
     pub find_tx_attempted: bool,
+    pub find_tx_running: bool,
+    pub find_tx_result_rx: Option<Receiver<(Option<usize>, FailureReason)>>,
     pub tx_confirmations: Option<usize>,
     pub finalize_status: Option<String>,
     pub finalize_async_result_rx: Option<Receiver<(bool, Option<TimestampedMerkleTree>, FailureReason)>>,
@@ -293,6 +295,8 @@ impl BuildTimestampStatus {
             locktime: None,
             find_tx_status: None,
             find_tx_attempted: false,
+            find_tx_running: false,
+            find_tx_result_rx: None,
             tx_confirmations: None,
             finalize_status: None,
             finalize_async_result_rx: None,
@@ -347,6 +351,7 @@ impl BuildTimestampStatus {
         self.find_tx_status = None;
         self.tx_confirmations = None;
         self.find_tx_attempted = false;
+        self.find_tx_result_rx = None;
     }
 
     pub fn reset_finalize_state(&mut self) {

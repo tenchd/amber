@@ -416,10 +416,34 @@ impl TemplateApp {
         }
     }
 
-    fn find_tx(&mut self) {
+    fn start_find_tx(&mut self) {
+        let (tx, rx) = mpsc::channel();
         self.build_ts_stat.find_tx_attempted = true;
+        self.build_ts_stat.find_tx_running = true;
+        self.build_ts_stat.find_tx_result_rx = Some(rx);
         let tx_hash_string = self.build_ts_stat.tx_hash_string.clone();
-        let (result, reason) = amber_core::check_confirmations(&tx_hash_string);
+
+        thread::spawn(move || {
+            let result = catch_panic(|| {
+                amber_core::check_confirmations(&tx_hash_string)
+            })
+            .unwrap_or_else(|reason| (None, reason));
+            let _ = tx.send(result);
+        });
+    }
+
+    fn finish_find_tx(&mut self) {
+        let Some(rx) = &self.build_ts_stat.find_tx_result_rx else { return };
+        let (result, reason) = match rx.try_recv() {
+            Ok(message) => message,
+            Err(TryRecvError::Empty) => return, // still running; check again next frame
+            Err(TryRecvError::Disconnected) => (
+                None,
+                FailureReason::Internal("the background task stopped without reporting a result".to_string()),
+            ),
+        };
+        self.build_ts_stat.find_tx_running = false;
+        self.build_ts_stat.find_tx_result_rx = None;
         if result.is_none() {
             self.build_ts_stat.find_tx_status = Some(format!("Could not find the transaction for the following reason: {}", reason));
         }
@@ -1585,6 +1609,10 @@ impl TemplateApp {
         if self.build_ts_stat.finalize_async_running {
             self.finish_finalize_timestamp();
         }
+
+        if self.build_ts_stat.find_tx_running {
+            self.finish_find_tx();
+        }
         ui.heading("Step 3: Finalizing the Timestamp");
         ui.label("On the previous page you submitted a transaction to the Bitcoin blockchain. In Electrum, you should able able to see that transaction in the History tab. Right-click the transaction, select Copy -> Transaction ID, and paste it in the box below:");
         ui.add_enabled(!self.build_ts_stat.find_tx_attempted, egui::TextEdit::singleline(&mut self.build_ts_stat.tx_hash_string));
@@ -1594,8 +1622,13 @@ impl TemplateApp {
         let find_tx_allowed = self.build_ts_stat.tx_hash_string != "".to_string() && !self.build_ts_stat.finalize_async_running && !self.build_ts_stat.tree_verified && self.build_ts_stat.finalize_status.is_none();
 
         if ui.add_enabled(find_tx_allowed, egui::Button::new("Find transaction")).clicked() {
-            self.find_tx();
+            self.start_find_tx();
         } 
+
+        if self.build_ts_stat.find_tx_running {
+            ui.spinner();
+            ui.label("Searching for the transaction on the blockchain...");
+        }
 
         if self.build_ts_stat.tx_confirmations.is_some() {
             if self.build_ts_stat.tx_confirmations.unwrap() == 0 {
@@ -1611,8 +1644,6 @@ impl TemplateApp {
                     ui.label("You can now finalize the timestamp.");
                 }
             }
-
-
         }
 
         if self.build_ts_stat.find_tx_status.is_some() {
@@ -1620,7 +1651,7 @@ impl TemplateApp {
         }
 
         if self.build_ts_stat.find_tx_attempted {
-            if ui.add_enabled(!self.build_ts_stat.finalize_status.is_some() && !self.build_ts_stat.finalize_async_running, egui::Button::new("Reset transaction hash and try again")).clicked() {
+            if ui.add_enabled(!self.build_ts_stat.finalize_status.is_some() && !self.build_ts_stat.finalize_async_running && !self.build_ts_stat.find_tx_running, egui::Button::new("Reset transaction hash and try again")).clicked() {
                 self.build_ts_stat.reset_find_tx_state();
             }
         }
