@@ -394,13 +394,39 @@ impl TemplateApp {
             });
     }
 
-    fn compute_script(&mut self) {
+    fn start_compute_script(&mut self) {
+        let (tx, rx) = mpsc::channel();
         self.build_ts_stat.script_attempted = true;
+        self.build_ts_stat.script_running = true;
+        self.build_ts_stat.script_result_tx = Some(rx);
         self.build_ts_stat.script_status = Some("Looking up transaction on the blockchain...".to_string());
         let receiving_address = self.build_ts_stat.receiving_address.clone();
         let balance = self.build_ts_stat.balance.clone();
         let tag = self.build_ts_stat.tag_string.clone();
-        let (result, fee, reason) = amber_core::generate_op_return_script(&receiving_address, balance, &tag);
+
+        thread::spawn(move || {
+            let result = catch_panic(|| {
+                amber_core::generate_op_return_script(&receiving_address, balance, &tag)
+            })
+            .unwrap_or_else(|reason| (None, None, reason));
+            let _ = tx.send(result);
+        });
+    }
+
+    fn finish_compute_script(&mut self) {
+        let Some(rx) = &self.build_ts_stat.script_result_tx else { return };
+        let (result, fee, reason) = match rx.try_recv() {
+            Ok(message) => message,
+            Err(TryRecvError::Empty) => return, // still running; check again next frame
+            Err(TryRecvError::Disconnected) => (
+                None,
+                None,
+                FailureReason::Internal("the background task stopped without reporting a result".to_string()),
+            ),
+        };
+        self.build_ts_stat.script_running = false;
+        self.build_ts_stat.script_result_tx = None;
+
         if result.is_some() && fee.is_some() {
             self.build_ts_stat.script = result.unwrap();
             self.build_ts_stat.script_status = None;
@@ -1497,6 +1523,9 @@ impl TemplateApp {
     }
 
     fn page_write_blockchain(&mut self, ui: &mut egui::Ui) {
+        if self.build_ts_stat.script_running {
+            self.finish_compute_script();
+        }
         ui.heading("Step 2: Writing to the Bitcoin Blockchain");
 
         ui.label("You have created the merkle tree, whose root hash serves as a witness of existence for each file in the corpus.");
@@ -1548,8 +1577,13 @@ impl TemplateApp {
         }
 
         ui.label("4. Click this button to generate the script:");
-        if ui.add_enabled(self.build_ts_stat.receiving_address != "".to_string() && self.build_ts_stat.balance != 0.0 && !self.build_ts_stat.script_attempted, egui::Button::new("Generate script")).clicked() {
-            self.compute_script();
+        if ui.add_enabled(self.build_ts_stat.receiving_address != "".to_string() && self.build_ts_stat.balance != 0.0 && !self.build_ts_stat.script_attempted && !self.build_ts_stat.script_running, egui::Button::new("Generate script")).clicked() {
+            self.start_compute_script();
+        }
+
+        if self.build_ts_stat.script_running {
+            ui.spinner();
+            ui.label("Computing script...");
         }
 
         if self.build_ts_stat.script != "".to_string() {

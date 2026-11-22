@@ -225,6 +225,8 @@ pub struct BuildTimestampStatus {
     pub receiving_address: String,
     pub script: String,
     pub script_attempted: bool,
+    pub script_running: bool,
+    pub script_result_tx: Option<Receiver<(Option<String>, Option<f64>, FailureReason)>>,
     pub script_status: Option<String>,
     pub find_tx_status: Option<String>,
     pub find_tx_attempted: bool,
@@ -289,6 +291,8 @@ impl BuildTimestampStatus {
             receiving_address: "".to_string(),
             script: "".to_string(),
             script_attempted: false,
+            script_running: false,
+            script_result_tx: None,
             script_status: None,
             root_hash: None,
             num_leaves: None,
@@ -344,6 +348,7 @@ impl BuildTimestampStatus {
         self.receiving_address = "".to_string();
         self.script = "".to_string();
         self.script_status = None;
+        self.script_result_tx = None;
     }
 
     pub fn reset_find_tx_state(&mut self) {
