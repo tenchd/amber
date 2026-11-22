@@ -455,7 +455,7 @@ pub fn get_locktime() -> (Option<usize>, FailureReason) {
     (Some(block_height + 1), FailureReason::Success)
 }
 
-pub fn verify_tree_async(tree_filename: PathBuf, explain_filename: PathBuf) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
+pub fn verify_tree_gui(tree_filename: PathBuf, explain_filename: PathBuf) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
     let tree_path = tree_filename.to_str().unwrap();
     let explain_path = explain_filename.to_str().unwrap();
     let (result, tree, reason) = verify_tree(tree_path, explain_path);
@@ -463,20 +463,20 @@ pub fn verify_tree_async(tree_filename: PathBuf, explain_filename: PathBuf) -> (
     (result, tree, reason)
 }
 
-pub fn verify_proof_async(filepath: PathBuf, proof_filepath: PathBuf) -> (bool, FailureReason, Option<i64>, String, String, Option<String>, Option<String>, String) {
+pub fn verify_proof_gui(filepath: PathBuf, proof_filepath: PathBuf) -> (bool, FailureReason, Option<i64>, String, String, Option<String>, Option<String>, String) {
     let path = filepath.to_str().unwrap();
     let proof_path = proof_filepath.to_str().unwrap();
     verify_proof(path, proof_path)
 }
 
-pub fn build_proof_async(file_path: PathBuf, merkle_path: PathBuf, explain_path: PathBuf, corpus_name: &str) -> (bool, FailureReason) {
+pub fn build_proof_gui(file_path: PathBuf, merkle_path: PathBuf, explain_path: PathBuf, corpus_name: &str) -> (bool, FailureReason) {
     let path = file_path.to_str().unwrap();
     let merkle = merkle_path.to_str().unwrap();
     let explain = explain_path.to_str().unwrap();
     make_proof(path, merkle, explain, corpus_name)
 }
 
-pub fn build_timestamp_async(corpus_name: String, identifier: String, hashes_source: bool, input_hashes_path: Option<PathBuf>, input_source_dir: Option<PathBuf>, corpus_desc: String, corpus_motiv: String, user_desc: String, timestamp_output_path: PathBuf) -> (bool, Option<MerkleTree>, FailureReason, Option<usize>, Option<PathBuf>, Option<PathBuf>, Option<PathBuf>) {
+pub fn build_timestamp_gui(corpus_name: String, identifier: String, hashes_source: bool, input_hashes_path: Option<PathBuf>, input_source_dir: Option<PathBuf>, corpus_desc: String, corpus_motiv: String, user_desc: String, timestamp_output_path: PathBuf) -> (bool, Option<MerkleTree>, FailureReason, Option<usize>, Option<PathBuf>, Option<PathBuf>, Option<PathBuf>) {
     let (locktime_result, locktime_reason) = get_locktime();
     if locktime_result.is_none() {
         return (false, None, locktime_reason, None, None, None, None)
@@ -524,7 +524,7 @@ pub fn build_timestamp_async(corpus_name: String, identifier: String, hashes_sou
     (true, result, FailureReason::Success, Some(locktime), Some(PathBuf::from(tree_filename)), Some(PathBuf::from(explain_filename)), Some(PathBuf::from(tag_filename)))
 }
 
-pub fn finalize_timestamp_async(generated_tree_filename: PathBuf, generated_explain_filename: PathBuf, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
+pub fn finalize_timestamp_gui(generated_tree_filename: PathBuf, generated_explain_filename: PathBuf, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
 
     let tree_path = generated_tree_filename.to_str().unwrap();
     let explain_path = generated_explain_filename.to_str().unwrap();

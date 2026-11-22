@@ -102,7 +102,7 @@ impl TemplateApp {
 
         thread::spawn(move || {
             let result = catch_panic(|| {
-                amber_core::verify_tree_async(tree_filepath.unwrap(), explain_filepath.unwrap())
+                amber_core::verify_tree_gui(tree_filepath.unwrap(), explain_filepath.unwrap())
             })
             .unwrap_or_else(|reason| (false, None, reason));
             let _ = tx.send(result);
@@ -152,7 +152,7 @@ impl TemplateApp {
     }
 
     fn start_verify_proof(&mut self) {
-        if self.proof_stat.provided_file.is_some() && self.proof_stat.provided_file.is_some() {
+        if self.proof_stat.provided_file.is_some() && self.proof_stat.provided_proof_file.is_some() {
 
             self.proof_stat.proof_auth_attempted = true;
             let (tx, rx) = mpsc::channel();
@@ -164,7 +164,7 @@ impl TemplateApp {
 
             thread::spawn(move || {
                 let result = catch_panic(|| {
-                    amber_core::verify_proof_async(file_path, proof_file_path)
+                    amber_core::verify_proof_gui(file_path, proof_file_path)
                 })
                 .unwrap_or_else(|reason| (false, reason, Some(0), String::new(), String::new(), Some(String::new()), Some(String::new()), String::new()));
                 let _ = tx.send(result);
@@ -219,7 +219,7 @@ impl TemplateApp {
 
             thread::spawn(move || {
                 let result = catch_panic(|| {
-                    amber_core::build_proof_async(file_path, merkle_path, explain_path, &corpus_name)
+                    amber_core::build_proof_gui(file_path, merkle_path, explain_path, &corpus_name)
                 })
                 .unwrap_or_else(|reason| (false, reason));
                 let _ = tx.send(result);
@@ -334,7 +334,7 @@ impl TemplateApp {
             
             thread::spawn(move || {
                 let result = catch_panic(|| {
-                    amber_core::build_timestamp_async(corpus_name, identifier, hashes_source, hash_file, directory, corpus_desc, corpus_motiv, user_desc, output_dir)
+                    amber_core::build_timestamp_gui(corpus_name, identifier, hashes_source, hash_file, directory, corpus_desc, corpus_motiv, user_desc, output_dir)
                 })
                 .unwrap_or_else(|reason| (false, None, reason, None, None, None, None));
                 let _ = tx.send(result);
@@ -447,7 +447,7 @@ impl TemplateApp {
             let tx_hash = tx_hash_option.unwrap();
             thread::spawn(move || {
                 let result = catch_panic(|| {
-                    amber_core::finalize_timestamp_async(tree_file, explain_file, &corpus_name, &identifier, tx_hash)
+                    amber_core::finalize_timestamp_gui(tree_file, explain_file, &corpus_name, &identifier, tx_hash)
                 })
                 .unwrap_or_else(|reason| (false, None, reason));
                 let _ = tx.send(result);
@@ -1161,7 +1161,7 @@ impl TemplateApp {
 
         else {
             ui.horizontal(|ui|{
-                if ui.button("Pick corpus description .txt file").clicked() {
+                if ui.button("Pick corpus motivation .txt file").clicked() {
                     self.build_ts_stat.corpus_motiv_dialog.pick_file();
                 }
             });
