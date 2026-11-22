@@ -1,5 +1,5 @@
 use crate::{
-    FailureReason::{self, Success}, merkle::{MerkleProof, MerkleTree}, tag
+    FailureReason, merkle::{MerkleProof, MerkleTree}, tag
 };
 use hex_fmt::HexFmt;
 use bitcoin::{
@@ -205,16 +205,28 @@ pub async fn verify_proof_timestamp(proof: &MerkleProof, verbose: bool) -> (bool
     }
 }
 
-pub fn get_explain_utc_timestamp(explain_filepath: &str) -> i64 {
-    let file = std::fs::File::open(explain_filepath).unwrap();
+pub fn get_explain_utc_timestamp(explain_filepath: &str) -> (Option<i64>, FailureReason) {
+    let file = match std::fs::File::open(explain_filepath) {
+        Ok(value) => value,
+        Err(_) => return (None, FailureReason::ExplainFileNotFound),
+    };
     let mut reader = std::io::BufReader::new(file);
     let mut line = "".to_string();
-    reader.read_line(&mut line).unwrap(); // ignore first line
+    match reader.read_line(&mut line) {
+        Ok(_) => (),
+        Err(_) => return (None, FailureReason::ExplainFileNotParseable(1)),
+    }; // ignore first line
     line = "".to_string();
-    reader.read_line(&mut line).unwrap(); // we will parse utc timestamp from second line
-    line.pop();
-    let uct_timestamp: i64 = line.parse().unwrap();
-    uct_timestamp
+    match reader.read_line(&mut line) {
+        Ok(_) => (),
+        Err(_) => return (None, FailureReason::ExplainFileNotParseable(2)), // we will parse utc timestamp from second line
+    }
+    line = line.trim().to_string();
+    let utc_timestamp: i64 = match line.parse(){
+        Ok(value) => value,
+        Err(_) => return (None, FailureReason::ExplainFileNotParseable(2)),
+    };
+    (Some(utc_timestamp), FailureReason::Success)
 
 }
 
@@ -284,7 +296,7 @@ pub fn generate_op_return_script(receiving_address: &str, balance: f64, tag: &st
     values.insert("change", change_str);
     values.insert("tag", tag);
     let script = script_template.try_fill_in(&values);
-    (Some(script.unwrap().to_string()), Some(fee), Success)
+    (Some(script.unwrap().to_string()), Some(fee), FailureReason::Success)
 }
 
 pub fn tag_valid(tag: &str) -> bool {

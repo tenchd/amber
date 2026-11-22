@@ -93,9 +93,13 @@ impl MerkleNode {
     }
 
     // create a new leaf node from a file.
-    fn new_leaf_from_file(filepath: &str, index: usize) -> Self {
-        let hash = double_hash_from_file(filepath).0.unwrap();
-        MerkleNode { hash, index, left: 0, right: 0, parent: 0 }
+    fn new_leaf_from_file(filepath: &str, index: usize) -> (Option<Self>, FailureReason) {
+        let (hash_result, reason) = double_hash_from_file(filepath);
+        let hash = match hash_result {
+            Some(value) => value,
+            None => return (None, reason),
+        };
+        (Some(MerkleNode { hash, index, left: 0, right: 0, parent: 0 }), FailureReason::Success)
     }
 
     // create a new internal (non-leaf) node by concatenating child hashes and then double hashing.
@@ -296,7 +300,7 @@ impl MerkleProof {
     }
 
     // 
-    pub fn fossilize_proof(&self, filename: &str, corpus_name: &str) {
+    pub fn fossilize_proof(&self, filename: &str, corpus_name: &str) -> FailureReason{
         let template = Template::from(PROOF_TEMPLATE);
 
         // identifier: ${identifier}
@@ -322,16 +326,24 @@ impl MerkleProof {
 
         let text = template.try_fill_in(&values).unwrap().to_string();
 
-        let mut file = File::create(filename).expect("failed to create file");
-        file.write_all(&text.into_bytes()).expect("couldn't write file");
+        let mut file = match File::create(filename) {
+            Ok(value) => value,
+            Err(_) => return FailureReason::PathNotWriteable,
+        };
+        if file.write_all(&text.into_bytes()).is_err() {
+            return FailureReason::PathNotWriteable
+        };
 
         let root_hash_line = format!("{}\n", BASE64_STANDARD.encode(self.root_hash));
-        file.write_all(root_hash_line.as_bytes()).unwrap();
+        if file.write_all(root_hash_line.as_bytes()).is_err() {
+            return FailureReason::PathNotWriteable
+        };
 
         for i in 0..self.proof_hashes.len() {
             let line = format!("{},{}\n", BASE64_STANDARD.encode(self.proof_hashes[i]), self.proof_directions[i]);
             file.write_all(line.as_bytes()).unwrap();
         }
+        FailureReason::Success
     }
 
     // verifies a proof starting from the leaf hash, proceeding along the leaf-to-root path encoded by the proof until the root hash is reached. If the proof is valid, this computed root hash will match the Merkle tree root hash.
@@ -437,7 +449,12 @@ impl MerkleTree {
         let mut nodes: Vec<MerkleNode> = vec![];
         nodes.push(MerkleNode { hash: [0u8; 32], index: 0, left: 0, right: 0, parent: 0 }); // dummy node at index 0
         for (index, filepath) in filepaths.iter().enumerate() {
-            nodes.push(MerkleNode::new_leaf_from_file(filepath, index + 1));
+            let (node_result, reason) = MerkleNode::new_leaf_from_file(filepath, index + 1);
+            let node = match node_result {
+                Some(value) => value,
+                None => return (None, reason)
+            };
+            nodes.push(node);
         }
         nodes.sort_by_key(|node| node.hash);
         for (i, node) in nodes.iter_mut().enumerate() {

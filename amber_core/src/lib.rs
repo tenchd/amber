@@ -47,8 +47,11 @@ pub fn get_filenames_from_directory(path: &str) -> Vec<String> {
 
 pub fn build_merkle_tree_from_directory(path: &str) -> (Option<MerkleTree>, FailureReason) {
     let filepaths = get_filenames_from_directory(path);
+    if filepaths.len() == 0 {
+        println!("Directory contains no timestampable files.");
+        return (None, FailureReason::EmptyCorpus)
+    }
     println!("Building a Merkle tree from {} files. This may take a couple of minutes.", filepaths.len());
-    //println!("{}", filepaths.first().unwrap());
     MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
 }
 pub fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, utc_raw: DateTime<Utc>, locktime: usize, identifier: &str, corpus_desc: Option<String>, corpus_motiv: Option<String>, user_desc: Option<String>) -> FailureReason {
@@ -213,7 +216,11 @@ pub fn verify_tree(provided_tree_filename: &str, provided_explain_filename: &str
             explain_utc_timestamp = 1782492300;
         }
         else {
-            explain_utc_timestamp = verify::get_explain_utc_timestamp(&provided_explain_filename);
+            let (timestamp_result, reason) = verify::get_explain_utc_timestamp(&provided_explain_filename);
+            explain_utc_timestamp = match timestamp_result {
+                Some(value) => value,
+                None => return (false, None, reason),
+            }
 
         }
         let difference = (chain_utc_timestamp - explain_utc_timestamp).abs();
@@ -295,7 +302,10 @@ pub fn make_proof(input_path: &str, tree_filename: &str, explain_filename: &str,
         return (false, reason);
     }
     let unfossilized = unfossilized_result.unwrap();
-    let md = std::fs::metadata(input_path).unwrap();
+    let md = match std::fs::metadata(input_path) {
+        Ok(value) => value,
+        Err(err) => return (false, FailureReason::Internal(err.to_string())), 
+    };
     // if user provided the path to a single file, create a proof for that file only.
     if md.is_file() {
         let output_filename = input_path.to_owned() + "_proof.txt";
@@ -357,6 +367,7 @@ pub enum FailureReason {
     TimestampMismatchNonFatal, // the tag was found in the transaction, but the tx timestamp doesn't match the one listed in the tree/proof file.
     // this is a success technically because the timestamp WAS found, but the time listed in the file header may be significantly wrong.
     BlockHeightMismatchNonFatal,
+    EmptyCorpus, // provided directory has no timestampable files
     MerkleFileNotFound, // can't find merkle file
     MerkleFileNotParseable(usize), // code can't read/parse merkle tree file
     MerkleTreeInconsistent, // merkle tree from file isn't valid
@@ -390,6 +401,7 @@ impl std::fmt::Display for FailureReason {
             FailureReason::AutoAccept => write!(f, "The timestamp was locally verified, but not checked on the blockchain."),
             FailureReason::TimestampMismatchNonFatal => write!(f, "While the timestamp verified successfully on the blockchain, the utc timestamp listed in the merkle tree file header is wrong; It does not match the true timestamp on the blockchain. This header value should be corrected."),
             FailureReason::BlockHeightMismatchNonFatal => write!(f, "While the timestamp verified successfully on the blockchain, the block height in the fossil file does not match the true block height of the transaction containing the timestamp. This header value should be corrected."),
+            FailureReason::EmptyCorpus=> write!(f, "The provided directory has no timestampable files."),
             FailureReason::MerkleFileNotFound => write!(f, "The provided merkle tree file path could not be found."),
             FailureReason::MerkleFileNotParseable(s) => write!(f, "The file containing the merkle tree could not be parsed. The problem is on line {s} of the file."),
             FailureReason::MerkleTreeInconsistent => write!(f, "The provided merkle tree is inconsistent. Either the number of leaves is wrong, or the internal hashes don't line up."),
