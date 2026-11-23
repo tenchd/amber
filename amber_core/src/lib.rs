@@ -28,14 +28,14 @@ const CORPUS_MOTIVATION: &str = include_str!("../editable_templates/corpus_motiv
 const USER_DESCRIPTION: &str = include_str!("../editable_templates/user_description.txt");
 
 // Scans corpus top-level directory recursively to gather the files that will be put in the merkle tree.
-pub fn get_filenames_from_directory(path: &str) -> Vec<String> {
-    let filepaths: Vec<String> = WalkDir::new(path)
+pub fn get_filenames_from_directory(path: &PathBuf) -> Vec<PathBuf> {
+    let filepaths: Vec<PathBuf> = WalkDir::new(path)
         .into_iter()
         //.expect("Failed to read directory")
         .filter_map(|entry| {
             let entry = entry.expect("Failed to read directory entry");
             if entry.file_type().is_file() && !entry.path().to_string_lossy().ends_with("_proof.txt") {
-                Some(entry.path().to_str().unwrap().to_string())
+                Some(entry.into_path())
             }
             else {
                 Option::None
@@ -45,17 +45,17 @@ pub fn get_filenames_from_directory(path: &str) -> Vec<String> {
     filepaths
 }
 
-pub fn build_merkle_tree_from_directory(path: &str) -> (Option<MerkleTree>, FailureReason) {
+pub fn build_merkle_tree_from_directory(path: &PathBuf) -> (Option<MerkleTree>, FailureReason) {
     let filepaths = get_filenames_from_directory(path);
     if filepaths.len() == 0 {
         println!("Directory contains no timestampable files.");
         return (None, FailureReason::EmptyCorpus)
     }
     println!("Building a Merkle tree from {} files. This may take a couple of minutes.", filepaths.len());
-    MerkleTree::new_from_files(filepaths.iter().map(|s| s.as_str()).collect())
+    MerkleTree::new_from_files(filepaths)
 }
-pub fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, utc_raw: DateTime<Utc>, locktime: usize, identifier: &str, corpus_desc: Option<String>, corpus_motiv: Option<String>, user_desc: Option<String>) -> FailureReason {
-    println!("Reading merkle tree from file {}.", tree_filename);
+pub fn build_doc_and_tag_from_saved_tree(tree_filename: &PathBuf, explain_filename: &PathBuf, tag_filename: &PathBuf, corpus_name: &str, utc_raw: DateTime<Utc>, locktime: usize, identifier: &str, corpus_desc: Option<String>, corpus_motiv: Option<String>, user_desc: Option<String>) -> FailureReason {
+    println!("Reading merkle tree from file {}.", tree_filename.to_string_lossy());
     let (unfossilized_result, reason) = MerkleTree::new_from_unfinished_tree_file(tree_filename);
     if unfossilized_result.is_none() {
         return reason;
@@ -69,35 +69,50 @@ pub fn build_doc_and_tag_from_saved_tree(tree_filename: &str, explain_filename: 
     let time = format!("{}", utc.format("%H:%M").to_string());
 
     let document_filename = explain_filename;
-    crate::tag::write_document(document_filename, corpus_name, utc_raw, &date, &time, locktime, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), corpus_desc, corpus_motiv, user_desc);
-    let (result, reason) = double_hash_from_file(document_filename);
+    crate::tag::write_document(&document_filename, corpus_name, utc_raw, &date, &time, locktime, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), corpus_desc, corpus_motiv, user_desc);
+    let (result, reason) = double_hash_from_file(&document_filename);
     if result.is_none() {
         return reason
     }
     let document_hash = result.unwrap();
     let tag = crate::tag::create_chain_tag(identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), document_hash);
-    println!("Wrote explainer document to file {}", document_filename);
+    println!("Wrote explainer document to file {}", document_filename.to_string_lossy());
     //let tag_filename = "generated_timestamp/tag.txt";
     let tag_string = format!("{}", HexFmt(&tag));
-    let file_result = File::create(tag_filename);
+    let file_result = File::create(&tag_filename);
     if file_result.is_err() {
-        println!("Failed to write tag to location {}", tag_filename);
+        println!("Failed to write tag to location {}", tag_filename.to_string_lossy());
         return FailureReason::PathNotWriteable;
     }
     let mut file = file_result.unwrap();
     let result = file.write_all(&tag_string.into_bytes());
     if result.is_err() {
-        println!("Failed to write tag to location {}", tag_filename);
+        println!("Failed to write tag to location {}", tag_filename.to_string_lossy());
         return FailureReason::PathNotWriteable;
     }
-    println!("Wrote tag to file {}", tag_filename);
+    println!("Wrote tag to file {}", tag_filename.to_string_lossy());
 
     FailureReason::Success
 }
 
-pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool, tree_filename: &str, explain_filename: &str, tag_filename: &str, corpus_name: &str, locktime: usize, identifier: &str, corpus_desc: Option<String>, corpus_motiv: Option<String>, user_desc: Option<String>) -> (Option<MerkleTree>, FailureReason) {
+fn append_to_filename(filename: &PathBuf, extension: &str) -> PathBuf {
+    let mut tree_filename_unfinished: PathBuf = Default::default();
+    if let Some(prefix) = filename.file_name() {
+        let mut unfinished_filename = prefix.to_os_string();
+        unfinished_filename.push(extension);
+        tree_filename_unfinished.set_file_name(unfinished_filename);
+    }
+    //tree_filename_unfinished
+    let mut result = filename.clone();
+    result.pop();
+    result.push(tree_filename_unfinished);
+    result
+}
+
+pub fn build_timestamp(corpus_path: &PathBuf, hashes_path: &PathBuf, hashes_source: bool, tree_filename: &PathBuf, explain_filename: &PathBuf, tag_filename: &PathBuf, corpus_name: &str, locktime: usize, identifier: &str, corpus_desc: Option<String>, corpus_motiv: Option<String>, user_desc: Option<String>) -> (Option<MerkleTree>, FailureReason) {
     let tree: MerkleTree;
 
+    println!("{}", tree_filename.to_string_lossy());
     // ensure that the identifier string is entirely graphic ASCII characters
     let mut identifier_graphic = true;
     for character in identifier.chars() {
@@ -112,7 +127,7 @@ pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool
     }
 
     if hashes_source {
-        println!("Building merkle tree from leaf hashes in {}", hashes_path);
+        println!("Building merkle tree from leaf hashes in {}", hashes_path.to_string_lossy());
         let (result, reason) = MerkleTree::new_from_hashes(hashes_path);
         if result.is_none() {
             return (None, reason)
@@ -130,7 +145,9 @@ pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool
             return (None, reason)
         }
     }
-    let tree_filename_unfinished = format!("{}_unfinished.txt",tree_filename);
+
+    let tree_filename_unfinished = append_to_filename(tree_filename, "_unfinished.txt");
+
     println!("Merkle tree built. Root hash is {}", HexFmt(tree.get_root_hash()));
 
     let utc_raw = Utc::now();
@@ -138,10 +155,10 @@ pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool
     let date = format!("{}", utc.format("%B %-d, %Y").to_string());
     let tree_write_result = tree.write_unfinished_tree_to_file(&tree_filename_unfinished, &date);
     if tree_write_result != FailureReason::Success {
-        println!("Couldn't write tree file to location {tree_filename_unfinished}. You must fix the problem and rebuild before continuing.");
+        println!("Couldn't write tree file to location {}. You must fix the problem and rebuild before continuing.", tree_filename_unfinished.to_string_lossy());
         return (None, tree_write_result)
     }
-    println!("wrote tree to file {}", tree_filename_unfinished);
+    println!("wrote tree to file {}", tree_filename_unfinished.to_string_lossy());
 
     let timestamp_write_result = build_doc_and_tag_from_saved_tree(&tree_filename_unfinished, explain_filename, tag_filename, corpus_name, utc_raw, locktime, identifier, corpus_desc, corpus_motiv, user_desc);
     if timestamp_write_result != FailureReason::Success {
@@ -151,8 +168,8 @@ pub fn build_timestamp(corpus_path: &str, hashes_path: &str, hashes_source: bool
     (Some(tree), FailureReason::Success)
 }
 
-pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filename: &str, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> (Option<TimestampedMerkleTree>, FailureReason) {
-    let unfinished_tree_file = format!("{}_unfinished.txt",generated_tree_filename);
+pub fn finalize_timestamp(generated_tree_filename: &PathBuf, generated_explain_filename: &PathBuf, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> (Option<TimestampedMerkleTree>, FailureReason) {
+    let unfinished_tree_file = append_to_filename(generated_tree_filename, "_unfinished.txt");
     let (tree_result, reason) = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_file);
     if tree_result.is_none() {
         return (None, reason)
@@ -164,14 +181,14 @@ pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filen
     }
     let explain_hash = result.unwrap();
     let mut timestamped_tree = TimestampedMerkleTree::new_without_time(unfinished_tree, &identifier, tx_hash, explain_hash);
-    println!("verifying tree file at {}", unfinished_tree_file);
+    println!("verifying tree file at {}", unfinished_tree_file.to_string_lossy());
     let autoaccept = false;
     let (result, reason) = timestamped_tree.verify_timestamp(generated_explain_filename, autoaccept);
     if result {
         let write_reason = timestamped_tree.fossilize_tree(generated_tree_filename, &corpus_name);
 
         if write_reason == FailureReason::Success {
-            println!("Timestamp verified! Wrote the updated merkle tree file at {}. Deleting temporary untimestamped merkle tree file at {}", generated_tree_filename, unfinished_tree_file);
+            println!("Timestamp verified! Wrote the updated merkle tree file at {}. Deleting temporary untimestamped merkle tree file at {}", generated_tree_filename.to_string_lossy(), unfinished_tree_file.to_string_lossy());
             std::fs::remove_file(unfinished_tree_file).unwrap();
             return (Some(timestamped_tree), reason);
         }
@@ -186,8 +203,8 @@ pub fn finalize_timestamp(generated_tree_filename: &str, generated_explain_filen
     (None, reason)
 }
 
-pub fn verify_tree(provided_tree_filename: &str, provided_explain_filename: &str) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
-    println!("Verifying timestamp in {}", provided_tree_filename);
+pub fn verify_tree(provided_tree_filename: &PathBuf, provided_explain_filename: &PathBuf) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
+    println!("Verifying timestamp in {}", provided_tree_filename.to_string_lossy());
     let (timestamped_tree_result, reason) = TimestampedMerkleTree::new_from_fossilized_tree(&provided_tree_filename);
     if timestamped_tree_result.is_none() {
         return (false, None, reason);
@@ -238,8 +255,8 @@ pub fn verify_tree(provided_tree_filename: &str, provided_explain_filename: &str
     (result, Some(timestamped_tree), reason)
 }
 
-pub fn verify_file(tree_filename: &str, filepath: &str) -> bool {
-    println!("Reading merkle tree from file {}.", tree_filename);
+pub fn verify_file(tree_filename: &PathBuf, filepath: &PathBuf) -> bool {
+    println!("Reading merkle tree from file {}.", tree_filename.to_string_lossy());
     let (unfossilized_result, reason) = TimestampedMerkleTree::new_from_fossilized_tree(tree_filename);
     if unfossilized_result.is_none() {
         println!("Could not load merkle tree for the following reason: {}", reason);
@@ -251,15 +268,15 @@ pub fn verify_file(tree_filename: &str, filepath: &str) -> bool {
 
     let contains = unfossilized.tree.verify_from_file(filepath);
     if contains {
-        println!("{} is in the Merkle tree.", filepath);
+        println!("{} is in the Merkle tree.", filepath.to_string_lossy());
     }
     else {
-        println!("{} is NOT in the Merkle tree.", filepath);
+        println!("{} is NOT in the Merkle tree.", filepath.to_string_lossy());
     }
     contains
 }
 
-pub fn verify_proof(filepath: &str, proof_file: &str) -> (bool, FailureReason, Option<i64>, String, String, Option<String>, Option<String>, String) {
+pub fn verify_proof(filepath: &PathBuf, proof_file: &PathBuf) -> (bool, FailureReason, Option<i64>, String, String, Option<String>, Option<String>, String) {
     let (proof, reason) = MerkleProof::new_from_file(proof_file);
     if proof.is_none() {
         let s = "".to_string(); 
@@ -277,24 +294,24 @@ pub fn verify_proof(filepath: &str, proof_file: &str) -> (bool, FailureReason, O
         };
         let date = format!("{}", utc.format("%B %-d, %Y").to_string());
         let time = format!("{}", utc.format("%H:%M").to_string());
-        println!("File {} was verified by proof file {} via the Bitcoin blockchain.\nIts Merkle root hash {} appears in the Bitcoin transaction identified by tx hash {}.", filepath, proof_file, HexFmt(proof.root_hash), HexFmt(proof.tx_hash));
+        println!("File {} was verified by proof file {} via the Bitcoin blockchain.\nIts Merkle root hash {} appears in the Bitcoin transaction identified by tx hash {}.", filepath.to_string_lossy(), proof_file.to_string_lossy(), HexFmt(proof.root_hash), HexFmt(proof.tx_hash));
 
-        println!("This proves that {} existed on {} at {}.", filepath, date, time);
+        println!("This proves that {} existed on {} at {}.", filepath.to_string_lossy(), date, time);
         block = chain_block_height.unwrap().to_string();
         let utc_secs: i64 = utc.timestamp();
         return (result, reason, Some(utc_secs), tx_hash, block, Some(date), Some(time), identifier);
     }
     else {
         block = proof.block_height.to_string();
-        println!("File {} failed to verify for proof file {}. It does NOT certify any timestamp for the file.", filepath, proof_file);
+        println!("File {} failed to verify for proof file {}. It does NOT certify any timestamp for the file.", filepath.to_string_lossy(), proof_file.to_string_lossy());
 
         return (result, reason, Some(proof.utc_timestamp), tx_hash, block, None, None, identifier)
     }
 
 }
 
-pub fn make_proof(input_path: &str, tree_filename: &str, explain_filename: &str, corpus_name: &str) -> (bool, FailureReason) {
-    println!("Reading merkle tree from file {} and explain.txt from file {}.", tree_filename, explain_filename);
+pub fn make_proof(input_path: &PathBuf, tree_filename: &PathBuf, explain_filename: &PathBuf, corpus_name: &str) -> (bool, FailureReason) {
+    println!("Reading merkle tree from file {} and explain.txt from file {}.", tree_filename.to_string_lossy(), explain_filename.to_string_lossy());
     let (result, unfossilized_result, reason) = verify_tree(tree_filename, explain_filename);
     if !result {
         return (false, reason);
@@ -311,7 +328,7 @@ pub fn make_proof(input_path: &str, tree_filename: &str, explain_filename: &str,
     };
     // if user provided the path to a single file, create a proof for that file only.
     if md.is_file() {
-        let output_filename = input_path.to_owned() + "_proof.txt";
+        let output_filename = append_to_filename(input_path, "_proof.txt");
         let (proof_result, reason) = unfossilized.produce_proof_from_file(input_path);
         if proof_result.is_none() {
             return (false, reason);
@@ -319,17 +336,17 @@ pub fn make_proof(input_path: &str, tree_filename: &str, explain_filename: &str,
         let proof = proof_result.unwrap();
         proof.fossilize_proof(&output_filename, corpus_name);
         proof.verify_proof_for_file(input_path, false, true);
-        println!("{} Merkle proof written to file {}", input_path, output_filename);
+        println!("{} Merkle proof written to file {}", input_path.to_string_lossy(), output_filename.to_string_lossy());
         return (true, FailureReason::Success);
     }
     //if the user provided the path to a directory, create a proof for every file in that directory (recursively including subdirectories).
     else {
-        println!("Producing merkle proofs for all files in directory {}", input_path);
+        println!("Producing merkle proofs for all files in directory {}", input_path.to_string_lossy());
         let filepaths = get_filenames_from_directory(input_path);
         println!("{} files found. Constructing proofs.", filepaths.len());
         let mut first = true;
         for filepath in filepaths {
-            let output_filename = filepath.to_owned() + "_proof.txt";
+            let output_filename = append_to_filename(&filepath, "_proof.txt");
             let (proof_result, reason) = unfossilized.produce_proof_from_file(&filepath);
             if proof_result.is_none() {
                 return (false, reason);
@@ -346,7 +363,7 @@ pub fn make_proof(input_path: &str, tree_filename: &str, explain_filename: &str,
             else {
                 let (local_verified, reason, _, _) = proof.verify_proof_for_file(&filepath, true, false);
                 if !local_verified {
-                    println!("Proof for file {} failed to validate for the following reason: {}", filepath, reason);
+                    println!("Proof for file {} failed to validate for the following reason: {}", filepath.to_string_lossy(), reason);
                     return (false, reason);
                 }
             }
@@ -455,26 +472,19 @@ pub fn get_locktime() -> (Option<usize>, FailureReason) {
     (Some(block_height + 1), FailureReason::Success)
 }
 
-pub fn verify_tree_gui(tree_filename: PathBuf, explain_filename: PathBuf) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
-    let tree_path = tree_filename.to_str().unwrap();
-    let explain_path = explain_filename.to_str().unwrap();
-    let (result, tree, reason) = verify_tree(tree_path, explain_path);
+// pub fn verify_tree_gui(tree_filename: &PathBuf, explain_filename: &PathBuf) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
+//     let (result, tree, reason) = verify_tree(tree_filename, explain_filename);
 
-    (result, tree, reason)
-}
+//     (result, tree, reason)
+// }
 
-pub fn verify_proof_gui(filepath: PathBuf, proof_filepath: PathBuf) -> (bool, FailureReason, Option<i64>, String, String, Option<String>, Option<String>, String) {
-    let path = filepath.to_str().unwrap();
-    let proof_path = proof_filepath.to_str().unwrap();
-    verify_proof(path, proof_path)
-}
+// pub fn verify_proof_gui(filepath: PathBuf, proof_filepath: PathBuf) -> (bool, FailureReason, Option<i64>, String, String, Option<String>, Option<String>, String) {
+//     verify_proof(&filepath, &proof_filepath)
+// }
 
-pub fn build_proof_gui(file_path: PathBuf, merkle_path: PathBuf, explain_path: PathBuf, corpus_name: &str) -> (bool, FailureReason) {
-    let path = file_path.to_str().unwrap();
-    let merkle = merkle_path.to_str().unwrap();
-    let explain = explain_path.to_str().unwrap();
-    make_proof(path, merkle, explain, corpus_name)
-}
+// pub fn build_proof_gui(file_path: PathBuf, merkle_path: PathBuf, explain_path: PathBuf, corpus_name: &str) -> (bool, FailureReason) {
+//     make_proof(&file_path, &merkle_path, &explain_path, corpus_name)
+// }
 
 pub fn build_timestamp_gui(corpus_name: String, identifier: String, hashes_source: bool, input_hashes_path: Option<PathBuf>, input_source_dir: Option<PathBuf>, corpus_desc: String, corpus_motiv: String, user_desc: String, timestamp_output_path: PathBuf) -> (bool, Option<MerkleTree>, FailureReason, Option<usize>, Option<PathBuf>, Option<PathBuf>, Option<PathBuf>) {
     let (locktime_result, locktime_reason) = get_locktime();
@@ -485,38 +495,34 @@ pub fn build_timestamp_gui(corpus_name: String, identifier: String, hashes_sourc
 
     let mut output_dir = timestamp_output_path;
     output_dir.push("merkle.txt");
-    let tree_filename_buf = output_dir.clone();
-    let tree_filename = tree_filename_buf.to_str().unwrap();
+    let tree_filename = output_dir.clone();
     output_dir.pop();
 
     output_dir.push("explain.txt");
-    let explain_filename_buf = output_dir.clone();
-    let explain_filename = explain_filename_buf.to_str().unwrap();
+    let explain_filename = output_dir.clone();
     output_dir.pop();
 
     output_dir.push("tag.txt");
-    let tag_filename_buf = output_dir.clone();
-    let tag_filename = tag_filename_buf.to_str().unwrap();
+    let tag_filename = output_dir.clone();
     output_dir.pop();
 
     output_dir.push("leaf_hashes.txt");
-    let leaf_hash_filename_buf = output_dir.clone();
-    let leaf_hash_filename = leaf_hash_filename_buf.to_str().unwrap();
+    let leaf_hash_filename = output_dir.clone();
     output_dir.pop();
 
     //let output_path = self.timestamp_output_path.as_ref().unwrap().to_str().unwrap();
-    let mut corpus_path = "";
+    let mut corpus_path = &Default::default();
     let hashes_path;
 
     if hashes_source {
-        hashes_path = input_hashes_path.as_ref().unwrap().to_str().unwrap();
+        hashes_path = input_hashes_path.as_ref().unwrap();
     }
     else {
-        corpus_path = input_source_dir.as_ref().unwrap().to_str().unwrap();
-        hashes_path = leaf_hash_filename;
+        corpus_path = input_source_dir.as_ref().unwrap();
+        hashes_path = &leaf_hash_filename;
     }
 
-    let (result, reason) = build_timestamp(corpus_path, hashes_path, hashes_source, tree_filename, explain_filename, tag_filename, &corpus_name, locktime, &identifier, Some(corpus_desc), Some(corpus_motiv), Some(user_desc));
+    let (result, reason) = build_timestamp(corpus_path, hashes_path, hashes_source, &tree_filename, &explain_filename, &tag_filename, &corpus_name, locktime, &identifier, Some(corpus_desc), Some(corpus_motiv), Some(user_desc));
     if result.is_none() {
         return (false, None, reason, None, None, None, None);
     }
@@ -525,11 +531,8 @@ pub fn build_timestamp_gui(corpus_name: String, identifier: String, hashes_sourc
 }
 
 pub fn finalize_timestamp_gui(generated_tree_filename: PathBuf, generated_explain_filename: PathBuf, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
-
-    let tree_path = generated_tree_filename.to_str().unwrap();
-    let explain_path = generated_explain_filename.to_str().unwrap();
     
-    let (tree, reason) = finalize_timestamp(tree_path, explain_path, corpus_name, identifier, tx_hash);
+    let (tree, reason) = finalize_timestamp(&generated_tree_filename, &generated_explain_filename, corpus_name, identifier, tx_hash);
 
     if tree.is_some() {
         return (true, tree, reason);

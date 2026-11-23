@@ -2,6 +2,7 @@ use hex_fmt::HexFmt;
 use sha2::{Sha256, Digest};
 use std::{fmt, println};
 use std::fs::File;
+use std::path::PathBuf;
 use std::io::{Read,Write,BufReader, prelude::*,};
 use std::collections::HashMap;
 use base64::prelude::*;
@@ -24,10 +25,10 @@ pub fn double_hash(input: &[u8]) -> [u8; 32] {
 }
 
 // apply SHA256 hash twice to file contents.
-pub fn double_hash_from_file(filepath: &str) -> (Option<[u8; 32]>, FailureReason) {
+pub fn double_hash_from_file(filepath: &PathBuf) -> (Option<[u8; 32]>, FailureReason) {
     let file_result = File::open(filepath);
     if file_result.is_err() {
-        println!("Could not find file to hash at location {}", filepath);
+        println!("Could not find file to hash at location {}", filepath.to_string_lossy());
         return (None, FailureReason::FileNotFound)
     }
     let mut file = file_result.unwrap();
@@ -37,8 +38,8 @@ pub fn double_hash_from_file(filepath: &str) -> (Option<[u8; 32]>, FailureReason
     loop {
             let bytes_read_result = file.read(&mut buffer);
             if bytes_read_result.is_err() {
-                println!("Could not read file to hash at location {}", filepath);
-                return (None, FailureReason::FileReadError(filepath.to_string()))
+                println!("Could not read file to hash at location {}", filepath.to_string_lossy());
+                return (None, FailureReason::FileReadError(filepath.to_string_lossy().into_owned()))
             }
             let bytes_read = bytes_read_result.unwrap();
             if bytes_read == 0 {
@@ -93,7 +94,7 @@ impl MerkleNode {
     }
 
     // create a new leaf node from a file.
-    fn new_leaf_from_file(filepath: &str, index: usize) -> (Option<Self>, FailureReason) {
+    fn new_leaf_from_file(filepath: &PathBuf, index: usize) -> (Option<Self>, FailureReason) {
         let (hash_result, reason) = double_hash_from_file(filepath);
         let hash = match hash_result {
             Some(value) => value,
@@ -143,15 +144,15 @@ pub struct MerkleProof {
 
 #[allow(dead_code)]
 impl MerkleProof {
-    pub fn new_from_file(proof_filepath: &str) -> (Option<MerkleProof>, FailureReason) {
+    pub fn new_from_file(proof_filepath: &PathBuf) -> (Option<MerkleProof>, FailureReason) {
         let mut proof_hashes: Vec<[u8; 32]> = vec![];
         let mut proof_directions: Vec<bool> = vec![];
 
 
         let file_result = File::open(proof_filepath);
         if file_result.is_err() {
-            println!("Couldn't find proof file at location {}", proof_filepath);
-            return (None, FailureReason::ProofFileNotFound(proof_filepath.to_string()));
+            println!("Couldn't find proof file at location {}", proof_filepath.to_string_lossy());
+            return (None, FailureReason::ProofFileNotFound(proof_filepath.to_string_lossy().to_string()));
         }
         let file = file_result.unwrap();
         let mut reader = BufReader::new(file);
@@ -300,7 +301,7 @@ impl MerkleProof {
     }
 
     // 
-    pub fn fossilize_proof(&self, filename: &str, corpus_name: &str) -> FailureReason{
+    pub fn fossilize_proof(&self, filename: &PathBuf, corpus_name: &str) -> FailureReason{
         let template = Template::from(PROOF_TEMPLATE);
 
         // identifier: ${identifier}
@@ -381,7 +382,7 @@ impl MerkleProof {
     }
 
     // verifies that some file is part of a merkle tree (represented by its root hash).
-    pub fn verify_proof_for_file(&self, filepath: &str, autoaccept: bool, verbose: bool) -> (bool, FailureReason, Option<i64>, Option<usize>) {
+    pub fn verify_proof_for_file(&self, filepath: &PathBuf, autoaccept: bool, verbose: bool) -> (bool, FailureReason, Option<i64>, Option<usize>) {
         let (result, reason) = double_hash_from_file(filepath);
         if result.is_none() {
             return (false, reason, None, None)
@@ -444,12 +445,12 @@ impl MerkleTree {
     }
 
     // build tree from a collection of files.
-    pub fn new_from_files(filepaths: Vec<&str>) -> (Option<Self>, FailureReason) {
+    pub fn new_from_files(filepaths: Vec<PathBuf>) -> (Option<Self>, FailureReason) {
         let num_leaves = filepaths.len();
         let mut nodes: Vec<MerkleNode> = vec![];
         nodes.push(MerkleNode { hash: [0u8; 32], index: 0, left: 0, right: 0, parent: 0 }); // dummy node at index 0
-        for (index, filepath) in filepaths.iter().enumerate() {
-            let (node_result, reason) = MerkleNode::new_leaf_from_file(filepath, index + 1);
+        for (index, filepath) in filepaths.into_iter().enumerate() {
+            let (node_result, reason) = MerkleNode::new_leaf_from_file(&filepath, index + 1);
             let node = match node_result {
                 Some(value) => value,
                 None => return (None, reason)
@@ -550,11 +551,11 @@ impl MerkleTree {
     }
 
     // rebuild tree that has been written to a file in my "fossilized" format. 
-    pub fn new_from_unfinished_tree_file(tree_filename: &str) -> (Option<Self>, FailureReason) {
-        let file_result = File::open(tree_filename);
+    pub fn new_from_unfinished_tree_file(tree_filename: &PathBuf) -> (Option<Self>, FailureReason) {
+        let file_result = File::open(&tree_filename);
         if file_result.is_err() {
-            println!("Couldn't open unfinished merkle tree file at location {}", tree_filename);
-            return (None, FailureReason::MerkleFileNotFound(tree_filename.to_string()))
+            println!("Couldn't open unfinished merkle tree file at location {}", tree_filename.to_string_lossy());
+            return (None, FailureReason::MerkleFileNotFound(tree_filename.to_string_lossy().into_owned()))
         }
         let file = file_result.unwrap();
         let mut reader = BufReader::new(file);
@@ -564,7 +565,7 @@ impl MerkleTree {
         for i in 0..3 {
             let result = reader.read_line(&mut header_lines[i]);
             if result.is_ok_and(|value| value == 0) {
-                println!("Unfinished merkle tree file at location {} has fewer than 3 lines", tree_filename);
+                println!("Unfinished merkle tree file at location {} has fewer than 3 lines", tree_filename.to_string_lossy());
                 return (None, FailureReason::MerkleFileNotParseable(i))
             }
         }
@@ -586,11 +587,11 @@ impl MerkleTree {
     }
 
     // builds tree from a file that simply lists the leaf hashes. Used for "blind" tree construction when user does not want to reveal the files that were hashed.
-    pub fn new_from_hashes(hashes_filepath: &str) -> (Option<Self>, FailureReason) {
+    pub fn new_from_hashes(hashes_filepath: &PathBuf) -> (Option<Self>, FailureReason) {
         let file_result = File::open(hashes_filepath);
         if file_result.is_err() {
-            println!("Couldn't open leaf hashes file at location {}", hashes_filepath);
-            return (None, FailureReason::LeafHashesFileNotFound(hashes_filepath.to_string()))
+            println!("Couldn't open leaf hashes file at location {}", hashes_filepath.to_string_lossy());
+            return (None, FailureReason::LeafHashesFileNotFound(hashes_filepath.to_string_lossy().into_owned()))
         }
         let file = file_result.unwrap();
         let mut reader = BufReader::new(file);
@@ -712,7 +713,7 @@ impl MerkleTree {
     }
 
     // returns whether some file was included in the merkle tree.
-    pub fn verify_from_file(&self, filepath: &str) -> bool {
+    pub fn verify_from_file(&self, filepath: &PathBuf) -> bool {
         let (result, _) = double_hash_from_file(filepath);
         if result.is_none() {
             return false;
@@ -761,17 +762,17 @@ impl MerkleTree {
         true
     }
 
-    pub fn write_leaf_hashes_to_file(&self, leaf_hash_filename: &str) -> FailureReason {
+    pub fn write_leaf_hashes_to_file(&self, leaf_hash_filename: &PathBuf) -> FailureReason {
         let file_result = File::create(leaf_hash_filename);
         if file_result.is_err() {
-            println!("Failed to write leaf hashes to location {}", leaf_hash_filename);
+            println!("Failed to write leaf hashes to location {}", leaf_hash_filename.to_string_lossy());
             return FailureReason::PathNotWriteable;
         }
         let mut file = file_result.unwrap();
         let num_leaves_line = format!("{}\n", self.num_leaves);
         let result = file.write_all(&num_leaves_line.into_bytes());
         if result.is_err() {
-            println!("Failed to write leaf hashes to location {}", leaf_hash_filename);
+            println!("Failed to write leaf hashes to location {}", leaf_hash_filename.to_string_lossy());
             return FailureReason::PathNotWriteable;
         }
 
@@ -779,7 +780,7 @@ impl MerkleTree {
             let line = format!("{}\n", BASE64_STANDARD.encode(self.nodes[i].hash));
             let result = file.write_all(line.as_bytes());
             if result.is_err() {
-                println!("Failed to write leaf hashes to location {}", leaf_hash_filename);
+                println!("Failed to write leaf hashes to location {}", leaf_hash_filename.to_string_lossy());
                 return FailureReason::PathNotWriteable;
             }
         }
@@ -788,7 +789,7 @@ impl MerkleTree {
     }
 
     // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
-    pub fn write_unfinished_tree_to_file(&self, tree_filename: &str, date: &str,) -> FailureReason {
+    pub fn write_unfinished_tree_to_file(&self, tree_filename: &PathBuf, date: &str,) -> FailureReason {
         let template = Template::from(UNFINISHED_MERKLE_TEMPLATE);
 
         let mut values: HashMap<&str, &str> = HashMap::new();
@@ -799,13 +800,13 @@ impl MerkleTree {
 
         let file_result = File::create(tree_filename);
         if file_result.is_err() {
-            println!("Failed to write unfinished merkle tree to location {}", tree_filename);
+            println!("Failed to write unfinished merkle tree to location {}", tree_filename.to_string_lossy());
             return FailureReason::PathNotWriteable;
         }
         let mut file = file_result.unwrap();
         let result = file.write_all(&text.into_bytes());
         if result.is_err() {
-            println!("Failed to write unfinished merkle tree to location {}", tree_filename);
+            println!("Failed to write unfinished merkle tree to location {}", tree_filename.to_string_lossy());
             return FailureReason::PathNotWriteable;
         }
 
@@ -813,7 +814,7 @@ impl MerkleTree {
             let line = format!("{}\n", BASE64_STANDARD.encode(self.nodes[i].hash));
             let result = file.write_all(line.as_bytes());
             if result.is_err() {
-            println!("Failed to write unfinished merkle tree to location {}", tree_filename);
+            println!("Failed to write unfinished merkle tree to location {}", tree_filename.to_string_lossy());
                 return FailureReason::PathNotWriteable;
             }
         }
@@ -845,7 +846,7 @@ impl TimestampedMerkleTree {
         TimestampedMerkleTree::new(tree, identifier, utc_raw.timestamp(), block_height, tx_hash, explain_hash)
     }
 
-    pub fn new_from_fossilized_tree(fossil_filepath: &str) -> (Option<TimestampedMerkleTree>, FailureReason) {
+    pub fn new_from_fossilized_tree(fossil_filepath: &PathBuf) -> (Option<TimestampedMerkleTree>, FailureReason) {
         let file_result = File::open(fossil_filepath);
         let file;
         match file_result {
@@ -853,8 +854,8 @@ impl TimestampedMerkleTree {
                 file = value;
             },
             Err(_) => {
-            println!("Could not find merkle tree file at location {}", fossil_filepath);
-                return (None, FailureReason::MerkleFileNotFound(fossil_filepath.to_string()));
+            println!("Could not find merkle tree file at location {}", fossil_filepath.to_string_lossy());
+                return (None, FailureReason::MerkleFileNotFound(fossil_filepath.to_string_lossy().to_string()));
             },
         }
         let mut reader = BufReader::new(file);
@@ -950,7 +951,7 @@ impl TimestampedMerkleTree {
         self.verified_timestamp
     }
 
-    pub fn verify_timestamp(&mut self, explain_filepath: &str, autoaccept: bool) -> (bool, FailureReason) {
+    pub fn verify_timestamp(&mut self, explain_filepath: &PathBuf, autoaccept: bool) -> (bool, FailureReason) {
         if autoaccept {
             println!("Autoaccepting the blockchain verification process for testing purposes. DO NOT TRUST THIS RESULT AS A SECURE TIMESTAMP.");
             return (true, FailureReason::AutoAccept);
@@ -1001,7 +1002,7 @@ impl TimestampedMerkleTree {
     }
 
     // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
-    pub fn fossilize_tree(&self, tree_filename: &str, corpus_name: &str) -> FailureReason {
+    pub fn fossilize_tree(&self, tree_filename: &PathBuf, corpus_name: &str) -> FailureReason {
         if !(self.is_verified()) {
             println!("!!!!!!!!!!");
             println!("WARNING: You are fossilizing an unverified timestamped merkle tree. You should only be doing this as a test. There is no guarantee that the resulting fossil file will verify on the blockchain.");
@@ -1034,13 +1035,13 @@ impl TimestampedMerkleTree {
 
         let file_result = File::create(tree_filename);
         if file_result.is_err() {
-            println!("Could not write fossilized tree file to location {}", tree_filename);
+            println!("Could not write fossilized tree file to location {}", tree_filename.to_string_lossy());
             return FailureReason::PathNotWriteable
         }
         let mut file = file_result.unwrap();
         let result = file.write_all(&text.into_bytes());
         if result.is_err() {
-            println!("Could not write fossilized tree file to location {}", tree_filename);
+            println!("Could not write fossilized tree file to location {}", tree_filename.to_string_lossy());
             return FailureReason::PathNotWriteable
         }
 
@@ -1048,7 +1049,7 @@ impl TimestampedMerkleTree {
             let line = format!("{}\n", BASE64_STANDARD.encode(self.tree.nodes[i].hash));
             let result = file.write_all(line.as_bytes());
             if result.is_err() {
-            println!("Could not write fossilized tree file to location {}", tree_filename);
+            println!("Could not write fossilized tree file to location {}", tree_filename.to_string_lossy());
                 return FailureReason::PathNotWriteable
             }
         }
@@ -1084,7 +1085,7 @@ impl TimestampedMerkleTree {
         MerkleProof { root_hash, proof_hashes, proof_directions, identifier: self.identifier.clone(), num_leaves: self.tree.num_leaves, explain_hash: self.explain_hash, block_height: self.block_height, utc_timestamp: self. utc_timestamp, tx_hash: self.tx_hash}
     }
 
-    pub fn produce_proof_from_file(&self, filepath: &str) -> (Option<MerkleProof>, FailureReason) {
+    pub fn produce_proof_from_file(&self, filepath: &PathBuf) -> (Option<MerkleProof>, FailureReason) {
         let (result, reason) = double_hash_from_file(filepath);
         if result.is_none() {
             return (None, reason)

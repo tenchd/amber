@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::Write;
+use std::path::PathBuf;
 use hex_fmt::HexFmt;
 use text_template::Template;
 use std::collections::HashMap;
@@ -30,7 +31,7 @@ pub fn create_chain_tag(identifier: &str, num_merkle_leaves: u32, merkle_root_ha
 }
 
 // Inserts relevant details about the merkle tree, target block, day & time, etc. into the explanatory document and writes the document as a txt file.
-pub fn write_document(output_filename: &str, corpus_name: &str, utc: chrono::DateTime<chrono::Utc>, date: &str, time: &str, locktime: usize, identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32], corpus_desc: Option<String>, corpus_motiv: Option<String>, user_desc: Option<String>) -> FailureReason {
+pub fn write_document(output_filename: &PathBuf, corpus_name: &str, utc: chrono::DateTime<chrono::Utc>, date: &str, time: &str, locktime: usize, identifier: &str, num_merkle_leaves: u32, merkle_root_hash: [u8; 32], corpus_desc: Option<String>, corpus_motiv: Option<String>, user_desc: Option<String>) -> FailureReason {
     let template = Template::from(EXPLAIN_TEMPLATE);
 
     let mut values: HashMap<&str, &str> = HashMap::new();

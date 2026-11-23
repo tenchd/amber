@@ -1,5 +1,6 @@
 #[allow(unused_parens)]
 
+use std::path::PathBuf;
 use config::Config;
 use clap::Parser;
 use amber_core::{build_timestamp, finalize_timestamp, verify_proof, verify_tree, verify_file, make_proof, parse_hash_from_string};
@@ -53,7 +54,7 @@ fn main() {
             println!("Ignoring verification request. Building tree+docs.")
         }
 
-        build_timestamp(&corpus_path, &hashes_path, args.hash_source, &generated_tree_filename, &generated_explain_filename, &generated_tag_filename, &corpus_name, locktime, &identifier, None, None, None);
+        build_timestamp(&PathBuf::from(corpus_path), &PathBuf::from(hashes_path), args.hash_source, &PathBuf::from(generated_tree_filename), &PathBuf::from(generated_explain_filename), &PathBuf::from(generated_tag_filename), &corpus_name, locktime, &identifier, None, None, None);
 
     }
     else if args.generate_timestamp {
@@ -64,25 +65,25 @@ fn main() {
         let (tx_hash, _) = parse_hash_from_string(&tx_hash_string);
         // need to read in unfinished merkle file, build a timestamped merkle file from it, verify the timestamp on the chain, then write to the timestamped tree to file.
         
-        finalize_timestamp(generated_tree_filename, generated_explain_filename, &corpus_name, &identifier, tx_hash.unwrap());
+        finalize_timestamp(&PathBuf::from(generated_tree_filename), &PathBuf::from(generated_explain_filename), &corpus_name, &identifier, tx_hash.unwrap());
 
     }
     else if args.verify_timestamp {
-        _ = verify_tree(&provided_tree_filename, &provided_explain_filename);
+        _ = verify_tree(&PathBuf::from(provided_tree_filename), &PathBuf::from(provided_explain_filename));
     }
     else if args.file_to_verify != "".to_string() {
         let filepath = args.file_to_verify;
         if args.proof_verify != "".to_string() {
             let proof_file = args.proof_verify;
-            _ = verify_proof(&filepath, &proof_file);
+            _ = verify_proof(&PathBuf::from(filepath), &PathBuf::from(proof_file));
         }
         else {
-            _ = verify_file(&provided_tree_filename, &filepath);
+            _ = verify_file(&PathBuf::from(provided_tree_filename), &PathBuf::from(filepath));
         }
     }
     else if args.make_proof != "".to_string() {
         let input_path: String = args.make_proof;
-        make_proof(&input_path, &provided_tree_filename, &provided_explain_filename, &corpus_name);
+        make_proof(&PathBuf::from(input_path), &PathBuf::from(provided_tree_filename), &PathBuf::from(provided_explain_filename), &corpus_name);
     }
     else {
         panic!("Need to provide a command line argument");

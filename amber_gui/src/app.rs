@@ -102,7 +102,7 @@ impl TemplateApp {
 
         thread::spawn(move || {
             let result = catch_panic(|| {
-                amber_core::verify_tree_gui(tree_filepath.unwrap(), explain_filepath.unwrap())
+                amber_core::verify_tree(&tree_filepath.unwrap(), &explain_filepath.unwrap())
             })
             .unwrap_or_else(|reason| (false, None, reason));
             let _ = tx.send(result);
@@ -136,7 +136,7 @@ impl TemplateApp {
         if self.ver_stat.verified.unwrap() {
             self.auth_stat.auth_attempted = true;
             if self.ver_stat.tree.is_some() && self.auth_stat.provided_file.is_some() {
-                let auth_file = self.auth_stat.provided_file.as_ref().unwrap().to_str().unwrap();
+                let auth_file = self.auth_stat.provided_file.as_ref().unwrap();
                 let result = self.ver_stat.tree.as_ref().unwrap().tree.verify_from_file(auth_file);
                 self.auth_stat.file_authenticated = Some(result);
                 self.auth_stat.file_auth_status = Some("Done.".to_string());
@@ -164,7 +164,7 @@ impl TemplateApp {
 
             thread::spawn(move || {
                 let result = catch_panic(|| {
-                    amber_core::verify_proof_gui(file_path, proof_file_path)
+                    amber_core::verify_proof(&file_path, &proof_file_path)
                 })
                 .unwrap_or_else(|reason| (false, reason, Some(0), String::new(), String::new(), Some(String::new()), Some(String::new()), String::new()));
                 let _ = tx.send(result);
@@ -219,7 +219,7 @@ impl TemplateApp {
 
             thread::spawn(move || {
                 let result = catch_panic(|| {
-                    amber_core::build_proof_gui(file_path, merkle_path, explain_path, &corpus_name)
+                    amber_core::make_proof(&file_path, &merkle_path, &explain_path, &corpus_name)
                 })
                 .unwrap_or_else(|reason| (false, reason));
                 let _ = tx.send(result);
