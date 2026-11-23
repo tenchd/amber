@@ -1,6 +1,7 @@
 #[allow(unused_parens)]
 
 use std::path::PathBuf;
+use std::process::ExitCode;
 use config::Config;
 use clap::Parser;
 use amber_core::{build_timestamp, finalize_timestamp, verify_proof, verify_tree, verify_file, make_proof, parse_hash_from_string};
@@ -31,7 +32,7 @@ struct Args {
     make_proof: String,
 }
 
-fn main() {
+fn main() -> ExitCode {
     let settings = Config::builder()
                     .add_source(config::File::with_name("config"))
                     .build()
@@ -54,7 +55,9 @@ fn main() {
             println!("Ignoring verification request. Building tree+docs.")
         }
 
-        build_timestamp(&PathBuf::from(corpus_path), &PathBuf::from(hashes_path), args.hash_source, &PathBuf::from(generated_tree_filename), &PathBuf::from(generated_explain_filename), &PathBuf::from(generated_tag_filename), &corpus_name, locktime, &identifier, None, None, None);
+        let (tree, _reason) = build_timestamp(&PathBuf::from(corpus_path), &PathBuf::from(hashes_path), args.hash_source, &PathBuf::from(generated_tree_filename), &PathBuf::from(generated_explain_filename), &PathBuf::from(generated_tag_filename), &corpus_name, locktime, &identifier, None, None, None);
+
+        if tree.is_some() { ExitCode::SUCCESS } else { ExitCode::FAILURE }
 
     }
     else if args.generate_timestamp {
@@ -65,25 +68,30 @@ fn main() {
         let (tx_hash, _) = parse_hash_from_string(&tx_hash_string);
         // need to read in unfinished merkle file, build a timestamped merkle file from it, verify the timestamp on the chain, then write to the timestamped tree to file.
         
-        finalize_timestamp(&PathBuf::from(generated_tree_filename), &PathBuf::from(generated_explain_filename), &corpus_name, &identifier, tx_hash.unwrap());
+        let (result, _tree, _reason) = finalize_timestamp(&PathBuf::from(generated_tree_filename), &PathBuf::from(generated_explain_filename), &corpus_name, &identifier, tx_hash.unwrap());
+        if result { ExitCode::SUCCESS } else { ExitCode::FAILURE }
 
     }
     else if args.verify_timestamp {
-        _ = verify_tree(&PathBuf::from(provided_tree_filename), &PathBuf::from(provided_explain_filename));
+        let (result, _tree, _reason) = verify_tree(&PathBuf::from(provided_tree_filename), &PathBuf::from(provided_explain_filename));
+        if result { ExitCode::SUCCESS } else { ExitCode::FAILURE }
     }
     else if args.file_to_verify != "".to_string() {
         let filepath = args.file_to_verify;
         if args.proof_verify != "".to_string() {
             let proof_file = args.proof_verify;
-            _ = verify_proof(&PathBuf::from(filepath), &PathBuf::from(proof_file));
+            let (result, _reason, _, _, _, _, _, _) = verify_proof(&PathBuf::from(filepath), &PathBuf::from(proof_file));
+            if result { ExitCode::SUCCESS } else { ExitCode::FAILURE }
         }
         else {
-            _ = verify_file(&PathBuf::from(provided_tree_filename), &PathBuf::from(filepath));
+            let result = verify_file(&PathBuf::from(provided_tree_filename), &PathBuf::from(filepath));
+            if result { ExitCode::SUCCESS } else { ExitCode::FAILURE }
         }
     }
     else if args.make_proof != "".to_string() {
         let input_path: String = args.make_proof;
-        make_proof(&PathBuf::from(input_path), &PathBuf::from(provided_tree_filename), &PathBuf::from(provided_explain_filename), &corpus_name);
+        let (result, _reason) = make_proof(&PathBuf::from(input_path), &PathBuf::from(provided_tree_filename), &PathBuf::from(provided_explain_filename), &corpus_name);
+        if result { ExitCode::SUCCESS } else { ExitCode::FAILURE }
     }
     else {
         panic!("Need to provide a command line argument");
