@@ -497,7 +497,7 @@ impl TemplateApp {
             let tx_hash = tx_hash_option.unwrap();
             thread::spawn(move || {
                 let result = catch_panic(|| {
-                    amber_core::finalize_timestamp_gui(tree_file, explain_file, &corpus_name, &identifier, tx_hash)
+                    amber_core::finalize_timestamp(&tree_file, &explain_file, &corpus_name, &identifier, tx_hash)
                 })
                 .unwrap_or_else(|reason| (false, None, reason));
                 let _ = tx.send(result);

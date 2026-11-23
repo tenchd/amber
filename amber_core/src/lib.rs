@@ -168,16 +168,16 @@ pub fn build_timestamp(corpus_path: &PathBuf, hashes_path: &PathBuf, hashes_sour
     (Some(tree), FailureReason::Success)
 }
 
-pub fn finalize_timestamp(generated_tree_filename: &PathBuf, generated_explain_filename: &PathBuf, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> (Option<TimestampedMerkleTree>, FailureReason) {
+pub fn finalize_timestamp(generated_tree_filename: &PathBuf, generated_explain_filename: &PathBuf, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
     let unfinished_tree_file = append_to_filename(generated_tree_filename, "_unfinished.txt");
     let (tree_result, reason) = MerkleTree::new_from_unfinished_tree_file(&unfinished_tree_file);
     if tree_result.is_none() {
-        return (None, reason)
+        return (false, None, reason)
     }
     let unfinished_tree = tree_result.unwrap();
     let (result, reason) = double_hash_from_file(generated_explain_filename);
     if result.is_none() {
-        return (None, reason);
+        return (false, None, reason);
     }
     let explain_hash = result.unwrap();
     let mut timestamped_tree = TimestampedMerkleTree::new_without_time(unfinished_tree, &identifier, tx_hash, explain_hash);
@@ -190,17 +190,17 @@ pub fn finalize_timestamp(generated_tree_filename: &PathBuf, generated_explain_f
         if write_reason == FailureReason::Success {
             println!("Timestamp verified! Wrote the updated merkle tree file at {}. Deleting temporary untimestamped merkle tree file at {}", generated_tree_filename.to_string_lossy(), unfinished_tree_file.to_string_lossy());
             std::fs::remove_file(unfinished_tree_file).unwrap();
-            return (Some(timestamped_tree), reason);
+            return (true, Some(timestamped_tree), reason);
         }
 
         else {
-            return (None, write_reason)
+            return (false, None, write_reason)
         }
     }
     if autoaccept{
         println!("WARNING: you set the autoaccept flag to true so we did not actually verify w.r.t. the blockchain. This was for testing purposes only.");
     }
-    (None, reason)
+    (false, None, reason)
 }
 
 pub fn verify_tree(provided_tree_filename: &PathBuf, provided_explain_filename: &PathBuf) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
@@ -472,20 +472,6 @@ pub fn get_locktime() -> (Option<usize>, FailureReason) {
     (Some(block_height + 1), FailureReason::Success)
 }
 
-// pub fn verify_tree_gui(tree_filename: &PathBuf, explain_filename: &PathBuf) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
-//     let (result, tree, reason) = verify_tree(tree_filename, explain_filename);
-
-//     (result, tree, reason)
-// }
-
-// pub fn verify_proof_gui(filepath: PathBuf, proof_filepath: PathBuf) -> (bool, FailureReason, Option<i64>, String, String, Option<String>, Option<String>, String) {
-//     verify_proof(&filepath, &proof_filepath)
-// }
-
-// pub fn build_proof_gui(file_path: PathBuf, merkle_path: PathBuf, explain_path: PathBuf, corpus_name: &str) -> (bool, FailureReason) {
-//     make_proof(&file_path, &merkle_path, &explain_path, corpus_name)
-// }
-
 pub fn build_timestamp_gui(corpus_name: String, identifier: String, hashes_source: bool, input_hashes_path: Option<PathBuf>, input_source_dir: Option<PathBuf>, corpus_desc: String, corpus_motiv: String, user_desc: String, timestamp_output_path: PathBuf) -> (bool, Option<MerkleTree>, FailureReason, Option<usize>, Option<PathBuf>, Option<PathBuf>, Option<PathBuf>) {
     let (locktime_result, locktime_reason) = get_locktime();
     if locktime_result.is_none() {
@@ -528,16 +514,6 @@ pub fn build_timestamp_gui(corpus_name: String, identifier: String, hashes_sourc
     }
 
     (true, result, FailureReason::Success, Some(locktime), Some(PathBuf::from(tree_filename)), Some(PathBuf::from(explain_filename)), Some(PathBuf::from(tag_filename)))
-}
-
-pub fn finalize_timestamp_gui(generated_tree_filename: PathBuf, generated_explain_filename: PathBuf, corpus_name: &str, identifier: &str, tx_hash: [u8; 32]) -> (bool, Option<TimestampedMerkleTree>, FailureReason) {
-    
-    let (tree, reason) = finalize_timestamp(&generated_tree_filename, &generated_explain_filename, corpus_name, identifier, tx_hash);
-
-    if tree.is_some() {
-        return (true, tree, reason);
-    }
-    (false, None, reason)
 }
 
 pub fn generate_op_return_script(receiving_address: &str, balance: f64, tag: &str) -> (Option<String>, Option<f64>, FailureReason) {
