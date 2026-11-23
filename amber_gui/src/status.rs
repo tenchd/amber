@@ -74,6 +74,8 @@ pub struct AuthenticationStatus {
     pub provided_file_dialog: FileDialog,
     pub provided_file: Option<PathBuf>,
     pub auth_attempted: bool,
+    pub auth_running: bool, 
+    pub auth_result_rx: Option<Receiver<(Option<[u8; 32]>, FailureReason)>>,
     pub file_authenticated: Option<bool>,
     pub file_auth_status: Option<String>,
 }
@@ -84,6 +86,8 @@ impl AuthenticationStatus {
             provided_file_dialog: FileDialog::new(),
             provided_file: None,
             auth_attempted: false,
+            auth_running: false,
+            auth_result_rx: None,
             file_authenticated: None,
             file_auth_status: None,
         }
@@ -92,6 +96,8 @@ impl AuthenticationStatus {
     pub fn clear_auth_state(&mut self) {
         self.file_auth_status = None;
         self.file_authenticated = None;
+        self.auth_result_rx = None;
+        self.auth_attempted = false;
     }
 }
 

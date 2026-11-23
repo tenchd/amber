@@ -113,14 +113,22 @@ impl AmberApp {
         }
     }
 
-    fn authenticate_file(&mut self) {
+    fn start_authenticate_file(&mut self) {
         if self.ver_stat.verified.unwrap() {
             self.auth_stat.auth_attempted = true;
             if self.ver_stat.tree.is_some() && self.auth_stat.provided_file.is_some() {
-                let auth_file = self.auth_stat.provided_file.as_ref().unwrap();
-                let result = self.ver_stat.tree.as_ref().unwrap().tree.verify_from_file(auth_file);
-                self.auth_stat.file_authenticated = Some(result);
-                self.auth_stat.file_auth_status = Some("Done.".to_string());
+                let auth_file = self.auth_stat.provided_file.clone().unwrap();
+                self.auth_stat.auth_running = true;
+                let (tx, rx) = mpsc::channel();
+                self.auth_stat.auth_result_rx = Some(rx);
+                thread::spawn(move || {
+                    let result = catch_panic(|| {
+                        amber_core::merkle::double_hash_from_file(&auth_file)
+                    })
+                    .unwrap_or_else(|reason| (None, reason));
+                    let _ = tx.send(result);
+                });
+
             }
             else {
                 self.auth_stat.file_auth_status = Some("You must specify a file to authenticate.".to_string());
@@ -130,6 +138,30 @@ impl AmberApp {
         else {
             self.auth_stat.file_auth_status = Some("You must verify a merkle tree before you authenticate files!".to_string())
         }
+    }
+
+    fn finish_authenticate_file(&mut self) {
+        let Some(rx) = &self.auth_stat.auth_result_rx else { return };
+        let (hash, reason) = match rx.try_recv() {
+            Ok(message) => message,
+            Err(TryRecvError::Empty) => return, // still running; check again next frame
+            Err(TryRecvError::Disconnected) => (
+                None,
+                FailureReason::Internal("the background task stopped without reporting a result".to_string()),
+            ),
+        };
+
+        if hash.is_none() {
+            self.auth_stat.file_auth_status = Some(format!("Couldn't authenticate for the following reason: {reason}"));
+        }
+        else {
+            println!("{}", HexFmt(hash.unwrap()));
+            let authenticated = self.ver_stat.tree.as_ref().unwrap().tree.verify_hash(hash.unwrap());
+            self.auth_stat.file_authenticated = Some(authenticated);
+            self.auth_stat.file_auth_status = Some("Done.".to_string());   
+        }
+        self.auth_stat.auth_running = false;
+        self.auth_stat.auth_result_rx = None;
     }
 
     fn start_verify_proof(&mut self) {
@@ -616,6 +648,9 @@ impl AmberApp {
         if self.ver_stat.async_running {
             self.finish_verify();
         }
+        if self.auth_stat.auth_running {
+            self.finish_authenticate_file();
+        }
 
         ui.heading("Verify Files with a Secure Timestamp");
 
@@ -739,9 +774,14 @@ impl AmberApp {
             if self.auth_stat.provided_file.is_some(){
                 ui.label(format!("File to authenticate: {:?}", self.auth_stat.provided_file.clone().unwrap()));
                 //if ui.button("Authenticate file").clicked() {
-                if ui.add_enabled(!self.auth_stat.auth_attempted, egui::Button::new("Authenticate file")).clicked() {
+                if ui.add_enabled(!self.auth_stat.auth_attempted && !self.auth_stat.auth_running, egui::Button::new("Authenticate file")).clicked() {
                     self.auth_stat.clear_auth_state();
-                    self.authenticate_file();
+                    self.start_authenticate_file();
+                }
+
+                if self.auth_stat.auth_running {
+                    ui.spinner();
+                    ui.label("Authenticating file...");
                 }
 
                 if self.auth_stat.file_auth_status.is_some() {
