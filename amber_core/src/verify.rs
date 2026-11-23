@@ -306,13 +306,13 @@ pub fn get_fee_estimate() -> (Option<f64>, FailureReason) {
 pub fn generate_op_return_script(receiving_address: &str, balance: f64, tag: &str) -> (Option<String>, Option<f64>, FailureReason) {
     let script_template_str = "${receiving_address},${change}\nscript(OP_RETURN ${tag}), 0";
     let script_template = Template::from(script_template_str);
-    // fee ratio is in satoshis/vbyte. message will have 198 vbytes. convert to mBTC
+    // fee ratio is in satoshis/vbyte. message will have at most 266 vbytes. convert to mBTC
     let (fee_estimate_result, reason) = get_fee_estimate();
     let fee_rate = match fee_estimate_result {
         Some(value) => value,
         None => return (None, None, reason),
     };
-    let fee = fee_rate * 229.0 * 0.00001;
+    let fee = fee_rate * 266.0 * 0.00001;
     let mut change= balance - fee;
     let round_factor = 100000.0;
     change = (change * round_factor).round()/ round_factor;

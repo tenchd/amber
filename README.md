@@ -148,7 +148,7 @@ If you want to build a Merkle tree from some other leaf hash file, simply set `h
 ### Second Step: Writing to the Blockchain
 Submit a transaction to the Bitcoin blockchain with a 0-sat output whose script is a single OP_RETURN command which writes the exact 76-byte hash dump contained in `generated_timestamp/tag.txt`. If you are not familiar with how to do this, I recommend you follow [this guide](https://planb.academy/en/tutorials/wallet/desktop/electrum-opreturn-46cd3701-cb52-4dda-8251-9fd10e8f8542). I further recommend that you set a relatively high transaction fee to increase the odds that your transaction is mined quickly, ideally within one or two blocks (the guide indicates how to do this).
 
-Wait until the transaction is mined into a block, and then for five subsequent blocks to be mined. At this point the transaction has been confirmed by six blocks and can be considered secure and final. 
+Wait until the transaction is mined into a block, and then for five subsequent blocks to be mined. At this point the transaction has been confirmed by six blocks and can be considered secure and final. (If you are in a rush, I think you can safely move to the next step after 3 confirmations instead of 6.)
 
 Note the transaction hash of your confirmed blockchain transaction.
 

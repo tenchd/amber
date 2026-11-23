@@ -1543,11 +1543,12 @@ impl AmberApp {
         ui.heading("Generate the OP_RETURN script");
         ui.label("First, we're going to generate the OP_RETURN script that will write the message to the blockchain.");
 
-        ui.label("1. Open Electrum and unlock your wallet with your password. Go to the Addresses tab.");
-        ui.label("2. Choose an address with a balance greater than 0. Right-click the address and choose Copy -> Address and paste it in the box below:");
+        ui.label("1. Open Electrum and unlock your wallet with your password.");
+        ui.label("2. Click Tools -> Preferences -> Units and make sure \"Base unit\" is set to \"mBTC\".");
+        ui.label("3. Go to the Addresses tab. Choose an address with a balance greater than 0. Right-click the address and choose Copy -> Address and paste it in the box below:");
         ui.add_enabled(!self.build_ts_stat.script_attempted, egui::TextEdit::singleline(&mut self.build_ts_stat.receiving_address));
 
-        ui.label("3. Next, right-click the same address and choose Copy -> Balance and paste the result in the box below:");
+        ui.label("4. Next, right-click the same address and choose Copy -> Balance and paste the result in the box below:");
         ui.add_enabled(!self.build_ts_stat.script_attempted, egui::TextEdit::singleline(&mut self.build_ts_stat.balance_string));
 
         if self.build_ts_stat.balance_string != "".to_string(){
@@ -1557,7 +1558,7 @@ impl AmberApp {
             }
         }
 
-        ui.label("4. Click this button to generate the script:");
+        ui.label("5. Click this button to generate the script:");
         if ui.add_enabled(self.build_ts_stat.receiving_address != "".to_string() && self.build_ts_stat.balance != 0.0 && !self.build_ts_stat.script_attempted && !self.build_ts_stat.script_running, egui::Button::new("Generate script")).clicked() {
             self.start_compute_script();
         }
@@ -1587,9 +1588,9 @@ impl AmberApp {
             }
             ui.heading("Submit the transaction");
             let locktime = self.build_ts_stat.locktime.unwrap();
-            ui.label("5. In Electrum, go to the Send tab. Copy the above script and paste it in the \"Pay to\" field. If you did this right, the text in the box should be highlighted green.");
+            ui.label("6. In Electrum, go to the Send tab. Copy the above script and paste it in the \"Pay to\" field. If you did this right, the text in the box should be highlighted green.");
 
-            ui.label("6. Click \"Pay...\". This will open up a popup window titled \"New Transaction\". Click \"Tools\" in the upper-right corner and check the \"Edit Locktime\" box. This will cause the following line to appear in the New Transaction popup window:");
+            ui.label("7. Click \"Pay...\". This will open up a popup window titled \"New Transaction\". Click \"Tools\" in the upper-right corner and check the \"Edit Locktime\" box. This will cause the following line to appear in the New Transaction popup window:");
 
             ui.add_sized(
             [300.0, 40.0],
@@ -1598,8 +1599,8 @@ impl AmberApp {
 
             ui.label(format!("Ensure that the LockTime number is EXACTLY {} (not the number in the example picture).", locktime));
             ui.label("Don't change anything else on this screen.");
-            ui.label("7. In Electrum in the New Transaction popup, click Ok. This will submit your transaction to the blockchain.");
-            ui.label("8. Click Continue below to finalize your timestamp.");
+            ui.label("8. In Electrum in the New Transaction popup, click Ok. This will submit your transaction to the blockchain.");
+            ui.label("9. Click Continue below to finalize your timestamp.");
         }
 
         if self.build_ts_stat.script_status.is_some() {
