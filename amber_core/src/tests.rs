@@ -293,7 +293,7 @@ use crate::{MerkleTree, build_merkle_tree_from_directory, merkle::{MerkleProof, 
             println!("Testing proof for leaf with index {}", index);
             let starting_hash = timestamped_tree.tree.nodes[index].hash;
             let proof = timestamped_tree.produce_proof(index);
-            let result = proof.verify_proof(starting_hash, true);
+            let (result, _reason) = proof.verify_proof(starting_hash, true);
             assert!(result);
             let (chain_result, _, _, _) = verify::verify_proof_timestamp(&proof, true);
             assert!(chain_result);

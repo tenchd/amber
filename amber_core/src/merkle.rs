@@ -348,8 +348,14 @@ impl MerkleProof {
     }
 
     // verifies a proof starting from the leaf hash, proceeding along the leaf-to-root path encoded by the proof until the root hash is reached. If the proof is valid, this computed root hash will match the Merkle tree root hash.
-    pub fn verify_proof(&self, starting_hash: [u8; 32], verbose: bool) -> bool {
+    pub fn verify_proof(&self, starting_hash: [u8; 32], verbose: bool) -> (bool, FailureReason) {
         let mut computed_hash = starting_hash;
+        let observed_length = self.proof_hashes.len();
+        let expected_length = ((self.num_leaves as f64).log2()).ceil() as usize;
+        if observed_length != expected_length {
+            if verbose {println!("Proof length is {observed_length} instead of the expected length of {expected_length}");}
+            return (false, FailureReason::ProofWrongLength(observed_length, expected_length))
+        }
         for (i, sibling_hash) in self.proof_hashes.iter().enumerate() {
             if self.proof_directions[i] {
                 computed_hash = double_hash(&[computed_hash, *sibling_hash].concat());
@@ -358,18 +364,19 @@ impl MerkleProof {
             }
         }
         if computed_hash != self.root_hash {
-            if verbose {println!("Computed hash doesn't match root hash. Proof verification failed.");}
-            return false;
+            if verbose {println!("File hash does not match first hash in proof file");}
+            return (false, FailureReason::FileHashMismatch)
         }
-        true
+        (true, FailureReason::Success)
     }
 
     // verifies that some data is part of a merkle tree (represented by its root hash).
     pub fn verify_proof_for_data(&self, data: &[u8], autoaccept: bool, verbose: bool) -> (bool, FailureReason, Option<i64>, Option<usize>) {
         let starting_hash = double_hash(data);
-        if !self.verify_proof(starting_hash, verbose){
+        let (result, reason) = self.verify_proof(starting_hash, verbose);
+        if !result {
             println!("File hash does not match first hash in proof file");
-            (false, FailureReason::FileHashMismatch, None, None)
+            (false, reason, None, None)
         }
         else if autoaccept {
             println!("Input data properly hashes up the tree to the root.");
@@ -388,9 +395,9 @@ impl MerkleProof {
             return (false, reason, None, None)
         }
         let starting_hash = result.unwrap();
-        if !self.verify_proof(starting_hash, verbose) {
-            println!("File hash does not match first hash in proof file");
-            (false, FailureReason::FileHashMismatch, None, None)
+        let (result, reason) = self.verify_proof(starting_hash, verbose);
+        if !result {
+            (false, reason, None, None)
         }
         else if autoaccept {
             if verbose {

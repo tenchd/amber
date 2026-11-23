@@ -396,6 +396,7 @@ pub enum FailureReason {
     ExplainFileNotParseable(usize), // code can't read/parse explain file
     ProofFileNotParseable(usize), // code can't read/parse merkle proof file
     ProofFileNotFound(String), // can't find proof file
+    ProofWrongLength(usize, usize), // proof has the wrong length of leaf-> root path
     ExplainHashMismatch,  // double SHA256 hash of explain.txt doesn't match the header entry in merkle.txt
     ExplainFileNotFound(String), // can't find explain file
     FileHashMismatch, // double SHA256 hash of file provided alongside proof doesn't match first hash in proof leaf-> root path
@@ -435,6 +436,7 @@ impl std::fmt::Display for FailureReason {
             FailureReason::ExplainFileNotFound(s) => write!(f, "Could not find explain file at location {s}."),
             FailureReason::ProofFileNotParseable(s) => write!(f, "The provided proof file could not be parsed. The problem is on line {s} of the file."),
             FailureReason::ProofFileNotFound(s) => write!(f, "The provided proof file path {s} could not be found."),
+            FailureReason::ProofWrongLength(s,t) => write!(f, "The provided proof has length {s} but should have length {t}."),
             FailureReason::ExplainHashMismatch => write!(f, "The hash of explain.txt does not match the hash listed in the merkle/proof file header."),
             FailureReason::FileHashMismatch => write!(f, "The hash of the provided file does not match the expected hash in the proof file."),
             FailureReason::FileNotInMerkleTree => write!(f, "The provided file is not in the Merkle tree."),
