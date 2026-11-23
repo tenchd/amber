@@ -24,8 +24,6 @@ version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3b7f7f85a7e5f68090000ed7622545829afd484d210358702ae4cb97dd0c320"
 dependencies = [
- "enumn",
- "serde",
  "uuid",
 ]
 
@@ -148,7 +146,6 @@ dependencies = [
  "cfg-if",
  "getrandom 0.3.4",
  "once_cell",
- "serde",
  "version_check",
  "zerocopy",
 ]
@@ -198,7 +195,6 @@ dependencies = [
  "hex",
  "hex-literal",
  "hex_fmt",
- "hybrid-array",
  "rand 0.10.3",
  "reqwest",
  "serde_json",
@@ -213,26 +209,15 @@ name = "amber_gui"
 version = "0.1.0"
 dependencies = [
  "amber_core",
- "base64 0.23.1",
- "bitcoin",
  "chrono",
  "eframe",
  "egui",
  "egui-file-dialog",
  "egui_extras",
  "env_logger",
- "hex",
  "hex_fmt",
  "image",
- "log",
- "reqwest",
- "serde",
  "serde_json",
- "sha2",
- "text-template",
- "walkdir",
- "wasm-bindgen-futures",
- "web-sys",
 ]
 
 [[package]]
@@ -1407,7 +1392,6 @@ checksum = "0656a7530b9e2841ee7a5f983965bdd9840c32f4012f759cfd44b912cced6b34"
 dependencies = [
  "bytemuck",
  "emath",
- "serde",
 ]
 
 [[package]]
@@ -1436,8 +1420,6 @@ dependencies = [
  "pollster",
  "profiling",
  "raw-window-handle",
- "ron",
- "serde",
  "static_assertions",
  "wasm-bindgen",
  "web-sys",
@@ -1462,8 +1444,6 @@ dependencies = [
  "log",
  "nohash-hasher",
  "profiling",
- "ron",
- "serde",
  "smallvec",
  "unicode-segmentation",
  "web-sys",
@@ -1518,7 +1498,6 @@ dependencies = [
  "objc2-ui-kit 0.3.2",
  "profiling",
  "raw-window-handle",
- "serde",
  "smithay-clipboard",
  "web-time",
  "webbrowser",
@@ -1584,7 +1563,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52c8d4141cf0f60fb2f7aefaf352d3ffa5171ef0ab09731c64391801e95e48f1"
 dependencies = [
  "bytemuck",
- "serde",
 ]
 
 [[package]]
@@ -1649,17 +1627,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "enumn"
-version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f9ed6b3789237c8a0c1c505af1c7eb2c560df6186f01b098c3a1064ea532f38"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "env_filter"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1700,7 +1667,6 @@ dependencies = [
  "parking_lot",
  "profiling",
  "self_cell",
- "serde",
  "skrifa",
  "smallvec",
  "unicode-general-category",
@@ -1882,7 +1848,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "835ae9d781464a79026cde387f9cbc650c9a4909d7cf7e658b127e3c35d2f35d"
 dependencies = [
  "bytemuck",
- "serde",
 ]
 
 [[package]]
@@ -4860,9 +4825,6 @@ name = "smallvec"
 version = "1.16.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0d5d4b1981b8bbbb7aed204cae5726d683d5d6ac7e74ec54122ea28f315e7c8"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "smithay-client-toolkit"

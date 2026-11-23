@@ -13,7 +13,6 @@ use crate::{
     merkle::{MerkleProof, MerkleTree, TimestampedMerkleTree}
 };
 use chrono::{DurationRound, TimeDelta, prelude::*};
-extern crate rand;
 use bitcoin::{Address, Network, address::NetworkUnchecked};
 
 const AMBER_VERSION: &str = "0.1.0";
