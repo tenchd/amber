@@ -712,6 +712,11 @@ impl MerkleTree {
         present
     }
 
+    pub fn verify_hash(&self, hash: [u8; 32]) -> bool {
+        let present = self.hash_lookup.contains_key(&hash);
+        present
+    }
+
     // returns whether some file was included in the merkle tree.
     pub fn verify_from_file(&self, filepath: &PathBuf) -> bool {
         let (result, _) = double_hash_from_file(filepath);
