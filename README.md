@@ -25,7 +25,7 @@ Merkle tree files may be large because they contain information about all files 
 This repo includes a secure timestamp of the Project Gutenberg corpus as it existed on June 26, 2026. The Merkle tree file and explanatory document for this timestamp can be found in `amber_core/testing/reference_timestamp/`. In addition, a single file from the corpus and its corresponding Merkle proof file can be found in `amber_core/testing/`.
 
 # Using the code
-Currently, there are two ways to use this repo. You can use the GUI (more beginner-friendly, self-explanatory), or you can use the command line interface (supports more functionality, more carefully tested). The GUI is currently "correct-or-crash". This means that if it enters an incorrect state, it may handle the error gracefully, or it may crash. But it will not produce incorrect output.
+Currently, there are two ways to use this repo. You can use the GUI (more beginner-friendly, self-explanatory), or you can use the command line interface (supports more functionality, more carefully tested).
 
 # Quick Start: GUI Mode
 1. Clone this repo and `cd` into the directory.

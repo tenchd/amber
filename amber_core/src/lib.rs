@@ -64,7 +64,7 @@ pub fn build_doc_and_tag_from_saved_tree(tree_filename: &PathBuf, explain_filena
     let time = format!("{}", utc.format("%H:%M").to_string());
 
     let document_filename = explain_filename;
-    crate::tag::write_document(&document_filename, corpus_name, utc_raw, &date, &time, locktime, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), corpus_desc, corpus_motiv, user_desc);
+    crate::tag::write_document(&document_filename, corpus_name, utc_raw, &date, &time, locktime, identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), corpus_desc, corpus_motiv, user_desc)?;
     let document_hash = double_hash_from_file(&document_filename)?;
     let tag = crate::tag::create_chain_tag(identifier, unfossilized.num_leaves.try_into().unwrap(), unfossilized.get_root_hash(), document_hash);
     println!("Wrote explainer document to file {}", document_filename.to_string_lossy());
