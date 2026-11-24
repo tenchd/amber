@@ -9,7 +9,7 @@ use base64::prelude::*;
 use text_template::Template;
 
 use crate::{AMBER_VERSION, MERKLE_TEMPLATE, PROOF_TEMPLATE, UNFINISHED_MERKLE_TEMPLATE};
-use crate::FailureReason;
+use crate::{FailureReason, Warning};
 
 // apply SHA256 hash twice to input bytes.
 pub fn double_hash(input: &[u8]) -> [u8; 32] {
@@ -25,11 +25,11 @@ pub fn double_hash(input: &[u8]) -> [u8; 32] {
 }
 
 // apply SHA256 hash twice to file contents.
-pub fn double_hash_from_file(filepath: &PathBuf) -> (Option<[u8; 32]>, FailureReason) {
+pub fn double_hash_from_file(filepath: &PathBuf) -> Result<[u8; 32], FailureReason> {
     let file_result = File::open(filepath);
     if file_result.is_err() {
         println!("Could not find file to hash at location {}", filepath.to_string_lossy());
-        return (None, FailureReason::FileNotFound)
+        return Err(FailureReason::FileNotFound)
     }
     let mut file = file_result.unwrap();
     let mut hasher = Sha256::new();
@@ -39,7 +39,7 @@ pub fn double_hash_from_file(filepath: &PathBuf) -> (Option<[u8; 32]>, FailureRe
             let bytes_read_result = file.read(&mut buffer);
             if bytes_read_result.is_err() {
                 println!("Could not read file to hash at location {}", filepath.to_string_lossy());
-                return (None, FailureReason::FileReadError(filepath.to_string_lossy().into_owned()))
+                return Err(FailureReason::FileReadError(filepath.to_string_lossy().into_owned()))
             }
             let bytes_read = bytes_read_result.unwrap();
             if bytes_read == 0 {
@@ -54,22 +54,17 @@ pub fn double_hash_from_file(filepath: &PathBuf) -> (Option<[u8; 32]>, FailureRe
     let mut hash_bytes = vec![0u8; 32];
     hash_bytes.copy_from_slice(&result);
     let hash_bytes_length: [u8; 32] = hash_bytes.try_into().expect("Hash length must be 32 bytes");
-    (Some(hash_bytes_length), FailureReason::Success)
+    Ok(hash_bytes_length)
 }
 
-pub fn parse_hash_from_str(input_string: &str) -> (Option<[u8; 32]>, FailureReason) {
+pub fn parse_hash_from_str(input_string: &str) -> Result<[u8; 32], FailureReason> {
     let mut hash = [0u8; 32];
     let result = hex::decode_to_slice(input_string, &mut hash);
-    let reason;
     match result {
-        Ok(_) => {
-            reason = FailureReason::Success;
-            return (Some(hash), reason);
-        },
+        Ok(_) => {return Ok(hash)},
         Err(_) => {
             println!("Unable to parse tx hash {} into hex", input_string);
-            reason = FailureReason::TxHashNotParseable;
-            return (None, reason);
+            return Err(FailureReason::TxHashNotParseable);
         },
     }
 }
@@ -94,13 +89,9 @@ impl MerkleNode {
     }
 
     // create a new leaf node from a file.
-    fn new_leaf_from_file(filepath: &PathBuf, index: usize) -> (Option<Self>, FailureReason) {
-        let (hash_result, reason) = double_hash_from_file(filepath);
-        let hash = match hash_result {
-            Some(value) => value,
-            None => return (None, reason),
-        };
-        (Some(MerkleNode { hash, index, left: 0, right: 0, parent: 0 }), FailureReason::Success)
+    fn new_leaf_from_file(filepath: &PathBuf, index: usize) -> Result<Self, FailureReason> {
+        let hash = double_hash_from_file(filepath)?;
+        Ok( MerkleNode { hash, index, left: 0, right: 0, parent: 0 })
     }
 
     // create a new internal (non-leaf) node by concatenating child hashes and then double hashing.
@@ -144,7 +135,7 @@ pub struct MerkleProof {
 
 #[allow(dead_code)]
 impl MerkleProof {
-    pub fn new_from_file(proof_filepath: &PathBuf) -> (Option<MerkleProof>, FailureReason) {
+    pub fn new_from_file(proof_filepath: &PathBuf) -> Result<MerkleProof, FailureReason> {
         let mut proof_hashes: Vec<[u8; 32]> = vec![];
         let mut proof_directions: Vec<bool> = vec![];
 
@@ -152,7 +143,7 @@ impl MerkleProof {
         let file_result = File::open(proof_filepath);
         if file_result.is_err() {
             println!("Couldn't find proof file at location {}", proof_filepath.to_string_lossy());
-            return (None, FailureReason::ProofFileNotFound(proof_filepath.to_string_lossy().to_string()));
+            return Err(FailureReason::ProofFileNotFound(proof_filepath.to_string_lossy().to_string()));
         }
         let file = file_result.unwrap();
         let mut reader = BufReader::new(file);
@@ -162,66 +153,68 @@ impl MerkleProof {
             let result = reader.read_line(&mut header_lines[i]);
             if result.is_ok_and(|value| value == 0) {
                 println!("Proof file has too few lines. Expected at least 11 header lines but only read {}", i);
-                return (None, FailureReason::ProofFileNotParseable(i))
+                return Err(FailureReason::ProofFileNotParseable(i))
             }
         }
 
         let words  = header_lines[4].split_whitespace().collect::<Vec<&str>>();
         let identifier: &str = match words.get(2){
             Some(value) => value,
-            None => return (None, FailureReason::ProofFileNotParseable(5)),
+            None => return Err(FailureReason::ProofFileNotParseable(5)),
         };
 
         let words  = header_lines[5].split_whitespace().collect::<Vec<&str>>();
         let num_leaves_result = {match words.get(2) {
             Some(value) => value,
-            None => return (None, FailureReason::ProofFileNotParseable(6)),
+            None => return Err(FailureReason::ProofFileNotParseable(6)),
         }}.parse::<NodeHandle>();
         if num_leaves_result.is_err() {
             println!("Could not parse number of leaves header line: {:?}", words);
-            return (None, FailureReason::ProofFileNotParseable(6))
+            return Err(FailureReason::ProofFileNotParseable(6))
         }
         let num_leaves = num_leaves_result.unwrap();
 
         let words  = header_lines[6].split_whitespace().collect::<Vec<&str>>();
-        let (explain_hash, _) = parse_hash_from_str({match words.get(3) {
+        let explain_hash_result = parse_hash_from_str({match words.get(3) {
             Some(value) => value,
-            None => return (None, FailureReason::ProofFileNotParseable(7)),
+            None => return Err(FailureReason::ProofFileNotParseable(7)),
         }});
-        if explain_hash.is_none() {
+        if explain_hash_result.is_err() {
             println!("Could not parse explain hash header line: {:?}", words);
-            return (None, FailureReason::ProofFileNotParseable(7));
+            return Err(FailureReason::ProofFileNotParseable(7));
         }
+        let explain_hash = explain_hash_result.unwrap();
 
         let words  = header_lines[7].split_whitespace().collect::<Vec<&str>>();
         let block_height_result = {match words.get(2) {
             Some(value) => value,
-            None => return (None, FailureReason::ProofFileNotParseable(8)),
+            None => return Err(FailureReason::ProofFileNotParseable(8)),
         }}.parse::<usize>();
         if block_height_result.is_err() {
             println!("Could not parse block height header line: {:?}", words);
-            return (None, FailureReason::ProofFileNotParseable(8))
+            return Err(FailureReason::ProofFileNotParseable(8))
         }
         let block_height = block_height_result.unwrap();
 
         let words  = header_lines[8].split_whitespace().collect::<Vec<&str>>();
-        let (tx_hash, _) = parse_hash_from_str({match words.get(2) {
+        let tx_hash_result = parse_hash_from_str({match words.get(2) {
             Some(value) => value,
-            None => return (None, FailureReason::ProofFileNotParseable(9)),
+            None => return Err(FailureReason::ProofFileNotParseable(9)),
         }});
-        if tx_hash.is_none() {
+        if tx_hash_result.is_err() {
             println!("Could not parse tx hash header line: {:?}", words);
-            return (None, FailureReason::ProofFileNotParseable(9));
+            return Err(FailureReason::ProofFileNotParseable(9));
         }
+        let tx_hash = tx_hash_result.unwrap();
 
         let words  = header_lines[9].split_whitespace().collect::<Vec<&str>>();
         let utc_timestamp_result = {match words.get(2) {
             Some(value) => value,
-            None => return (None, FailureReason::ProofFileNotParseable(10)),
+            None => return Err(FailureReason::ProofFileNotParseable(10)),
         }}.parse::<i64>();
         if utc_timestamp_result.is_err() {
             println!("Could not parse utc timestamp header line: {:?}", words);
-            return (None, FailureReason::ProofFileNotParseable(10))
+            return Err(FailureReason::ProofFileNotParseable(10))
         }
         let utc_timestamp = utc_timestamp_result.unwrap();
         
@@ -229,7 +222,7 @@ impl MerkleProof {
         let words = header_lines[10].split_whitespace().collect::<Vec<&str>>();
         let _version: &str = match words.get(5) {
             Some(value) => value,
-            None => return (None, FailureReason::ProofFileNotParseable(11)),
+            None => return Err(FailureReason::ProofFileNotParseable(11)),
         };
 
 
@@ -237,20 +230,20 @@ impl MerkleProof {
         let result = reader.read_line(&mut root_hash_line);
         if result.is_err() {
             println!("Expected root hash line after headers");
-            return (None, FailureReason::ProofFileNotParseable(12))
+            return Err(FailureReason::ProofFileNotParseable(12))
         }
         root_hash_line = root_hash_line.trim_end().to_string();
         let root_hash_result = BASE64_STANDARD.decode(&root_hash_line);
         if root_hash_result.is_err() {
             println!("Could not parse root hash line: {:?}", &root_hash_line);
-            return (None, FailureReason::ProofFileNotParseable(12))
+            return Err(FailureReason::ProofFileNotParseable(12))
         }
         let root_hash = root_hash_result.unwrap();
         let root_hash_bytes: [u8; 32] = match root_hash.try_into() {
             Ok(bytes) => bytes,
             Err(_) => {
                 println!("Could not parse root hash into bytes");
-                return (None, FailureReason::ProofFileNotParseable(12));
+                return Err(FailureReason::ProofFileNotParseable(12));
             }
         };
 
@@ -259,29 +252,29 @@ impl MerkleProof {
             let clean_line = match line {
                 Ok(value) => value,
                 Err(_) => {
-                    return (None, FailureReason::ProofFileNotParseable(counter))
+                    return Err(FailureReason::ProofFileNotParseable(counter))
                 }
             };
             let parts: Vec<&str> = clean_line.split(',').collect();
             if parts.len() != 2 {
                 println!("proof line {} does not have two parts separated by comma", counter);
-                return (None, FailureReason::ProofFileNotParseable(counter));
+                return Err(FailureReason::ProofFileNotParseable(counter));
             }
             let fossil_hash_result = BASE64_STANDARD.decode(parts[0]);
             if fossil_hash_result.is_err() {
                 println!("Failed to parse hash in proof line {}", counter);
-                return (None, FailureReason::ProofFileNotParseable(counter));
+                return Err(FailureReason::ProofFileNotParseable(counter));
             }
             let fossil_hash = fossil_hash_result.unwrap();
             if fossil_hash.len() != 32 {
                 println!("fossil hash on line {} is incorrect length", counter);
-                return (None, FailureReason::ProofFileNotParseable(counter));
+                return Err(FailureReason::ProofFileNotParseable(counter));
             }
             let bytes_result: [u8; 32] = match fossil_hash.try_into() {
                 Ok(bytes) => bytes,
                 Err(_) => {
                     println!("fossil hash on line {} failed to parse into bytes", counter);
-                    return (None, FailureReason::ProofFileNotParseable(counter));
+                    return Err(FailureReason::ProofFileNotParseable(counter));
                 }
             };
             proof_hashes.push(bytes_result);
@@ -289,19 +282,19 @@ impl MerkleProof {
                 Ok(boolean) => boolean,
                 Err(_) => {
                     println!("bool on line {} is not parseable", counter);
-                    return (None, FailureReason::ProofFileNotParseable(counter));
+                    return Err(FailureReason::ProofFileNotParseable(counter));
                 }
             };
             proof_directions.push(direction);
             counter += 1;
         }
 
-        let proof = MerkleProof { root_hash: root_hash_bytes, proof_hashes, proof_directions, identifier: identifier.to_string(), num_leaves, explain_hash: explain_hash.unwrap(), block_height, utc_timestamp, tx_hash: tx_hash.unwrap() };
-        (Some(proof), FailureReason::Success)
+        let proof = MerkleProof { root_hash: root_hash_bytes, proof_hashes, proof_directions, identifier: identifier.to_string(), num_leaves, explain_hash: explain_hash, block_height, utc_timestamp, tx_hash: tx_hash };
+        Ok(proof)
     }
 
     // 
-    pub fn fossilize_proof(&self, filename: &PathBuf, corpus_name: &str) -> FailureReason{
+    pub fn fossilize_proof(&self, filename: &PathBuf, corpus_name: &str) -> Result<(), FailureReason> {
         let template = Template::from(PROOF_TEMPLATE);
 
         // identifier: ${identifier}
@@ -329,32 +322,32 @@ impl MerkleProof {
 
         let mut file = match File::create(filename) {
             Ok(value) => value,
-            Err(_) => return FailureReason::PathNotWriteable,
+            Err(_) => return Err(FailureReason::PathNotWriteable),
         };
         if file.write_all(&text.into_bytes()).is_err() {
-            return FailureReason::PathNotWriteable
+            return Err(FailureReason::PathNotWriteable)
         };
 
         let root_hash_line = format!("{}\n", BASE64_STANDARD.encode(self.root_hash));
         if file.write_all(root_hash_line.as_bytes()).is_err() {
-            return FailureReason::PathNotWriteable
+            return Err(FailureReason::PathNotWriteable)
         };
 
         for i in 0..self.proof_hashes.len() {
             let line = format!("{},{}\n", BASE64_STANDARD.encode(self.proof_hashes[i]), self.proof_directions[i]);
             file.write_all(line.as_bytes()).unwrap();
         }
-        FailureReason::Success
+        Ok(())
     }
 
     // verifies a proof starting from the leaf hash, proceeding along the leaf-to-root path encoded by the proof until the root hash is reached. If the proof is valid, this computed root hash will match the Merkle tree root hash.
-    pub fn verify_proof(&self, starting_hash: [u8; 32], verbose: bool) -> (bool, FailureReason) {
+    pub fn verify_proof(&self, starting_hash: [u8; 32], verbose: bool) -> Result<(), FailureReason> {
         let mut computed_hash = starting_hash;
         let observed_length = self.proof_hashes.len();
         let expected_length = ((self.num_leaves as f64).log2()).ceil() as usize;
         if observed_length != expected_length {
             if verbose {println!("Proof length is {observed_length} instead of the expected length of {expected_length}");}
-            return (false, FailureReason::ProofWrongLength(observed_length, expected_length))
+            return Err(FailureReason::ProofWrongLength(observed_length, expected_length))
         }
         for (i, sibling_hash) in self.proof_hashes.iter().enumerate() {
             if self.proof_directions[i] {
@@ -365,49 +358,40 @@ impl MerkleProof {
         }
         if computed_hash != self.root_hash {
             if verbose {println!("File hash does not match first hash in proof file");}
-            return (false, FailureReason::FileHashMismatch)
+            return Err(FailureReason::FileHashMismatch)
         }
-        (true, FailureReason::Success)
+        Ok(())
     }
 
     // verifies that some data is part of a merkle tree (represented by its root hash).
-    pub fn verify_proof_for_data(&self, data: &[u8], autoaccept: bool, verbose: bool) -> (bool, FailureReason, Option<i64>, Option<usize>) {
+    pub fn verify_proof_for_data(&self, data: &[u8], autoaccept: bool, verbose: bool) -> Result<(Option<i64>, Option<usize>, Vec<Warning>), FailureReason> {
         let starting_hash = double_hash(data);
-        let (result, reason) = self.verify_proof(starting_hash, verbose);
-        if !result {
-            println!("File hash does not match first hash in proof file");
-            (false, reason, None, None)
-        }
-        else if autoaccept {
+        let _ = self.verify_proof(starting_hash, verbose)?;
+        if autoaccept {
             println!("Input data properly hashes up the tree to the root.");
             println!("Autoaccepting the blockchain verification process for testing purposes. DO NOT TRUST THIS RESULT AS A SECURE TIMESTAMP.");
-            (true, FailureReason::AutoAccept, None, None)
+            return Ok((None, None, vec![Warning::AutoAccept]))
         }
         else {
-            crate::verify::verify_proof_timestamp(&self, verbose)
+            let (chain_timestamp, chain_block_height, warnings) = crate::verify::verify_proof_timestamp(&self, verbose)?;
+            return Ok((Some(chain_timestamp), Some(chain_block_height), warnings))
         }
     }
 
     // verifies that some file is part of a merkle tree (represented by its root hash).
-    pub fn verify_proof_for_file(&self, filepath: &PathBuf, autoaccept: bool, verbose: bool) -> (bool, FailureReason, Option<i64>, Option<usize>) {
-        let (result, reason) = double_hash_from_file(filepath);
-        if result.is_none() {
-            return (false, reason, None, None)
-        }
-        let starting_hash = result.unwrap();
-        let (result, reason) = self.verify_proof(starting_hash, verbose);
-        if !result {
-            (false, reason, None, None)
-        }
-        else if autoaccept {
+    pub fn verify_proof_for_file(&self, filepath: &PathBuf, autoaccept: bool, verbose: bool) -> Result<(Option<i64>, Option<usize>, Vec<Warning>), FailureReason> {
+        let starting_hash = double_hash_from_file(filepath)?;
+        let _ = self.verify_proof(starting_hash, verbose)?;
+        if autoaccept {
             if verbose {
                 println!("Input data properly hashes up the tree to the root.");
                 println!("Autoaccepting the blockchain verification process for testing purposes. DO NOT TRUST THIS RESULT AS A SECURE TIMESTAMP.");
             }
-            (true, FailureReason::AutoAccept, None, None)
+            Ok((None, None, vec![Warning::AutoAccept]))
         }
         else {
-            crate::verify::verify_proof_timestamp(&self, verbose)
+            let (chain_timestamp, chain_block_height, warnings) = crate::verify::verify_proof_timestamp(&self, verbose)?;
+            return Ok((Some(chain_timestamp), Some(chain_block_height), warnings))
         }
     }
 }
@@ -452,16 +436,12 @@ impl MerkleTree {
     }
 
     // build tree from a collection of files.
-    pub fn new_from_files(filepaths: Vec<PathBuf>) -> (Option<Self>, FailureReason) {
+    pub fn new_from_files(filepaths: Vec<PathBuf>) -> Result<Self, FailureReason> {
         let num_leaves = filepaths.len();
         let mut nodes: Vec<MerkleNode> = vec![];
         nodes.push(MerkleNode { hash: [0u8; 32], index: 0, left: 0, right: 0, parent: 0 }); // dummy node at index 0
         for (index, filepath) in filepaths.into_iter().enumerate() {
-            let (node_result, reason) = MerkleNode::new_leaf_from_file(&filepath, index + 1);
-            let node = match node_result {
-                Some(value) => value,
-                None => return (None, reason)
-            };
+            let node = MerkleNode::new_leaf_from_file(&filepath, index + 1)?;
             nodes.push(node);
         }
         nodes.sort_by_key(|node| node.hash);
@@ -470,33 +450,33 @@ impl MerkleTree {
         }
         let root_index = MerkleTree::build_tree(&mut nodes, num_leaves, false);
         let hash_lookup = MerkleTree::build_hashmap(&nodes, num_leaves);
-        (Some(MerkleTree { root_index, num_leaves, nodes, hash_lookup }), FailureReason::Success)
+        Ok(MerkleTree { root_index, num_leaves, nodes, hash_lookup })
     }
 
-    fn new_from_tree_file_suffix(reader: BufReader<File>, num_leaves: usize, full: bool) -> (Option<Self>, FailureReason) {
+    fn new_from_tree_file_suffix(reader: BufReader<File>, num_leaves: usize, full: bool) -> Result<(Self, Vec<Warning>), FailureReason> {
         let mut fossil_hashes: Vec<[u8; 32]> = vec![];
         // read the fossilized sequence of merkle tree node hashes.
         let mut counter = 0;
         for line in reader.lines() {
             let clean_line = match line {
                 Ok(value) => value,
-                Err(_) => return (None, FailureReason::MerkleFileNotParseable(counter))
+                Err(_) => return Err(FailureReason::MerkleFileNotParseable(counter))
             };
             let fossil_hash_result = BASE64_STANDARD.decode(clean_line);
             if fossil_hash_result.is_err() {
                 println!("Could not parse {}th hash line as base64", counter);
-                return (None, FailureReason::MerkleFileNotParseable(counter))
+                return Err(FailureReason::MerkleFileNotParseable(counter))
             }
             let fossil_hash = fossil_hash_result.unwrap();
             if fossil_hash.len() != 32 {
                 println!("{}th fossil hash is incorrect length", counter);
-                return (None, FailureReason::MerkleFileNotParseable(counter))
+                return Err(FailureReason::MerkleFileNotParseable(counter))
             }
             let hash: [u8; 32] = match fossil_hash.try_into() {
                 Ok(value) => value,
                 Err(_) => {
                     println!("couldn't parse {}th hash line as bytes", counter);
-                    return (None, FailureReason::MerkleFileNotParseable(counter))
+                    return Err(FailureReason::MerkleFileNotParseable(counter))
                 }
             };
             fossil_hashes.push(hash);
@@ -504,7 +484,7 @@ impl MerkleTree {
         }
         if fossil_hashes.len() == 0 {
             println!("There were no leaf hash lines in the merkle file.");
-            return (None, FailureReason::MerkleTreeInconsistent);
+            return Err(FailureReason::MerkleTreeInconsistent);
         }
 
         let mut nodes: Vec<MerkleNode> = vec![];
@@ -519,7 +499,7 @@ impl MerkleTree {
         }
         if nodes.len() < num_leaves {
             println!("The number of merkle nodes is inconsistent with num_leaves from the header line.");
-            return (None, FailureReason::MerkleTreeInconsistent);
+            return Err(FailureReason::MerkleTreeInconsistent);
         } 
         let root_index = MerkleTree::build_tree(&mut nodes, num_leaves, false);
         let hash_lookup = MerkleTree::build_hashmap(&nodes, num_leaves);
@@ -527,7 +507,7 @@ impl MerkleTree {
         // build the rest of the tree from the leaves
         let tree = MerkleTree { root_index, num_leaves, nodes, hash_lookup };
         if !tree.verify_tree() {
-            return (None, FailureReason::MerkleTreeInconsistent)
+            return Err(FailureReason::MerkleTreeInconsistent)
         }
 
         let mut nonfatal_mismatch = false;
@@ -538,7 +518,7 @@ impl MerkleTree {
             //assert!(&tree.get_root_hash() == fossil_hashes.last().unwrap());
             if &tree.get_root_hash() != fossil_hashes.last().unwrap() {
                 println!("Computed root hash doesn't match the root hash listed in the merkle file.");
-                return (None, FailureReason::MerkleTreeInconsistent)
+                return Err(FailureReason::MerkleTreeInconsistent)
             }
             for i in 0..fossil_hashes.len() {
                 let fossil_hash = fossil_hashes[i];
@@ -552,17 +532,17 @@ impl MerkleTree {
             }
         }
         if nonfatal_mismatch {
-            return (Some(tree), FailureReason::MerkleTreeInconsistentNonfatal(mismatch_location));
+            return Ok((tree, vec![Warning::MerkleTreeInconsistentNonfatal(mismatch_location)]));
         }
-        (Some(tree), FailureReason::Success)
+        Ok((tree, vec![]))
     }
 
     // rebuild tree that has been written to a file in my "fossilized" format. 
-    pub fn new_from_unfinished_tree_file(tree_filename: &PathBuf) -> (Option<Self>, FailureReason) {
+    pub fn new_from_unfinished_tree_file(tree_filename: &PathBuf) -> Result<(Self, Vec<Warning>), FailureReason> {
         let file_result = File::open(&tree_filename);
         if file_result.is_err() {
             println!("Couldn't open unfinished merkle tree file at location {}", tree_filename.to_string_lossy());
-            return (None, FailureReason::MerkleFileNotFound(tree_filename.to_string_lossy().into_owned()))
+            return Err(FailureReason::MerkleFileNotFound(tree_filename.to_string_lossy().into_owned()))
         }
         let file = file_result.unwrap();
         let mut reader = BufReader::new(file);
@@ -573,7 +553,7 @@ impl MerkleTree {
             let result = reader.read_line(&mut header_lines[i]);
             if result.is_ok_and(|value| value == 0) {
                 println!("Unfinished merkle tree file at location {} has fewer than 3 lines", tree_filename.to_string_lossy());
-                return (None, FailureReason::MerkleFileNotParseable(i))
+                return Err(FailureReason::MerkleFileNotParseable(i))
             }
         }
 
@@ -582,11 +562,11 @@ impl MerkleTree {
         let words  = header_lines[1].split_whitespace().collect::<Vec<&str>>();
         let num_leaves_result = {match words.get(4) {
             Some(value) => value,
-            None => return (None, FailureReason::MerkleFileNotParseable(4)),
+            None => return Err(FailureReason::MerkleFileNotParseable(4)),
         }}.parse::<NodeHandle>();
         if num_leaves_result.is_err() {
             println!("Couldn't parse num_leaves header line {:?} in unfinished merkle tree file", words);
-            return (None, FailureReason::MerkleFileNotParseable(4))
+            return Err(FailureReason::MerkleFileNotParseable(4))
         }
         let num_leaves = num_leaves_result.unwrap();
 
@@ -594,11 +574,11 @@ impl MerkleTree {
     }
 
     // builds tree from a file that simply lists the leaf hashes. Used for "blind" tree construction when user does not want to reveal the files that were hashed.
-    pub fn new_from_hashes(hashes_filepath: &PathBuf) -> (Option<Self>, FailureReason) {
+    pub fn new_from_hashes(hashes_filepath: &PathBuf) -> Result<(Self, Vec<Warning>), FailureReason> {
         let file_result = File::open(hashes_filepath);
         if file_result.is_err() {
             println!("Couldn't open leaf hashes file at location {}", hashes_filepath.to_string_lossy());
-            return (None, FailureReason::LeafHashesFileNotFound(hashes_filepath.to_string_lossy().into_owned()))
+            return Err(FailureReason::LeafHashesFileNotFound(hashes_filepath.to_string_lossy().into_owned()))
         }
         let file = file_result.unwrap();
         let mut reader = BufReader::new(file);
@@ -607,13 +587,13 @@ impl MerkleTree {
         let result = reader.read_line(&mut first_line);
         if result.is_err() {
             println!("Couldn't parse num_leaves header line {:?} in leaf hashes file", first_line);
-            return (None, FailureReason::MerkleFileNotParseable(1))
+            return Err(FailureReason::MerkleFileNotParseable(1))
         }
         first_line.pop();
         let num_leaves_result = first_line.parse::<usize>();
         if num_leaves_result.is_err() {
             println!("Couldn't parse num_leaves header line {:?} in leaf hashes file", first_line);
-            return (None, FailureReason::MerkleFileNotParseable(1))
+            return Err(FailureReason::MerkleFileNotParseable(1))
         }
         let num_leaves = num_leaves_result.unwrap();
 
@@ -706,12 +686,6 @@ impl MerkleTree {
         let leaf_hash = double_hash(data);
         node.hash == leaf_hash
     }
-
-    // fn matches_hash_from_file(&self, node: &MerkleNode, filepath: &str) -> bool {
-    //     let leaf_hash = double_hash_from_file(filepath);
-    //     node.hash == leaf_hash
-    // }
-
     // returns whether some data was included in the merkle tree.
     pub fn verify(&self, data: &[u8]) -> bool {
         let hash = double_hash(data);
@@ -725,14 +699,14 @@ impl MerkleTree {
     }
 
     // returns whether some file was included in the merkle tree.
-    pub fn verify_from_file(&self, filepath: &PathBuf) -> bool {
-        let (result, _) = double_hash_from_file(filepath);
-        if result.is_none() {
-            return false;
+    pub fn verify_from_file(&self, filepath: &PathBuf) -> Result<bool, FailureReason> {
+        let hash = double_hash_from_file(filepath)?;
+        if self.hash_lookup.contains_key(&hash) {
+            return Ok(true)
         }
-        let hash = result.unwrap();
-        let present = self.hash_lookup.contains_key(&hash);
-        present
+        else {
+            return Ok(false)
+        }
     }
 
     // checks that each parent hash follows from its child hashes; i.e., the tree is a valid Merkle tree.
@@ -774,18 +748,18 @@ impl MerkleTree {
         true
     }
 
-    pub fn write_leaf_hashes_to_file(&self, leaf_hash_filename: &PathBuf) -> FailureReason {
+    pub fn write_leaf_hashes_to_file(&self, leaf_hash_filename: &PathBuf) -> Result<(), FailureReason> {
         let file_result = File::create(leaf_hash_filename);
         if file_result.is_err() {
             println!("Failed to write leaf hashes to location {}", leaf_hash_filename.to_string_lossy());
-            return FailureReason::PathNotWriteable;
+            return Err(FailureReason::PathNotWriteable);
         }
         let mut file = file_result.unwrap();
         let num_leaves_line = format!("{}\n", self.num_leaves);
         let result = file.write_all(&num_leaves_line.into_bytes());
         if result.is_err() {
             println!("Failed to write leaf hashes to location {}", leaf_hash_filename.to_string_lossy());
-            return FailureReason::PathNotWriteable;
+            return Err(FailureReason::PathNotWriteable);
         }
 
         for i in 1..self.num_leaves + 1 {
@@ -793,15 +767,15 @@ impl MerkleTree {
             let result = file.write_all(line.as_bytes());
             if result.is_err() {
                 println!("Failed to write leaf hashes to location {}", leaf_hash_filename.to_string_lossy());
-                return FailureReason::PathNotWriteable;
+                return Err(FailureReason::PathNotWriteable);
             }
         }
 
-        FailureReason::Success
+        Ok(())
     }
 
     // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
-    pub fn write_unfinished_tree_to_file(&self, tree_filename: &PathBuf, date: &str,) -> FailureReason {
+    pub fn write_unfinished_tree_to_file(&self, tree_filename: &PathBuf, date: &str,) -> Result<(), FailureReason> {
         let template = Template::from(UNFINISHED_MERKLE_TEMPLATE);
 
         let mut values: HashMap<&str, &str> = HashMap::new();
@@ -813,13 +787,13 @@ impl MerkleTree {
         let file_result = File::create(tree_filename);
         if file_result.is_err() {
             println!("Failed to write unfinished merkle tree to location {}", tree_filename.to_string_lossy());
-            return FailureReason::PathNotWriteable;
+            return Err(FailureReason::PathNotWriteable);
         }
         let mut file = file_result.unwrap();
         let result = file.write_all(&text.into_bytes());
         if result.is_err() {
             println!("Failed to write unfinished merkle tree to location {}", tree_filename.to_string_lossy());
-            return FailureReason::PathNotWriteable;
+            return Err(FailureReason::PathNotWriteable);
         }
 
         for i in 1..self.nodes.len() {
@@ -827,10 +801,10 @@ impl MerkleTree {
             let result = file.write_all(line.as_bytes());
             if result.is_err() {
             println!("Failed to write unfinished merkle tree to location {}", tree_filename.to_string_lossy());
-                return FailureReason::PathNotWriteable;
+                return Err(FailureReason::PathNotWriteable);
             }
         }
-        FailureReason::Success
+        Ok(())
     }
 
 }
@@ -858,7 +832,7 @@ impl TimestampedMerkleTree {
         TimestampedMerkleTree::new(tree, identifier, utc_raw.timestamp(), block_height, tx_hash, explain_hash)
     }
 
-    pub fn new_from_fossilized_tree(fossil_filepath: &PathBuf) -> (Option<TimestampedMerkleTree>, FailureReason) {
+    pub fn new_from_fossilized_tree(fossil_filepath: &PathBuf) -> Result<(TimestampedMerkleTree, Vec<Warning>), FailureReason> {
         let file_result = File::open(fossil_filepath);
         let file;
         match file_result {
@@ -867,7 +841,7 @@ impl TimestampedMerkleTree {
             },
             Err(_) => {
             println!("Could not find merkle tree file at location {}", fossil_filepath.to_string_lossy());
-                return (None, FailureReason::MerkleFileNotFound(fossil_filepath.to_string_lossy().to_string()));
+                return Err(FailureReason::MerkleFileNotFound(fossil_filepath.to_string_lossy().to_string()));
             },
         }
         let mut reader = BufReader::new(file);
@@ -878,143 +852,115 @@ impl TimestampedMerkleTree {
             let result = reader.read_line(&mut header_lines[i]);
             if result.is_ok_and(|value| value == 0) {
                 println!("Expected 9 header lines in merkle tree file but only read {}", i);
-                return (None, FailureReason::MerkleFileNotParseable(i))
+                return Err(FailureReason::MerkleFileNotParseable(i))
             }
         }
 
         let words  = header_lines[1].split_whitespace().collect::<Vec<&str>>();
         let num_leaves_result = {match words.get(4){
             Some(value) => value,
-            None => return (None, FailureReason::MerkleFileNotParseable(3)),
+            None => return Err(FailureReason::MerkleFileNotParseable(3)),
         }}.parse::<NodeHandle>();
         if num_leaves_result.is_err() {
             println!("Could not parse num_leaves header line: {:?}", words);
-            return (None, FailureReason::MerkleFileNotParseable(2))
+            return Err(FailureReason::MerkleFileNotParseable(2))
         }
         let num_leaves = num_leaves_result.unwrap();
 
         let words = header_lines[2].split_whitespace().collect::<Vec<&str>>();
         let identifier = match words.get(10) {
             Some(value) => value,
-            None => return (None, FailureReason::MerkleFileNotParseable(3)),
+            None => return Err(FailureReason::MerkleFileNotParseable(3)),
         };
         let words = header_lines[3].split_whitespace().collect::<Vec<&str>>();
         let block_height_result = {match words.get(3) {
             Some(value) => value,
-            None => return (None, FailureReason::MerkleFileNotParseable(4)),
+            None => return Err(FailureReason::MerkleFileNotParseable(4)),
         }}.parse::<usize>();
         if block_height_result.is_err() {
             println!("Could not parse block height header line: {:?}", words);
-            return(None, FailureReason::MerkleFileNotParseable(4))
+            return Err(FailureReason::MerkleFileNotParseable(4))
         }
         let block_height = block_height_result.unwrap();
 
         let words = header_lines[4].split_whitespace().collect::<Vec<&str>>();
         let tx_hash_string = match words.get(3) {
             Some(value) => value,
-            None => return (None, FailureReason::MerkleFileNotParseable(5)),
+            None => return Err(FailureReason::MerkleFileNotParseable(5)),
         };
-        let (tx_hash_result, reason) = parse_hash_from_str(tx_hash_string);
-        if tx_hash_result.is_none() {
-            return (None, reason);
-        }
-        let tx_hash = tx_hash_result.unwrap();
+        let tx_hash = parse_hash_from_str(tx_hash_string)?;
 
         let words = header_lines[5].split_whitespace().collect::<Vec<&str>>();
         let utc_timestamp_result = {match words.get(3){
             Some(value) => value,
-            None => return (None, FailureReason::MerkleFileNotParseable(6)),
+            None => return Err(FailureReason::MerkleFileNotParseable(6)),
         }}.parse::<i64>();
         if utc_timestamp_result.is_err() {
             println!("Could not parse utc timestamp header line: {:?}", words);
-            return (None, FailureReason::MerkleFileNotParseable(6))
+            return Err(FailureReason::MerkleFileNotParseable(6))
         }
         let utc_timestamp = utc_timestamp_result.unwrap();
 
         let words = header_lines[6].split_whitespace().collect::<Vec<&str>>();
         let explain_hash_string = match words.get(3){
             Some(value) => value,
-            None => return (None, FailureReason::MerkleFileNotParseable(7)),
+            None => return Err(FailureReason::MerkleFileNotParseable(7)),
         };
-        let (explain_hash_result, reason) = parse_hash_from_str(explain_hash_string);
-        if explain_hash_result.is_none() {
-            return (None, reason);
-        }
-        let explain_hash = explain_hash_result.unwrap();
+        let explain_hash = parse_hash_from_str(explain_hash_string)?;
 
         let words = header_lines[7].split_whitespace().collect::<Vec<&str>>();
         let _version: &str = match words.get(3){
             Some(value) => value,
-            None => return (None, FailureReason::MerkleFileNotParseable(8)),
+            None => return Err(FailureReason::MerkleFileNotParseable(8)),
         };
 
-        let (tree_result, tree_reason) = MerkleTree::new_from_tree_file_suffix(reader, num_leaves, true);
-        if tree_result.is_none() {
-            return (None, tree_reason)
-        }
-        let tree = tree_result.unwrap();
+        let (tree, warnings) = MerkleTree::new_from_tree_file_suffix(reader, num_leaves, true)?;
         if !tree.verify_tree() {
-            return (None, FailureReason::MerkleTreeInconsistent)
+            return Err(FailureReason::MerkleTreeInconsistent)
         }
-        (Some(Self::new(tree, identifier, utc_timestamp, block_height, tx_hash, explain_hash)), FailureReason::Success) //note for tomorrow: read utctimestamp from fossil file and then add it to this call
+        Ok((Self::new(tree, identifier, utc_timestamp, block_height, tx_hash, explain_hash), warnings)) //note for tomorrow: read utctimestamp from fossil file and then add it to this call
     }
 
     pub fn is_verified(&self) -> bool {
         self.verified_timestamp
     }
 
-    pub fn verify_timestamp(&mut self, explain_filepath: &PathBuf, autoaccept: bool) -> (bool, FailureReason) {
+    pub fn verify_timestamp(&mut self, explain_filepath: &PathBuf, autoaccept: bool) -> Result<Vec<Warning>, FailureReason> {
         if autoaccept {
             println!("Autoaccepting the blockchain verification process for testing purposes. DO NOT TRUST THIS RESULT AS A SECURE TIMESTAMP.");
-            return (true, FailureReason::AutoAccept);
+            return Ok(vec![Warning::AutoAccept]);
         }
         
-        let (result, reason) = double_hash_from_file(explain_filepath);
-        if result.is_none() {
-            return (false, reason)
-        }
-        let observed_explain_hash = result.unwrap();
+        let observed_explain_hash = double_hash_from_file(explain_filepath)?;
         if observed_explain_hash != self.explain_hash {
             println!("Failed to verify: explain.txt does not match explain hash in merkle tree file");
-            return (false, FailureReason::ExplainHashMismatch);
+            return Err(FailureReason::ExplainHashMismatch);
         }
 
-        let (result, reason) = crate::verify::verify_tree_timestamp(&self.identifier, &self.tree, self.explain_hash, self.tx_hash);
-        match result {
-            Some(timestamp_details) => {
-                let success_reason;
+        let timestamp_details = crate::verify::verify_tree_timestamp(&self.identifier, &self.tree, self.explain_hash, self.tx_hash)?;
+        let mut warnings = vec![];
 
-                if self.block_height == 0 {
-                    self.block_height = timestamp_details.block_height;
-                    success_reason = FailureReason::Success;
-                }
-                else {
-                    if self.block_height != timestamp_details.block_height {
-                        println!("WARNING: the block height in the fossil file does not match the true block height of the transaction containing the timestamp. The fossil file says the block height is {}, but the true block height is {}", self.block_height, timestamp_details.block_height);
-                        success_reason = FailureReason::BlockHeightMismatchNonFatal;
-                    }
-                    else {
-                        success_reason = FailureReason::Success;
-                    }
-                }
-                self.utc_timestamp = timestamp_details.timestamp;
-                self.verified_timestamp = true;
-                let utc = chrono::DateTime::from_timestamp(timestamp_details.timestamp, 0).unwrap();
-                let date = format!("{}", utc.format("%B %-d, %Y").to_string());
-                let time = format!("{}", utc.format("%H:%M").to_string());
-                println!("Timestamp has been verified on the blockchain. Transaction found in block {} on {} at {}", timestamp_details.block_height, date, time);
-                return (true, success_reason);
-            }
-            _ => {
-                println!("Failed to verify the timestamp on the blockchain.");
-                return (false, reason);
+        if self.block_height == 0 {
+            self.block_height = timestamp_details.block_height;
+        }
+        else {
+            if self.block_height != timestamp_details.block_height {
+                println!("WARNING: the block height in the fossil file does not match the true block height of the transaction containing the timestamp. The fossil file says the block height is {}, but the true block height is {}", self.block_height, timestamp_details.block_height);
+                warnings.push(Warning::BlockHeightMismatchNonFatal);
             }
         }
+        self.utc_timestamp = timestamp_details.timestamp;
+        self.verified_timestamp = true;
+        let utc = chrono::DateTime::from_timestamp(timestamp_details.timestamp, 0).unwrap();
+        let date = format!("{}", utc.format("%B %-d, %Y").to_string());
+        let time = format!("{}", utc.format("%H:%M").to_string());
+        println!("Timestamp has been verified on the blockchain. Transaction found in block {} on {} at {}", timestamp_details.block_height, date, time);
+        return Ok(warnings);
         
     }
 
     // Serializes the tree into my "fossilized" format, so named because the goal of the format is to maximize the chance that a useful copy of the serialized tree persists as far into the future as possible. It is designed to be human-readable, relatively compact, simple, self-explanatory, and friendly to write on physical information-storage media such as paper books in addition to hard drives. It is purpose-designed for storing merkle trees only; it is mostly just an in-order list of the node hashes, along with a little metadata and English language explanation of the tree structure.
-    pub fn fossilize_tree(&self, tree_filename: &PathBuf, corpus_name: &str) -> FailureReason {
+    pub fn fossilize_tree(&self, tree_filename: &PathBuf, corpus_name: &str) -> Result<(), FailureReason> {
         if !(self.is_verified()) {
             println!("!!!!!!!!!!");
             println!("WARNING: You are fossilizing an unverified timestamped merkle tree. You should only be doing this as a test. There is no guarantee that the resulting fossil file will verify on the blockchain.");
@@ -1048,13 +994,13 @@ impl TimestampedMerkleTree {
         let file_result = File::create(tree_filename);
         if file_result.is_err() {
             println!("Could not write fossilized tree file to location {}", tree_filename.to_string_lossy());
-            return FailureReason::PathNotWriteable
+            return Err(FailureReason::PathNotWriteable)
         }
         let mut file = file_result.unwrap();
         let result = file.write_all(&text.into_bytes());
         if result.is_err() {
             println!("Could not write fossilized tree file to location {}", tree_filename.to_string_lossy());
-            return FailureReason::PathNotWriteable
+            return Err(FailureReason::PathNotWriteable)
         }
 
         for i in 1..self.tree.nodes.len() {
@@ -1062,11 +1008,11 @@ impl TimestampedMerkleTree {
             let result = file.write_all(line.as_bytes());
             if result.is_err() {
             println!("Could not write fossilized tree file to location {}", tree_filename.to_string_lossy());
-                return FailureReason::PathNotWriteable
+                return Err(FailureReason::PathNotWriteable)
             }
         }
 
-        FailureReason::Success
+        Ok(())
     }
 
     // builds a Merkle inclusion proof for some leaf of the tree, complete with the required info to verify the timestamp on the blockchain.
@@ -1097,29 +1043,25 @@ impl TimestampedMerkleTree {
         MerkleProof { root_hash, proof_hashes, proof_directions, identifier: self.identifier.clone(), num_leaves: self.tree.num_leaves, explain_hash: self.explain_hash, block_height: self.block_height, utc_timestamp: self. utc_timestamp, tx_hash: self.tx_hash}
     }
 
-    pub fn produce_proof_from_file(&self, filepath: &PathBuf) -> (Option<MerkleProof>, FailureReason) {
-        let (result, reason) = double_hash_from_file(filepath);
-        if result.is_none() {
-            return (None, reason)
-        }
-        let starting_hash = result.unwrap();
+    pub fn produce_proof_from_file(&self, filepath: &PathBuf) -> Result<MerkleProof, FailureReason> {
+        let starting_hash = double_hash_from_file(filepath)?;
         let index_result = self.tree.hash_lookup.get(&starting_hash);
         if index_result.is_none() {
             println!("Provided file is not in the merkle tree.");
-            return (None, FailureReason::FileNotInMerkleTree);
+            return Err(FailureReason::FileNotInMerkleTree);
         }
         let index: NodeHandle = *index_result.unwrap();
-        (Some(self.produce_proof(index)), FailureReason::Success)
+        Ok(self.produce_proof(index))
     }
 
-    pub fn produce_proof_from_data(&self, data: &[u8]) -> (Option<MerkleProof>, FailureReason) {
+    pub fn produce_proof_from_data(&self, data: &[u8]) -> Result<MerkleProof, FailureReason> {
         let starting_hash = double_hash(data);
         let index_result = self.tree.hash_lookup.get(&starting_hash);
         if index_result.is_none() {
             println!("Provided file is not in the merkle tree.");
-            return (None, FailureReason::FileNotInMerkleTree);
+            return Err(FailureReason::FileNotInMerkleTree);
         }
         let index: NodeHandle = *index_result.unwrap();
-        (Some(self.produce_proof(index)), FailureReason::Success)
+        Ok(self.produce_proof(index))
     }
 }

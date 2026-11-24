@@ -4,7 +4,16 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use config::Config;
 use clap::Parser;
-use amber_core::{build_timestamp, finalize_timestamp, verify_proof, verify_tree, verify_file, make_proof, parse_hash_from_string};
+use amber_core::{Warning, build_timestamp, finalize_timestamp, make_proof, parse_hash_from_string, verify_file, verify_proof, verify_tree};
+
+fn display_warnings(warnings: Vec<Warning>) {
+    if warnings.len() > 0 {
+        println!("Succeeded, but generated the following warnings:");
+        for warning in warnings {
+            println!("{warning}");
+        }
+    }
+}
 
 // command line parsing
 #[derive(Parser, Debug)]
@@ -55,9 +64,18 @@ fn main() -> ExitCode {
             println!("Ignoring verification request. Building tree+docs.")
         }
 
-        let (tree, _reason) = build_timestamp(&PathBuf::from(corpus_path), &PathBuf::from(hashes_path), args.hash_source, &PathBuf::from(generated_tree_filename), &PathBuf::from(generated_explain_filename), &PathBuf::from(generated_tag_filename), &corpus_name, locktime, &identifier, None, None, None);
+        let result = build_timestamp(&PathBuf::from(corpus_path), &PathBuf::from(hashes_path), args.hash_source, &PathBuf::from(generated_tree_filename), &PathBuf::from(generated_explain_filename), &PathBuf::from(generated_tag_filename), &corpus_name, locktime, &identifier, None, None, None);
 
-        if tree.is_some() { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+        match result {
+            Ok((_, warnings)) => {
+                display_warnings(warnings);
+                return ExitCode::SUCCESS;
+            },
+            Err(reason) => {
+                println!("The timestamp build process failed for the following reason: {}", reason);
+                return ExitCode::FAILURE; 
+            },
+        }
 
     }
     else if args.generate_timestamp {
@@ -65,33 +83,73 @@ fn main() -> ExitCode {
             println!("Ignoring verification request. Building timestamp.");
         }
         let tx_hash_string = settings.get_string("tx_hash").unwrap();
-        let (tx_hash, _) = parse_hash_from_string(&tx_hash_string);
+        let tx_hash = match parse_hash_from_string(&tx_hash_string) {
+            Ok(hash) => hash,
+            Err(reason) => {
+                println!("Failed to finalize timestamp for the following reason: {}", reason);
+                return ExitCode::FAILURE; 
+            },
+        };
         // need to read in unfinished merkle file, build a timestamped merkle file from it, verify the timestamp on the chain, then write to the timestamped tree to file.
         
-        let (result, _tree, _reason) = finalize_timestamp(&PathBuf::from(generated_tree_filename), &PathBuf::from(generated_explain_filename), &corpus_name, &identifier, tx_hash.unwrap());
-        if result { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+        let (_tree, warnings) = match finalize_timestamp(&PathBuf::from(generated_tree_filename), &PathBuf::from(generated_explain_filename), &corpus_name, &identifier, tx_hash) {
+            Ok((val1, val2)) => (val1, val2),
+            Err(reason) => {
+                println!("Failed to finalize timestamp for the following reason: {}", reason);
+                return ExitCode::FAILURE; 
+            },
+        };
+        display_warnings(warnings);
+        ExitCode::SUCCESS
 
     }
     else if args.verify_timestamp {
-        let (result, _tree, _reason) = verify_tree(&PathBuf::from(provided_tree_filename), &PathBuf::from(provided_explain_filename));
-        if result { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+        let (_tree, warnings) = match verify_tree(&PathBuf::from(provided_tree_filename), &PathBuf::from(provided_explain_filename)) {
+            Ok((val1, val2)) => (val1, val2),
+            Err(reason) => {
+                println!("Timestamp verification failed for the following reason: {reason}");
+                return ExitCode::FAILURE;
+            },
+        };
+        display_warnings(warnings);
+        ExitCode::SUCCESS
     }
     else if args.file_to_verify != "".to_string() {
         let filepath = args.file_to_verify;
         if args.proof_verify != "".to_string() {
             let proof_file = args.proof_verify;
-            let (result, _reason, _, _, _, _, _, _) = verify_proof(&PathBuf::from(filepath), &PathBuf::from(proof_file));
-            if result { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+            let _proof_details = match verify_proof(&PathBuf::from(filepath), &PathBuf::from(proof_file)) {
+                Ok(value) => value,
+                Err(reason) => {
+                    println!("Proof verification failed for the following reason: {reason}");
+                    return ExitCode::FAILURE;
+                },
+            };
+            ExitCode::SUCCESS
         }
         else {
-            let result = verify_file(&PathBuf::from(provided_tree_filename), &PathBuf::from(filepath));
-            if result { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+            let (_verified, warnings) = match verify_file(&PathBuf::from(provided_tree_filename), &PathBuf::from(filepath)) {
+                Ok((val1, val2)) => (val1, val2),
+                Err(reason) => {
+                    println!("File verification failed for the following reason: {reason}");
+                    return ExitCode::FAILURE;
+                },
+            };
+            display_warnings(warnings);
+            ExitCode::SUCCESS
         }
     }
     else if args.make_proof != "".to_string() {
         let input_path: String = args.make_proof;
-        let (result, _reason) = make_proof(&PathBuf::from(input_path), &PathBuf::from(provided_tree_filename), &PathBuf::from(provided_explain_filename), &corpus_name);
-        if result { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+        let warnings = match make_proof(&PathBuf::from(input_path), &PathBuf::from(provided_tree_filename), &PathBuf::from(provided_explain_filename), &corpus_name) {
+            Ok(value) => value,
+            Err(reason) => {
+                println!("Proof construction failed for the following reason: {reason}");
+                return ExitCode::FAILURE;
+            },
+        };
+        display_warnings(warnings);
+        ExitCode::SUCCESS
     }
     else {
         panic!("Need to provide a command line argument");

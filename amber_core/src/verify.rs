@@ -1,5 +1,5 @@
 use crate::{
-    FailureReason, merkle::{MerkleProof, MerkleTree}, tag
+    FailureReason, Warning, merkle::{MerkleProof, MerkleTree}, tag
 };
 use hex_fmt::HexFmt;
 use bitcoin::{
@@ -43,7 +43,7 @@ async fn verify_tag_async(
     expected_tag: Vec<u8>,
     tx_hash: [u8; 32],
     verbose: bool,
-) -> (Option<TimestampBlockchainDetails>, FailureReason) {
+) -> Result<TimestampBlockchainDetails, FailureReason> {
     let tx_hash_string = format!("{}", HexFmt(tx_hash));
 
     if verbose {
@@ -68,22 +68,22 @@ async fn verify_tag_async(
     let json_response = match json_result {
         Ok(response) => match check_http_status(response) {
             Ok(response) => response,
-            Err(reason) => return (None, reason),
+            Err(reason) => return Err(reason),
         },
         Err(_) => {
             println!("Blockchain explorer website did not respond.");
-            return (None, FailureReason::NoBlockchainResponse);
+            return Err(FailureReason::NoBlockchainResponse);
         }
     };
 
     let hex_response = match hex_result {
         Ok(response) => match check_http_status(response) {
             Ok(response) => response,
-            Err(reason) => return (None, reason),
+            Err(reason) => return Err(reason),
         },
         Err(_) => {
             println!("Blockchain explorer website did not respond.");
-            return (None, FailureReason::NoBlockchainResponse);
+            return Err(FailureReason::NoBlockchainResponse);
         }
     };
 
@@ -91,13 +91,13 @@ async fn verify_tag_async(
         Ok(text) => text,
         Err(_) => {
             println!("Blockchain explorer website did not respond.");
-            return (None, FailureReason::NoBlockchainResponse);
+            return Err(FailureReason::NoBlockchainResponse);
         }
     };
 
     let v: Value = match serde_json::from_str(&json_string){
         Ok(value) => value,
-        Err(_) => return (None, FailureReason::UnexpectedBlockchainResponse),
+        Err(_) => return Err(FailureReason::UnexpectedBlockchainResponse),
     };
 
     if v["error"] == "not-found-or-invalid-arg" {
@@ -105,13 +105,13 @@ async fn verify_tag_async(
             "Blockchain explorer reports tx hash {} does not exist on the chain.",
             HexFmt(tx_hash)
         );
-        return (None, FailureReason::TxNotFound);
+        return Err(FailureReason::TxNotFound);
     }
 
     let block_height: usize = {match v["block_height"]
         .as_u64() {
             Some(value) => value,
-            None => return (None, FailureReason::TxUnconfirmed)
+            None => return Err(FailureReason::TxUnconfirmed)
         }}
         .try_into().unwrap();
 
@@ -123,11 +123,11 @@ async fn verify_tag_async(
     let block_response = match client.get(&block_url).send().await {
         Ok(response) => match check_http_status(response) {
             Ok(response) => response,
-            Err(reason) => return (None, reason),
+            Err(reason) => return Err(reason),
         },
         Err(_) => {
             println!("Blockchain explorer website did not respond.");
-            return (None, FailureReason::NoBlockchainResponse);
+            return Err(FailureReason::NoBlockchainResponse);
         }
     };
 
@@ -135,13 +135,13 @@ async fn verify_tag_async(
         Ok(text) => text,
         Err(_) => {
             println!("Blockchain explorer website did not respond.");
-            return (None, FailureReason::NoBlockchainResponse);
+            return Err(FailureReason::NoBlockchainResponse);
         }
     };
 
     let b: Value = match serde_json::from_str(&block_string){
         Ok(value) => value,
-        Err(_) => return (None, FailureReason::UnexpectedBlockchainResponse),
+        Err(_) => return Err(FailureReason::UnexpectedBlockchainResponse),
     };
     let block = &b["blocks"][0];
     let time = block["time"].as_i64().unwrap();
@@ -150,7 +150,7 @@ async fn verify_tag_async(
         Ok(bytes) => bytes,
         Err(_) => {
             println!("Blockchain explorer website did not respond.");
-            return (None, FailureReason::NoBlockchainResponse);
+            return Err(FailureReason::NoBlockchainResponse);
         }
     };
 
@@ -167,17 +167,15 @@ async fn verify_tag_async(
                     match instruction {
                         Ok(Instruction::PushBytes(data)) => {
                             if data.as_bytes() == expected_tag {
-                                return (
-                                    Some(TimestampBlockchainDetails {
+                                return Ok(TimestampBlockchainDetails {
                                         block_height,
                                         timestamp: time,
-                                    }),
-                                    FailureReason::Success,
+                                    }
                                 );
                             }
                         }
                         Ok(Instruction::Op(_op)) => {}
-                        Err(_) => return (None, FailureReason::UnexpectedBlockchainResponse),
+                        Err(_) => return Err(FailureReason::UnexpectedBlockchainResponse),
                     }
                 }
             }
@@ -186,11 +184,11 @@ async fn verify_tag_async(
     }
 
     println!("Tag not found in specified transaction.");
-    (None, FailureReason::TagNotFound)
+    Err(FailureReason::TagNotFound)
 }
 
 #[tokio::main]
-pub async fn verify_tree_timestamp(identifier: &str, tree: &MerkleTree, explain_hash: [u8; 32], tx_hash: [u8; 32]) -> (Option<TimestampBlockchainDetails>, FailureReason) {
+pub async fn verify_tree_timestamp(identifier: &str, tree: &MerkleTree, explain_hash: [u8; 32], tx_hash: [u8; 32]) -> Result<TimestampBlockchainDetails, FailureReason> {
     //println!("Computing tag based on provided identifier, merkle tree, and explain file.");
     let num_leaves: u32 = tree.num_leaves.try_into().unwrap();
     let root_hash = tree.get_root_hash();
@@ -202,65 +200,60 @@ pub async fn verify_tree_timestamp(identifier: &str, tree: &MerkleTree, explain_
 }
 
 #[tokio::main]
-pub async fn verify_proof_timestamp(proof: &MerkleProof, verbose: bool) -> (bool, FailureReason, Option<i64>,Option<usize>) {
+pub async fn verify_proof_timestamp(proof: &MerkleProof, verbose: bool) -> Result<(i64, usize, Vec<Warning>), FailureReason> {
     //println!("Computing tag based on provided identifier, merkle tree, and explain file.");
     let expected_tag = compute_tag(&proof.identifier, proof.num_leaves.try_into().unwrap(), proof.root_hash, proof.explain_hash);
     if verbose {println!("The tag should be {}", HexFmt(&expected_tag));}
 
     let client = reqwest::Client::builder().timeout(Duration::from_secs(30)).build().unwrap();
-    let (result, mut reason) = verify_tag_async(&client, expected_tag, proof.tx_hash, verbose).await;
-    match result {
-        Some(details) => {
-            let chain_timestamp = details.timestamp;
-        let expected_timestamp = proof.utc_timestamp;
-            let chain_block_height = details.block_height;
-            let expected_block_height = proof.block_height;
-            if chain_timestamp == expected_timestamp {
-                if chain_block_height != expected_block_height {
-                    println!("WARNING: block height {} listed in proof file doesn't match the actual block height {} on the blockchain.", expected_block_height, chain_block_height);
-                    reason = FailureReason::BlockHeightMismatchNonFatal;
-                }
-                return (true, reason, Some(chain_timestamp), Some(chain_block_height));
-            }   
-            else {
-                println!("Timestamp in proof file {} does not match true (blockchain) timestamp {}.", expected_timestamp, chain_timestamp);
-                return (true, FailureReason::TimestampMismatchNonFatal, Some(chain_timestamp), Some(chain_block_height));
-            }
+    let details = verify_tag_async(&client, expected_tag, proof.tx_hash, verbose).await?;
+
+    let chain_timestamp = details.timestamp;
+    let expected_timestamp = proof.utc_timestamp;
+    let chain_block_height = details.block_height;
+    let expected_block_height = proof.block_height;
+    let mut warnings: Vec<Warning> = vec![];
+    if chain_timestamp == expected_timestamp {
+        if chain_block_height != expected_block_height {
+            println!("WARNING: block height {} listed in proof file doesn't match the actual block height {} on the blockchain.", expected_block_height, chain_block_height);
+            warnings.push(Warning::BlockHeightMismatchNonFatal);
         }
-        _ => {
-                println!("Tag (identifier + num_leaves + merkle root hash + explain hash) failed to verify on the blockchain.");
-                return (false, reason, None, None)
-            }
+        return Ok((chain_timestamp, chain_block_height, warnings));
+    }   
+    else {
+        warnings.push(Warning::TimestampMismatchNonFatal);
+        println!("Timestamp in proof file {} does not match true (blockchain) timestamp {}.", expected_timestamp, chain_timestamp);
+        return Ok((chain_timestamp, chain_block_height, warnings));
     }
 }
 
-pub fn get_explain_utc_timestamp(explain_filepath: &PathBuf) -> (Option<i64>, FailureReason) {
+pub fn get_explain_utc_timestamp(explain_filepath: &PathBuf) -> Result<i64, FailureReason> {
     let file = match std::fs::File::open(explain_filepath) {
         Ok(value) => value,
-        Err(_) => return (None, FailureReason::ExplainFileNotFound(explain_filepath.to_string_lossy().to_string())),
+        Err(_) => return Err(FailureReason::ExplainFileNotFound(explain_filepath.to_string_lossy().to_string())),
     };
     let mut reader = std::io::BufReader::new(file);
     let mut line = "".to_string();
     match reader.read_line(&mut line) {
         Ok(_) => (),
-        Err(_) => return (None, FailureReason::ExplainFileNotParseable(1)),
+        Err(_) => return Err(FailureReason::ExplainFileNotParseable(1)),
     }; // ignore first line
     line = "".to_string();
     match reader.read_line(&mut line) {
         Ok(_) => (),
-        Err(_) => return (None, FailureReason::ExplainFileNotParseable(2)), // we will parse utc timestamp from second line
+        Err(_) => return Err(FailureReason::ExplainFileNotParseable(2)), // we will parse utc timestamp from second line
     }
     line = line.trim().to_string();
     let utc_timestamp: i64 = match line.parse(){
         Ok(value) => value,
-        Err(_) => return (None, FailureReason::ExplainFileNotParseable(2)),
+        Err(_) => return Err(FailureReason::ExplainFileNotParseable(2)),
     };
-    (Some(utc_timestamp), FailureReason::Success)
+    Ok(utc_timestamp)
 
 }
 
 #[tokio::main]
-pub async fn get_current_latest_block() -> (Option<usize>, FailureReason) {
+pub async fn get_current_latest_block() -> Result<usize, FailureReason> {
     let client = reqwest::Client::builder().timeout(Duration::from_secs(30)).build().unwrap();
 
     let response_result = client
@@ -272,26 +265,26 @@ pub async fn get_current_latest_block() -> (Option<usize>, FailureReason) {
 
     if response_result.is_err() {
         println!("Blockchain explorer website did not respond.");
-        return (None, FailureReason::NoBlockchainResponse)
+        return Err(FailureReason::NoBlockchainResponse)
     }
     let response = response_result.unwrap();
     let json_string = response.text().await.unwrap();
     let v: Value = serde_json::from_str(&json_string).unwrap();
     let block_height: usize = v["currentHeight"].as_u64().unwrap().try_into().unwrap();
 
-    (Some(block_height), FailureReason::Success)
+    Ok(block_height)
 
 }
 
 // returns an estimate of the satoshi/vbyte fee required to get mined in the next block.
-pub fn get_fee_estimate() -> (Option<f64>, FailureReason) {
+pub fn get_fee_estimate() -> Result<f64, FailureReason> {
     let request_url = "https://mempool.space/api/v1/fees/precise";
 
     let fee_response = match reqwest::blocking::get(request_url) {
         Ok(response) => response,
         Err(_) => {
             println!("Blockchain explorer website did not respond.");
-            return (None, FailureReason::NoBlockchainResponse);
+            return Err(FailureReason::NoBlockchainResponse);
         }
     };
 
@@ -300,24 +293,20 @@ pub fn get_fee_estimate() -> (Option<f64>, FailureReason) {
     //let fields = vec!["fastestFee", "halfHourFee", "hourFee", "economyFee", "minimumFee"];
     let recommended_fast_fee = v["fastestFee"].as_f64().unwrap();
     let safe_fee = recommended_fast_fee * 1.25;
-    (Some(safe_fee), FailureReason::Success)
+    Ok(safe_fee)
 }
 
-pub fn generate_op_return_script(receiving_address: &str, balance: f64, tag: &str) -> (Option<String>, Option<f64>, FailureReason) {
+pub fn generate_op_return_script(receiving_address: &str, balance: f64, tag: &str) -> Result<(String, f64), FailureReason> {
     let script_template_str = "${receiving_address},${change}\nscript(OP_RETURN ${tag}), 0";
     let script_template = Template::from(script_template_str);
     // fee ratio is in satoshis/vbyte. message will have at most 266 vbytes. convert to mBTC
-    let (fee_estimate_result, reason) = get_fee_estimate();
-    let fee_rate = match fee_estimate_result {
-        Some(value) => value,
-        None => return (None, None, reason),
-    };
+    let fee_rate = get_fee_estimate()?;
     let fee = fee_rate * 266.0 * 0.00001;
-    let mut change= balance - fee;
+    let mut change = balance - fee;
     let round_factor = 100000.0;
     change = (change * round_factor).round()/ round_factor;
     if change <= 0.0 {
-        return (None, Some(fee), FailureReason::BalanceTooLow)
+        return Err(FailureReason::BalanceTooLow(fee))
     }
     let mut values: HashMap<&str, &str> = HashMap::new();
     values.insert("receiving_address", receiving_address);
@@ -325,7 +314,7 @@ pub fn generate_op_return_script(receiving_address: &str, balance: f64, tag: &st
     values.insert("change", change_str);
     values.insert("tag", tag);
     let script = script_template.try_fill_in(&values);
-    (Some(script.unwrap().to_string()), Some(fee), FailureReason::Success)
+    Ok((script.unwrap().to_string(), fee))
 }
 
 pub fn tag_valid(tag: &str) -> bool {
@@ -340,14 +329,14 @@ pub fn tag_valid(tag: &str) -> bool {
     }
 }
 
-pub fn check_confirmations(tx_hash_string: &str) -> (Option<usize>, FailureReason) {
+pub fn check_confirmations(tx_hash_string: &str) -> Result<usize, FailureReason> {
     let json_url = format!("https://blockchain.info/rawtx/{}", tx_hash_string);
     let json_result = reqwest::blocking::get(json_url);
     let json_response = match json_result {
         Ok(response) => response,
         Err(_) => {
             println!("Blockchain explorer website did not respond.");
-            return (None, FailureReason::NoBlockchainResponse);
+            return Err(FailureReason::NoBlockchainResponse);
         }
     };
 
@@ -355,7 +344,7 @@ pub fn check_confirmations(tx_hash_string: &str) -> (Option<usize>, FailureReaso
         Ok(text) => text,
         Err(_) => {
             println!("Blockchain explorer website did not respond.");
-            return (None, FailureReason::NoBlockchainResponse);
+            return Err(FailureReason::NoBlockchainResponse);
         }
     };
 
@@ -366,32 +355,29 @@ pub fn check_confirmations(tx_hash_string: &str) -> (Option<usize>, FailureReaso
             "Blockchain explorer reports tx hash {} does not exist on the chain.",
             tx_hash_string
         );
-        return (None, FailureReason::TxNotFound);
+        return Err(FailureReason::TxNotFound);
     }
 
     let block_height: i64 = match v.get("block_height") {
-        None => return (None, FailureReason::NoBlockchainResponse),
+        None => return Err(FailureReason::NoBlockchainResponse),
         Some(value) => {
             // if block height is null, that means the transaction has 0 confirmations so far.
             if *value == Value::Null {
-                return (Some(0), FailureReason::Success)
+                return Ok(0)
             }
             value.as_u64().unwrap()
             .try_into().unwrap()
         },
     };
 
-    let (current_height, reason) = get_current_latest_block();
-    if current_height.is_none() {
-        return (None, reason)
-    }
-    let current_height: i64 = current_height.unwrap().try_into().unwrap();
+    let current_height = get_current_latest_block()?;
+    let current_height: i64 = current_height.try_into().unwrap();
 
     let confirmations = current_height - block_height + 1;
     // edge case handler, in case current height and block height results are out of sync. avoids usize underflow error.
     if confirmations < 0 {
-        return (Some(0), FailureReason::Success);
+        return Ok(0);
     }
     let confirmations: usize = confirmations.try_into().unwrap();
-    return (Some(confirmations), FailureReason::Success)
+    return Ok(confirmations)
 }
