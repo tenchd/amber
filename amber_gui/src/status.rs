@@ -1,6 +1,6 @@
 use std:: path::PathBuf;
 use egui_file_dialog::FileDialog;
-use amber_core::{FailureReason, merkle::{MerkleTree, TimestampedMerkleTree}};
+use amber_core::{FailureReason, ProofVerifyDetails, TimestampBuildDetails, Warning, merkle::TimestampedMerkleTree};
 use std::sync::mpsc::Receiver;
 
 #[derive(PartialEq)]
@@ -29,10 +29,11 @@ pub struct VerificationStatus {
     pub provided_explain_file: Option<PathBuf>,
     pub verify_attempted: bool,
     pub async_running: bool,
-    pub async_result_rx: Option<Receiver<(bool, Option<TimestampedMerkleTree>, FailureReason)>>,
+    pub async_result_rx: Option<Receiver<Result<(TimestampedMerkleTree, Vec<Warning>), FailureReason>>>,
     pub verified: Option<bool>,
     pub tree: Option<TimestampedMerkleTree>,
     pub reason: Option<FailureReason>,
+    pub warnings: Option<Vec<Warning>>,
     pub show_more: bool, 
     pub tx_hash: Option<String>,
     pub block: Option<String>,
@@ -52,6 +53,7 @@ impl VerificationStatus {
             verified: None,
             tree: None,
             reason: None,
+            warnings: None,
             show_more: false,
             tx_hash: None,
             block: None,
@@ -64,6 +66,7 @@ impl VerificationStatus {
         self.verify_attempted = false;
         self.tree = None;
         self.reason = None;
+        self.warnings = None;
         self.tx_hash = None;
         self.block = None;
         self.utc = None;
@@ -75,7 +78,7 @@ pub struct AuthenticationStatus {
     pub provided_file: Option<PathBuf>,
     pub auth_attempted: bool,
     pub auth_running: bool, 
-    pub auth_result_rx: Option<Receiver<(Option<[u8; 32]>, FailureReason)>>,
+    pub auth_result_rx: Option<Receiver<Result<[u8; 32], FailureReason>>>,
     pub file_authenticated: Option<bool>,
     pub file_auth_status: Option<String>,
 }
@@ -108,10 +111,11 @@ pub struct ProofStatus {
     pub provided_file: Option<PathBuf>,
     pub proof_auth_status: Option<String>,
     pub proof_auth_attempted: bool,
-    pub async_result_rx: Option<Receiver<(bool, FailureReason, Option<i64>, String, String, Option<String>, Option<String>, String)>>,
+    pub async_result_rx: Option<Receiver<Result<ProofVerifyDetails, FailureReason>>>,
     pub async_running: bool,
     pub proof_authenticated: Option<bool>,
     pub proof_auth_reason: Option<FailureReason>,
+    pub proof_auth_warnings: Option<Vec<Warning>>,
     pub proof_utc: Option<i64>,
     pub proof_tx_hash: Option<String>,
     pub proof_block: Option<String>,
@@ -134,6 +138,7 @@ impl ProofStatus {
             async_running: false,
             proof_authenticated: None,
             proof_auth_reason: None,
+            proof_auth_warnings: None,
             proof_utc: None,
             proof_tx_hash: None,
             proof_block: None,
@@ -155,10 +160,11 @@ pub struct BuildProofStatus {
     pub proven_file: Option<PathBuf>,
     pub corpus_name: String,
     pub proof_attempted: bool,
-    pub async_result_rx: Option<Receiver<(bool, FailureReason)>>,
+    pub async_result_rx: Option<Receiver<Result<Vec<Warning>, FailureReason>>>,
     pub async_running: bool, 
     pub proof_verified: bool,
     pub proof_reason: Option<FailureReason>,
+    pub proof_warnings: Option<Vec<Warning>>,
     pub proof_string: String,
 }
 
@@ -178,6 +184,7 @@ impl BuildProofStatus {
             async_running: false,
             proof_verified: false,
             proof_reason: None,
+            proof_warnings: None,
             proof_string: "".to_string(),
         }
     }
@@ -212,7 +219,7 @@ pub struct BuildTimestampStatus {
     pub corpus_name: String,
     pub identifier: String,
     pub build_attempted: bool,
-    pub async_result_rx: Option<Receiver<(bool, Option<MerkleTree>, FailureReason, Option<usize>, Option<PathBuf>, Option<PathBuf>, Option<PathBuf>)>>,
+    pub async_result_rx: Option<Receiver<Result<TimestampBuildDetails, FailureReason>>>,
     pub async_running: bool,
     pub build_status: Option<String>,
     pub tree_exists: bool,
@@ -232,15 +239,16 @@ pub struct BuildTimestampStatus {
     pub script: String,
     pub script_attempted: bool,
     pub script_running: bool,
-    pub script_result_tx: Option<Receiver<(Option<String>, Option<f64>, FailureReason)>>,
+    pub script_result_tx: Option<Receiver<Result<(String, f64), FailureReason>>>,
     pub script_status: Option<String>,
     pub find_tx_status: Option<String>,
     pub find_tx_attempted: bool,
     pub find_tx_running: bool,
-    pub find_tx_result_rx: Option<Receiver<(Option<usize>, FailureReason)>>,
+    pub find_tx_result_rx: Option<Receiver<Result<usize, FailureReason>>>,
     pub tx_confirmations: Option<usize>,
     pub finalize_status: Option<String>,
-    pub finalize_async_result_rx: Option<Receiver<(bool, Option<TimestampedMerkleTree>, FailureReason)>>,
+    pub finalize_async_result_rx: Option<Receiver<Result<(TimestampedMerkleTree, Vec<Warning>), FailureReason>>>,
+    pub finalize_warnings: Option<Vec<Warning>>,
     pub finalize_async_running: bool,
     pub tree_verified: bool,
     pub tree_verified_reason: Option<FailureReason>,
@@ -310,6 +318,7 @@ impl BuildTimestampStatus {
             tx_confirmations: None,
             finalize_status: None,
             finalize_async_result_rx: None,
+            finalize_warnings: None,
             finalize_async_running: false,
             tree_verified: false,
             tree_verified_reason: None,
@@ -370,5 +379,6 @@ impl BuildTimestampStatus {
         self.tree_verified=  false;
         self.tree_verified_reason = None;
         self.tx_hash_string = "".to_string();
+        self.finalize_warnings = None;
     }
 }

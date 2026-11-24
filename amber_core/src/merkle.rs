@@ -946,7 +946,7 @@ impl TimestampedMerkleTree {
         else {
             if self.block_height != timestamp_details.block_height {
                 println!("WARNING: the block height in the fossil file does not match the true block height of the transaction containing the timestamp. The fossil file says the block height is {}, but the true block height is {}", self.block_height, timestamp_details.block_height);
-                warnings.push(Warning::BlockHeightMismatchNonFatal);
+                warnings.push(Warning::BlockHeightMismatchNonFatal(self.block_height, timestamp_details.block_height));
             }
         }
         self.utc_timestamp = timestamp_details.timestamp;

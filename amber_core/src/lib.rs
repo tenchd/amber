@@ -191,7 +191,7 @@ pub fn verify_tree(provided_tree_filename: &PathBuf, provided_explain_filename: 
         return Err(FailureReason::TimestampMismatchFatal);
     }
     if tree_timestamp != chain_utc_timestamp {
-        warnings.push(Warning::TimestampMismatchNonFatal);
+        warnings.push(Warning::TimestampMismatchNonFatal(tree_timestamp, chain_utc_timestamp));
     }
     Ok((timestamped_tree, warnings))
 }
@@ -223,6 +223,15 @@ pub struct ProofVerifyDetails {
     pub identifier: String,
 }
 
+pub struct TimestampBuildDetails {
+    //tree, locktime, tree_filename, explain_filename, tag_filename, warnings
+    pub tree: MerkleTree,
+    pub locktime: usize,
+    pub tree_filename: PathBuf,
+    pub explain_filename: PathBuf,
+    pub tag_filename: PathBuf,
+    pub warnings: Vec<Warning>,
+}
 
 pub fn verify_proof(filepath: &PathBuf, proof_file: &PathBuf) -> Result<ProofVerifyDetails, FailureReason> {
     let proof = MerkleProof::new_from_file(proof_file)?;
@@ -373,9 +382,9 @@ impl std::fmt::Display for FailureReason {
 
 pub enum Warning {
     AutoAccept, // a fake success. here you check the local parts of the timestamp match each other but don't actually look at the blockchain.
-    TimestampMismatchNonFatal, // the tag was found in the transaction, but the tx timestamp doesn't match the one listed in the tree/proof file.
+    TimestampMismatchNonFatal(i64, i64), // the tag was found in the transaction, but the tx timestamp doesn't match the one listed in the tree/proof file.
     // this is a success technically because the timestamp WAS found, but the time listed in the file header may be significantly wrong.
-    BlockHeightMismatchNonFatal,
+    BlockHeightMismatchNonFatal(usize, usize),
     MerkleTreeInconsistentNonfatal(usize), // e.g., internal merkle node from file doesn't match computed, but the root still matches.
 }
 
@@ -383,8 +392,8 @@ impl std::fmt::Display for Warning {
     fn fmt (&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Warning::AutoAccept => write!(f, "The timestamp was locally verified, but not checked on the blockchain."),
-            Warning::TimestampMismatchNonFatal => write!(f, "While the timestamp verified successfully on the blockchain, the utc timestamp listed in the merkle tree file header is wrong; It does not match the true timestamp on the blockchain. This header value should be corrected."),
-            Warning::BlockHeightMismatchNonFatal => write!(f, "While the timestamp verified successfully on the blockchain, the block height in the fossil file does not match the true block height of the transaction containing the timestamp. This header value should be corrected."),
+            Warning::TimestampMismatchNonFatal(s, t) => write!(f, "While the timestamp verified successfully on the blockchain, the utc timestamp listed in the merkle tree file header ({s}) is wrong; It does not match the true timestamp on the blockchain ({t}). This header value should be corrected."),
+            Warning::BlockHeightMismatchNonFatal(s,t) => write!(f, "While the timestamp verified successfully on the blockchain, the block height in the fossil file ({s}) does not match the true block height ({t}) of the transaction containing the timestamp. This header value should be corrected."),
             Warning::MerkleTreeInconsistentNonfatal(s) => write!(f, "An internal node from the computed merkle tree doesn't match the merkle file, but the root hashes still match. The mismatch is node {s}."),
         }
     }
@@ -400,7 +409,7 @@ pub fn get_locktime() -> Result<usize, FailureReason> {
     Ok(block_height + 1)
 }
 
-pub fn build_timestamp_gui(corpus_name: String, identifier: String, hashes_source: bool, input_hashes_path: Option<PathBuf>, input_source_dir: Option<PathBuf>, corpus_desc: String, corpus_motiv: String, user_desc: String, timestamp_output_path: PathBuf) -> Result<(MerkleTree, usize, PathBuf, PathBuf, PathBuf, Vec<Warning>), FailureReason> {
+pub fn build_timestamp_gui(corpus_name: String, identifier: String, hashes_source: bool, input_hashes_path: Option<PathBuf>, input_source_dir: Option<PathBuf>, corpus_desc: String, corpus_motiv: String, user_desc: String, timestamp_output_path: PathBuf) -> Result<TimestampBuildDetails, FailureReason> {
     let locktime = get_locktime()?;
 
     let mut output_dir = timestamp_output_path;
@@ -434,7 +443,7 @@ pub fn build_timestamp_gui(corpus_name: String, identifier: String, hashes_sourc
 
     let (tree, warnings) = build_timestamp(corpus_path, hashes_path, hashes_source, &tree_filename, &explain_filename, &tag_filename, &corpus_name, locktime, &identifier, Some(corpus_desc), Some(corpus_motiv), Some(user_desc))?;
 
-    Ok((tree, locktime, tree_filename, explain_filename, tag_filename, warnings))
+    Ok(TimestampBuildDetails{ tree, locktime, tree_filename, explain_filename, tag_filename, warnings})
 }
 
 pub fn generate_op_return_script(receiving_address: &str, balance: f64, tag: &str) -> Result<(String, f64), FailureReason> {

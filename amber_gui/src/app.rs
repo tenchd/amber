@@ -85,27 +85,33 @@ impl AmberApp {
             let result = catch_panic(|| {
                 amber_core::verify_tree(&tree_filepath.unwrap(), &explain_filepath.unwrap())
             })
-            .unwrap_or_else(|reason| (false, None, reason));
+            .unwrap_or_else(|reason| Err(reason));
             let _ = tx.send(result);
         });
     }
 
     fn finish_verify(&mut self) {
         let Some(rx) = &self.ver_stat.async_result_rx else { return };
-        let (result, tree, reason) = match rx.try_recv() {
+        let result = match rx.try_recv() {
             Ok(message) => message,
             Err(TryRecvError::Empty) => return, // still running; check again next frame
-            Err(TryRecvError::Disconnected) => (
-                false,
-                None,
-                FailureReason::Internal("the background task stopped without reporting a result".to_string()),
-            ),
+            Err(TryRecvError::Disconnected) => 
+                Err(FailureReason::Internal("the background task stopped without reporting a result".to_string())),
+        };
+        match result {
+            Ok((tree, warnings)) => {
+                self.ver_stat.verified = Some(true);
+                self.ver_stat.reason = Some(FailureReason::Success);
+                self.ver_stat.tree = Some(tree);
+                self.ver_stat.warnings = Some(warnings);
+            },
+            Err(reason) => {
+                self.ver_stat.verified = Some(false);
+                self.ver_stat.reason = Some(reason);
+            },
         };
         self.ver_stat.async_result_rx = None;
         self.ver_stat.async_running = false;
-        self.ver_stat.verified = Some(result);
-        self.ver_stat.reason = Some(reason);
-        self.ver_stat.tree = tree;
         if self.ver_stat.verified.unwrap() {
             self.ver_stat.tx_hash = Some(format!("{}", HexFmt(self.ver_stat.tree.as_ref().unwrap().tx_hash)));
             self.ver_stat.block = Some(self.ver_stat.tree.as_ref().unwrap().block_height.to_string());
@@ -125,7 +131,7 @@ impl AmberApp {
                     let result = catch_panic(|| {
                         amber_core::merkle::double_hash_from_file(&auth_file)
                     })
-                    .unwrap_or_else(|reason| (None, reason));
+                    .unwrap_or_else(|reason| Err(reason));
                     let _ = tx.send(result);
                 });
 
@@ -142,23 +148,22 @@ impl AmberApp {
 
     fn finish_authenticate_file(&mut self) {
         let Some(rx) = &self.auth_stat.auth_result_rx else { return };
-        let (hash, reason) = match rx.try_recv() {
+        let hash_result = match rx.try_recv() {
             Ok(message) => message,
             Err(TryRecvError::Empty) => return, // still running; check again next frame
-            Err(TryRecvError::Disconnected) => (
-                None,
-                FailureReason::Internal("the background task stopped without reporting a result".to_string()),
-            ),
+            Err(TryRecvError::Disconnected) => Err(FailureReason::Internal("the background task stopped without reporting a result".to_string())),
         };
 
-        if hash.is_none() {
-            self.auth_stat.file_auth_status = Some(format!("Couldn't authenticate for the following reason: {reason}"));
-        }
-        else {
-            println!("{}", HexFmt(hash.unwrap()));
-            let authenticated = self.ver_stat.tree.as_ref().unwrap().tree.verify_hash(hash.unwrap());
-            self.auth_stat.file_authenticated = Some(authenticated);
-            self.auth_stat.file_auth_status = Some("Done.".to_string());   
+        match hash_result {
+            Ok(hash) => {
+                println!("{}", HexFmt(hash));
+                let authenticated = self.ver_stat.tree.as_ref().unwrap().tree.verify_hash(hash);
+                self.auth_stat.file_authenticated = Some(authenticated);
+                self.auth_stat.file_auth_status = Some("Done.".to_string());   
+            },
+            Err(reason) => {
+                self.auth_stat.file_auth_status = Some(format!("Couldn't authenticate for the following reason: {reason}"));
+            },
         }
         self.auth_stat.auth_running = false;
         self.auth_stat.auth_result_rx = None;
@@ -179,7 +184,7 @@ impl AmberApp {
                 let result = catch_panic(|| {
                     amber_core::verify_proof(&file_path, &proof_file_path)
                 })
-                .unwrap_or_else(|reason| (false, reason, Some(0), String::new(), String::new(), Some(String::new()), Some(String::new()), String::new()));
+                .unwrap_or_else(|reason| Err(reason));
                 let _ = tx.send(result);
             });
         }
@@ -190,32 +195,33 @@ impl AmberApp {
 
     fn finish_verify_proof(&mut self) {
         let Some(rx) = &self.proof_stat.async_result_rx else { return };
-        let (verified, reason, utc, tx_hash, block, date, time, identifier) = match rx.try_recv() {
+        let proof_verify_result = match rx.try_recv() {
             Ok(message) => message,
             Err(TryRecvError::Empty) => return, // still running; check again next frame
             // (bool, FailureReason, Option<i64>, String, String, Option<String>, Option<String>, String)
-            Err(TryRecvError::Disconnected) => (
-                false,
-                FailureReason::Internal("the background task stopped without reporting a result".to_string()),
-                None,
-                "".to_string(),
-                "".to_string(),
-                None,
-                None,
-                "".to_string(),
-            ),
+            Err(TryRecvError::Disconnected) => 
+                Err(FailureReason::Internal("the background task stopped without reporting a result".to_string())),
         };
-        self.proof_stat.async_result_rx = None;
-        self.proof_stat.async_running = false;
-        self.proof_stat.proof_authenticated = Some(verified);
-        self.proof_stat.proof_auth_reason = Some(reason);
-        self.proof_stat.proof_utc = utc;
-        self.proof_stat.proof_tx_hash = Some(tx_hash);
-        self.proof_stat.proof_block = Some(block);
-        self.proof_stat.proof_date = date;
-        self.proof_stat.proof_time = time;
-        self.proof_stat.proof_id = Some(identifier);
+
+        match proof_verify_result {
+            Ok(details) => {
+                self.proof_stat.proof_authenticated = Some(details.verified);
+                self.proof_stat.proof_auth_warnings = Some(details.warnings);
+                self.proof_stat.proof_utc = Some(details.utc_timestamp);
+                self.proof_stat.proof_tx_hash = Some(details.tx_hash);
+                self.proof_stat.proof_block = Some(details.block);
+                self.proof_stat.proof_date = Some(details.date);
+                self.proof_stat.proof_time = Some(details.time);
+                self.proof_stat.proof_id = Some(details.identifier);
+            },
+            Err(reason) => {
+                self.proof_stat.proof_authenticated = Some(false);
+                self.proof_stat.proof_auth_reason = Some(reason);
+            },
+        }
         self.proof_stat.proof_auth_status = Some("Proof verification complete.".to_string());
+        self.proof_stat.async_running = false;
+        self.proof_stat.async_result_rx = None;
     }
 
     fn start_build_proof(&mut self) {
@@ -234,7 +240,7 @@ impl AmberApp {
                 let result = catch_panic(|| {
                     amber_core::make_proof(&file_path, &merkle_path, &explain_path, &corpus_name)
                 })
-                .unwrap_or_else(|reason| (false, reason));
+                .unwrap_or_else(|reason| Err(reason));
                 let _ = tx.send(result);
             });
         }
@@ -242,29 +248,31 @@ impl AmberApp {
 
     fn finish_build_proof(&mut self) {
         let Some(rx) = &self.build_pf_stat.async_result_rx else { return };
-        let (result, reason) = match rx.try_recv() {
+        let warnings_result = match rx.try_recv() {
             Ok(message) => message,
             Err(TryRecvError::Empty) => return, // still running; check again next frame
-            Err(TryRecvError::Disconnected) => (
-                false,
-                FailureReason::Internal("the background task stopped without reporting a result".to_string()),
-            ),
+            Err(TryRecvError::Disconnected) => 
+                Err(FailureReason::Internal("the background task stopped without reporting a result".to_string())),
         };
+
+        match warnings_result {
+            Ok(warnings) => {
+                self.build_pf_stat.status = Some("Wrote proof to file.".to_string());
+                self.build_pf_stat.proof_verified = true;
+                let file_path_buf = self.build_pf_stat.proven_file.clone().unwrap();
+                let file_path = file_path_buf.to_str().unwrap();
+                let output_path = file_path.to_owned() + "_proof.txt";
+                self.build_pf_stat.proof_string = read_to_string(output_path).unwrap();
+                self.build_pf_stat.proof_warnings = Some(warnings);
+            },
+            Err(reason) => {
+                self.build_pf_stat.status = Some("Could not make proof file.".to_string());
+                self.build_pf_stat.proof_verified = false;
+                self.build_pf_stat.proof_reason = Some(reason);
+            },
+        }
         self.build_pf_stat.async_result_rx = None;
         self.build_pf_stat.async_running = false;
-        if result {
-            self.build_pf_stat.status = Some("Wrote proof to file.".to_string());
-            self.build_pf_stat.proof_verified = true;
-            let file_path_buf = self.build_pf_stat.proven_file.clone().unwrap();
-            let file_path = file_path_buf.to_str().unwrap();
-            let output_path = file_path.to_owned() + "_proof.txt";
-            self.build_pf_stat.proof_string = read_to_string(output_path).unwrap();
-        }
-        else {
-            self.build_pf_stat.status = Some("Could not make proof file.".to_string());
-            self.build_pf_stat.proof_verified = false;
-            self.build_pf_stat.proof_reason = Some(reason);
-        }
     }
 
     fn build_valid(&mut self) -> bool {
@@ -349,7 +357,7 @@ impl AmberApp {
                 let result = catch_panic(|| {
                     amber_core::build_timestamp_gui(corpus_name, identifier, hashes_source, hash_file, directory, corpus_desc, corpus_motiv, user_desc, output_dir)
                 })
-                .unwrap_or_else(|reason| (false, None, reason, None, None, None, None));
+                .unwrap_or_else(|reason| Err(reason));
                 let _ = tx.send(result);
             });
             
@@ -358,37 +366,33 @@ impl AmberApp {
 
     fn finish_build_timestamp(&mut self) {
         let Some(rx) = &self.build_ts_stat.async_result_rx else { return };
-        let (succeeded, tree, reason, locktime, tree_filename, explain_filename, tag_filename) = match rx.try_recv() {
+        let result = match rx.try_recv() {
             Ok(message) => message,
             Err(TryRecvError::Empty) => return, // still running; check again next frame
-            Err(TryRecvError::Disconnected) => (
-                false,
-                None,
-                FailureReason::Internal("the background task stopped without reporting a result".to_string()),
-                None,
-                None,
-                None,
-                None,
-            ),
+            Err(TryRecvError::Disconnected) => 
+                Err(FailureReason::Internal("the background task stopped without reporting a result".to_string())),
         };
+        match result {
+            Ok(details) => {
+                self.build_ts_stat.root_hash = Some(format!("{}", HexFmt(details.tree.get_root_hash())));
+                self.build_ts_stat.num_leaves = Some(details.tree.num_leaves);
+                self.build_ts_stat.locktime = Some(details.locktime);
+                self.build_ts_stat.tree_exists = true;
+                self.build_ts_stat.tree_file = Some(details.tree_filename);
+                self.build_ts_stat.explain_file = Some(details.explain_filename);
+                let explain_path = self.build_ts_stat.explain_file.as_ref().unwrap();
+                self.build_ts_stat.explain_string = std::fs::read_to_string(explain_path).unwrap();
+                let tag_path = details.tag_filename;
+                self.build_ts_stat.tag_string = std::fs::read_to_string(tag_path).unwrap();
+
+            },
+            Err(reason) => {
+                self.build_ts_stat.tree_exists = false;
+                self.build_ts_stat.build_status = Some(format!("The build failed for the following reason: {}", reason));
+            },
+        }
         self.build_ts_stat.async_running = false;
         self.build_ts_stat.async_result_rx = None;
-        if succeeded {
-            self.build_ts_stat.root_hash = Some(format!("{}", HexFmt(tree.as_ref().unwrap().get_root_hash())));
-            self.build_ts_stat.num_leaves = Some(tree.as_ref().unwrap().num_leaves);
-            self.build_ts_stat.locktime = locktime;
-            self.build_ts_stat.tree_exists = true;
-            self.build_ts_stat.tree_file = tree_filename;
-            self.build_ts_stat.explain_file = explain_filename;
-            let explain_path = self.build_ts_stat.explain_file.as_ref().unwrap();
-            self.build_ts_stat.explain_string = std::fs::read_to_string(explain_path).unwrap();
-            let tag_path = tag_filename.as_ref().unwrap();
-            self.build_ts_stat.tag_string = std::fs::read_to_string(tag_path).unwrap();
-        }
-        else {
-            self.build_ts_stat.tree_exists = false;
-            self.build_ts_stat.build_status = Some(format!("The build failed for the following reason: {}", reason));
-        }
     }
 
     fn examine_explain_file(&mut self, ui: &mut egui::Ui) {
@@ -421,38 +425,30 @@ impl AmberApp {
             let result = catch_panic(|| {
                 amber_core::generate_op_return_script(&receiving_address, balance, &tag)
             })
-            .unwrap_or_else(|reason| (None, None, reason));
+            .unwrap_or_else(|reason| Err(reason));
             let _ = tx.send(result);
         });
     }
 
     fn finish_compute_script(&mut self) {
         let Some(rx) = &self.build_ts_stat.script_result_tx else { return };
-        let (result, fee, reason) = match rx.try_recv() {
+        let result = match rx.try_recv() {
             Ok(message) => message,
             Err(TryRecvError::Empty) => return, // still running; check again next frame
-            Err(TryRecvError::Disconnected) => (
-                None,
-                None,
-                FailureReason::Internal("the background task stopped without reporting a result".to_string()),
-            ),
+            Err(TryRecvError::Disconnected) => Err(FailureReason::Internal("the background task stopped without reporting a result".to_string())),
         };
+
+        match result {
+            Ok((script, _fee)) => {
+                self.build_ts_stat.script = script;
+                self.build_ts_stat.script_status = None;
+            },
+            Err(reason) => {
+                self.build_ts_stat.script_status = Some(format!("Script generation failed for the following reason: {}", reason));
+            },
+        }
         self.build_ts_stat.script_running = false;
         self.build_ts_stat.script_result_tx = None;
-
-        if result.is_some() && fee.is_some() {
-            self.build_ts_stat.script = result.unwrap();
-            self.build_ts_stat.script_status = None;
-        }
-        else {
-            if reason == FailureReason::BalanceTooLow {
-                let expected_fee = fee.unwrap();
-                self.build_ts_stat.script_status = Some(format!("Script generation failed because you entered a balance that was too low. Right now the cost of writing your message to the blockchain is about {} mBTC, so you need a balance that is at least that high.", expected_fee));
-            }
-            else {
-                self.build_ts_stat.script_status = Some(format!("Script generation failed for the following reason: {}", reason));
-            }
-        }
     }
 
     fn start_find_tx(&mut self) {
@@ -466,29 +462,29 @@ impl AmberApp {
             let result = catch_panic(|| {
                 amber_core::check_confirmations(&tx_hash_string)
             })
-            .unwrap_or_else(|reason| (None, reason));
+            .unwrap_or_else(|reason| Err(reason));
             let _ = tx.send(result);
         });
     }
 
     fn finish_find_tx(&mut self) {
         let Some(rx) = &self.build_ts_stat.find_tx_result_rx else { return };
-        let (result, reason) = match rx.try_recv() {
+        let result = match rx.try_recv() {
             Ok(message) => message,
             Err(TryRecvError::Empty) => return, // still running; check again next frame
-            Err(TryRecvError::Disconnected) => (
-                None,
-                FailureReason::Internal("the background task stopped without reporting a result".to_string()),
-            ),
+            Err(TryRecvError::Disconnected) => Err(FailureReason::Internal("the background task stopped without reporting a result".to_string())),
         };
+
+        match result {
+            Ok(value) => {
+                self.build_ts_stat.tx_confirmations = Some(value);
+            },
+            Err(reason) => {
+                self.build_ts_stat.find_tx_status = Some(format!("Could not find the transaction for the following reason: {}", reason));
+            },
+        }
         self.build_ts_stat.find_tx_running = false;
         self.build_ts_stat.find_tx_result_rx = None;
-        if result.is_none() {
-            self.build_ts_stat.find_tx_status = Some(format!("Could not find the transaction for the following reason: {}", reason));
-        }
-        else {
-            self.build_ts_stat.tx_confirmations = result;
-        }
     }
 
     fn start_finalize_timestamp(&mut self) {
@@ -500,51 +496,53 @@ impl AmberApp {
         let explain_file = self.build_ts_stat.explain_file.clone().unwrap();
         let corpus_name = self.build_ts_stat.corpus_name.clone();
         let identifier = self.build_ts_stat.identifier.clone();
-        let (tx_hash_option, reason) = amber_core::parse_hash(&self.build_ts_stat.tx_hash_string);
+        let tx_hash_result = amber_core::parse_hash(&self.build_ts_stat.tx_hash_string);
 
-        if tx_hash_option.is_none() {
-            self.build_ts_stat.finalize_status = Some(format!("The process failed for the following reason: {}", reason));
-            self.build_ts_stat.tree_verified_reason = Some(reason);
-        }
-        else {
-            let tx_hash = tx_hash_option.unwrap();
-            thread::spawn(move || {
+        match tx_hash_result {
+            Ok(tx_hash) => {thread::spawn(move || {
                 let result = catch_panic(|| {
                     amber_core::finalize_timestamp(&tree_file, &explain_file, &corpus_name, &identifier, tx_hash)
                 })
-                .unwrap_or_else(|reason| (false, None, reason));
+                .unwrap_or_else(|reason| Err(reason));
                 let _ = tx.send(result);
             });
+
+            },
+            Err(reason) => {
+                self.build_ts_stat.finalize_status = Some(format!("The process failed for the following reason: {}", reason));
+                self.build_ts_stat.tree_verified_reason = Some(reason);
+            }
         }
     }
 
     fn finish_finalize_timestamp(&mut self) {
         let Some(rx) = &self.build_ts_stat.finalize_async_result_rx else { return };
-        let (result, tree, reason) = match rx.try_recv() {
+        let result = match rx.try_recv() {
             Ok(message) => message,
             Err(TryRecvError::Empty) => return, // still running; check again next frame
-            Err(TryRecvError::Disconnected) => (
-                false,
-                None,
-                FailureReason::Internal("the background task stopped without reporting a result".to_string()),
-            ),
+            Err(TryRecvError::Disconnected) => Err(FailureReason::Internal("the background task stopped without reporting a result".to_string())),
         };
-        self.build_ts_stat.tree_verified = result;
-        self.build_ts_stat.tree_verified_reason = Some(reason);
+
+        match result {
+            Ok((tree, warnings)) => {
+                self.build_ts_stat.tree_verified = true;
+                let tree_path_buf = self.build_ts_stat.tree_file.clone().unwrap();
+                let tree_path = tree_path_buf.to_str().unwrap();
+                self.build_ts_stat.finalize_status = Some(format!("Timestamp verified on the blockchain! \nTimestamped merkle tree file written to {}", tree_path));
+                self.build_ts_stat.utc = tree.utc_timestamp;
+                self.build_ts_stat.block_height = tree.block_height;
+                self.build_ts_stat.tx_hash_string = format!("{}", HexFmt(tree.tx_hash));
+                self.build_ts_stat.finalize_warnings = Some(warnings);
+
+            },
+            Err(reason) => {
+                self.build_ts_stat.tree_verified = false;
+                self.build_ts_stat.tree_verified_reason = Some(reason);
+                self.build_ts_stat.finalize_status = Some(format!("The build failed for the following reason: {}", self.build_ts_stat.tree_verified_reason.as_ref().unwrap()));
+            },
+        }
         self.build_ts_stat.finalize_async_running = false;
         self.build_ts_stat.finalize_async_result_rx = None;
-
-        let tree_path_buf = self.build_ts_stat.tree_file.clone().unwrap();
-        let tree_path = tree_path_buf.to_str().unwrap();
-        if result {
-            self.build_ts_stat.finalize_status = Some(format!("Timestamp verified on the blockchain! \nTimestamped merkle tree file written to {}", tree_path));
-            self.build_ts_stat.utc = tree.as_ref().unwrap().utc_timestamp;
-            self.build_ts_stat.block_height = tree.as_ref().unwrap().block_height;
-            self.build_ts_stat.tx_hash_string = format!("{}", HexFmt(tree.unwrap().tx_hash));
-        }
-        else {
-            self.build_ts_stat.finalize_status = Some(format!("The build failed for the following reason: {}", self.build_ts_stat.tree_verified_reason.as_ref().unwrap()));
-        }
     }
 
     fn page_welcome(&mut self, ui: &mut egui::Ui) {
@@ -723,9 +721,11 @@ impl AmberApp {
             ui.label(format!("Verified: {}", self.ver_stat.verified.clone().unwrap()));
 
             if self.ver_stat.verified.unwrap() {
-                if self.ver_stat.reason.as_ref().unwrap() != &FailureReason::Success {
-                    ui.label("WARNING: while the verification succeeded, the following warning was emitted:");
-                    ui.label(format!("{}", self.ver_stat.reason.as_ref().unwrap()));
+                if self.ver_stat.warnings.is_some() {
+                    ui.label("WARNING: while the verification succeeded, the following warnings were emitted:");
+                    for warning in self.ver_stat.warnings.as_ref().unwrap() {
+                        ui.label(format!("{}", warning));
+                    }
                 }
                 let (date, time) = convert_utc_to_datetime(self.ver_stat.utc.clone().unwrap());
                 ui.label(format!("Corpus identifier: {}", self.ver_stat.tree.as_ref().unwrap().identifier));
@@ -890,6 +890,13 @@ impl AmberApp {
                 ui.label(format!("Date: {}", self.proof_stat.proof_date.clone().unwrap()));
                 ui.label(format!("Time: {}", self.proof_stat.proof_time.clone().unwrap()));
 
+                if self.proof_stat.proof_auth_warnings.is_some() {
+                    ui.label("WARNING: while the verification succeeded, the following warnings were emitted:");
+                    for warning in self.proof_stat.proof_auth_warnings.as_ref().unwrap() {
+                        ui.label(format!("{}", warning));
+                    }
+                }
+
                 if !self.proof_stat.show_more {
                     if ui.button("Show more information").clicked() {
                         self.proof_stat.show_more = true;
@@ -1011,6 +1018,13 @@ impl AmberApp {
 
         if self.build_pf_stat.proof_verified {
             ui.label(format!("Proof successfully verified and written to {}_proof.txt", self.build_pf_stat.proven_file.as_ref().unwrap().to_str().unwrap()));
+
+            if self.build_pf_stat.proof_warnings.is_some() {
+                ui.label("WARNING: while the process succeeded, the following warnings were emitted:");
+                for warning in self.build_pf_stat.proof_warnings.as_ref().unwrap() {
+                    ui.label(format!("{}", warning));
+                }
+            }
 
             ui.label("Here's a preview of the proof file you just made:");
             let ten_lines = 10.0 * ui.text_style_height(&egui::TextStyle::Body);
@@ -1744,6 +1758,13 @@ impl AmberApp {
             let (date, time) = convert_utc_to_datetime(self.build_ts_stat.utc);
             ui.label(format!("Date: {}", date));
             ui.label(format!("Time: {} UTC", time));
+
+            if self.build_ts_stat.finalize_warnings.is_some() {
+                ui.label("WARNING: while the finalize process succeeded, the following warnings were emitted:");
+                for warning in self.build_ts_stat.finalize_warnings.as_ref().unwrap() {
+                    ui.label(format!("{}", warning));
+                }
+            }
 
             if !self.build_ts_stat.show_more {
                 if ui.button("Show more information").clicked() {

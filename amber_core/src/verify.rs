@@ -216,12 +216,12 @@ pub async fn verify_proof_timestamp(proof: &MerkleProof, verbose: bool) -> Resul
     if chain_timestamp == expected_timestamp {
         if chain_block_height != expected_block_height {
             println!("WARNING: block height {} listed in proof file doesn't match the actual block height {} on the blockchain.", expected_block_height, chain_block_height);
-            warnings.push(Warning::BlockHeightMismatchNonFatal);
+            warnings.push(Warning::BlockHeightMismatchNonFatal(expected_block_height, chain_block_height));
         }
         return Ok((chain_timestamp, chain_block_height, warnings));
     }   
     else {
-        warnings.push(Warning::TimestampMismatchNonFatal);
+        warnings.push(Warning::TimestampMismatchNonFatal(expected_timestamp, chain_timestamp));
         println!("Timestamp in proof file {} does not match true (blockchain) timestamp {}.", expected_timestamp, chain_timestamp);
         return Ok((chain_timestamp, chain_block_height, warnings));
     }
